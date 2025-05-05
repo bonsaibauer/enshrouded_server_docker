@@ -18,7 +18,7 @@ Embark on an adventure in the mystical world of Embervale with your own dedicate
 
 **Enshrouded** is an immersive survival action RPG set in a vast, voxel-based open world. Players must explore dangerous lands, craft for survival, and battle mystical creatures. The game supports cooperative multiplayer for up to 16 players, creating the perfect environment for shared adventures.
 
-![Enshrouded Docker Server Setup](enshrouded_docker.png)  
+![Enshrouded Docker Server Setup](enshrouded_docker_v2.png)  
 <sub>Image generated with the help of [ChatGPT](https://openai.com/chatgpt)</sub>
 
 ---
