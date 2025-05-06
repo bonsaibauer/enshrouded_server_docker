@@ -163,7 +163,34 @@ cd enshrouded_server_docker
 sudo chown -R enshrouded:enshrouded .
 ```
 
-# 4. Edit server configuration
+# 4. Build the Docker image
+
+Run the following command in the project directory:
+
+```bash
+docker build -t enshrouded-server .
+```
+
+This builds the image using the provided Dockerfile which includes SteamCMD, downloads the server, and sets up the environment.
+
+# 5. Start the server
+
+Launch the container:
+
+```bash
+docker run -d \
+  --name enshroudedserver \
+  --restart=always \
+  -p 15636:15636 \
+  -p 15637:15637/udp \
+  -v /home/enshrouded:/home/steam/enshrouded \
+  -e ENSHROUDED_SERVER_NAME=myservername \
+  -e ENSHROUDED_SERVER_PASSWORD=changepw \
+  -e ENSHROUDED_SERVER_MAXPLAYERS=16 \
+  enshrouded-server
+```
+
+# 6. Edit server configuration
 
 Edit the `enshrouded_server.json` file to configure your server:
 - You can edit this configuration file to control the number of players and set a password for the server.
@@ -199,29 +226,6 @@ nano enshrouded_server.json
 >    - Press `CTRL + X` to close the Nano editor.
 >
 > You will then return to the regular command line.
-
-# 5. Build the Docker image
-
-Run the following command in the project directory:
-
-```bash
-docker build -t enshrouded-server .
-```
-
-This builds the image using the provided Dockerfile which includes SteamCMD, downloads the server, and sets up the environment.
-
-# 6. Start the server
-
-Launch the container:
-
-```bash
-docker run -d \
-  --name enshrouded \
-  -p 15636:15636/udp \
-  -p 15637:15637/udp \
-  -v /home/enshrouded:/home/enshrouded \
-  enshrouded-server
-```
 
 # 🚧 Work in Progress 😊
 .
