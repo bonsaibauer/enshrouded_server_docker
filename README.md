@@ -123,6 +123,92 @@ sudo systemctl status docker
 
 Press `q` to exit the status screen.
 
+# 2. Create user and working directory
+
+To allow the Docker container to persist game data and configurations, we create a dedicated system user and set up the correct directory.
+
+Run these commands as root or with `sudo`:
+
+```bash
+# Create a system user 'enshrouded' without login shell
+sudo useradd -m -r -s /bin/false enshrouded
+
+# Ensure the home directory exists
+sudo mkdir -p /home/enshrouded
+
+# Set proper ownership
+sudo chown -R enshrouded:enshrouded /home/enshrouded
+```
+
+> 🛡️ This ensures that the container can write to `/home/enshrouded` and all server data stays in one clean location.
+
+# 3. Download the repository
+
+Change to the working directory:
+
+```bash
+cd /home/enshrouded
+```
+
+Clone the project from GitHub:
+
+```bash
+sudo git clone https://github.com/bonsaibauer/enshrouded_server_docker.git
+cd enshrouded_server_docker
+```
+
+(Optional) Adjust ownership:
+
+```bash
+sudo chown -R enshrouded:enshrouded .
+```
+
+# 4. Edit server configuration
+
+Edit the `enshrouded_server.json` file to configure your server:
+- You can edit this configuration file to control the number of players and set a password for the server.
+- Set the server IP (important!), server name, password, and slot count as desired.
+
+```bash
+nano enshrouded_server.json
+```
+
+---
+
+### General Server Settings
+
+| Setting            | Description                                | Example / Default Value | Options / Notes          |
+|--------------------|--------------------------------------------|--------------------------|---------------------------|
+| **name**           | Name of the server                         | "Enshrouded Server"      | Any string                |
+| **saveDirectory**  | Directory where savegames are stored       | "./savegame"             | File path                 |
+| **logDirectory**   | Directory for log files                    | "./logs"                 | File path                 |
+| **ip**             | Server IP binding                          | "0.0.0.0"                | Server ip adress          |
+| ...                | ...                                        | ...                      | ...                       |
+
+... [View full server settings here](https://github.com/bonsaibauer/enshrouded_server_docker/blob/main/enshrouded_server.md)
+
+# 5. Build the Docker image
+
+Run the following command in the project directory:
+
+```bash
+docker build -t enshrouded-server .
+```
+
+This builds the image using the provided Dockerfile which includes SteamCMD, downloads the server, and sets up the environment.
+
+# 6. Start the server
+
+Launch the container:
+
+```bash
+docker run -d \
+  --name enshrouded \
+  -p 15636:15636/udp \
+  -v /home/enshrouded:/home/enshrouded \
+  enshrouded-server
+```
+
 # 🚧 Work in Progress 😊
 .
 .
