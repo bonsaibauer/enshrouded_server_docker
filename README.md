@@ -135,6 +135,8 @@ sudo useradd -m -r -s /bin/false enshrouded
 
 # Ensure the home directory exists
 sudo mkdir -p /home/enshrouded
+sudo mkdir -p /home/enshrouded/steamcmd
+sudo mkdir -p /home/enshrouded/enshroudedserver
 
 # Set proper ownership
 sudo chown -R enshrouded:enshrouded /home/enshrouded
