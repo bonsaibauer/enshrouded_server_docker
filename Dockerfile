@@ -2,7 +2,7 @@
 FROM ubuntu:24.04
 
 # Environment variables for SteamCMD
-ENV STEAMCMDDIR="/usr/games"
+ENV STEAMCMDDIR="/home/enshrouded/steamcmd"
 ENV SERVERDIR="/home/enshrouded/enshroudedserver"
 
 # Set DEBIAN_FRONTEND to avoid interactive prompts during installation
@@ -47,8 +47,11 @@ RUN useradd -m enshrouded
 USER enshrouded
 WORKDIR /home/enshrouded
 
+# Erstelle Verzeichnisse
+RUN mkdir -p ${STEAMCMDDIR} ${SERVERDIR}
+
 # Use SteamCMD to download and install the game server
-RUN ${STEAMCMDDIR}/steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir ${SERVERDIR} +login anonymous +app_update 2278520 validate +quit
+RUN steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir ${SERVERDIR} +login anonymous +app_update 2278520 validate +quit
 
 # Add custom server configuration (replace this with your own JSON config if needed)
 COPY --chown=enshrouded:enshrouded enshrouded_server.json ${SERVERDIR}/enshrouded_server.json
