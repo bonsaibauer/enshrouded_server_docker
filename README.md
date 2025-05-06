@@ -138,6 +138,7 @@ sudo mkdir -p /home/enshrouded
 
 # Set proper ownership
 sudo chown -R enshrouded:enshrouded /home/enshrouded
+sudo chown 1000:1000 /home/enshrouded
 ```
 
 > 🛡️ This ensures that the container can write to `/home/enshrouded` and all server data stays in one clean location.
@@ -218,6 +219,7 @@ Launch the container:
 docker run -d \
   --name enshrouded \
   -p 15636:15636/udp \
+  -p 15637:15637/udp \
   -v /home/enshrouded:/home/enshrouded \
   enshrouded-server
 ```
