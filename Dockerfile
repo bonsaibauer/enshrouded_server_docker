@@ -48,10 +48,10 @@ USER enshrouded
 WORKDIR /home/enshrouded
 
 # Use SteamCMD to download and install the game server
-RUN $STEAMCMDDIR/steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir $SERVERDIR +login anonymous +app_update 2278520 +quit
+RUN ${STEAMCMDDIR}/steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir ${SERVERDIR} +login anonymous +app_update 2278520 validate +quit
 
 # Add custom server configuration (replace this with your own JSON config if needed)
-COPY enshrouded_server.json $SERVERDIR/enshrouded_server.json
+COPY --chown=enshrouded:enshrouded enshrouded_server.json ${SERVERDIR}/enshrouded_server.json
 
 # Expose required TCP ports for server communication
 EXPOSE 15636/tcp
