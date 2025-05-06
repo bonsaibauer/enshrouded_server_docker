@@ -1,56 +1,90 @@
-# Use a base Ubuntu image
-FROM steamcmd/steamcmd:ubuntu-24@sha256:7b54eb6c3abf01d11b9fc78383bcd4dd3a613104997d476ad3203f52e58b7bbb
+######## Enshrouded Dedicated Server - SteamCMD & Wine ########
 
-LABEL maintainer="bonsaibauer"
+# Base image: Ubuntu 22.04 for WineHQ-Staging compatibility
+FROM ubuntu:22.04
 
-# Environment variables for SteamCMD
-ENV STEAMCMDDIR="/home/enshrouded/steamcmd"
-ENV SERVERDIR="/home/enshrouded/enshroudedserver"
-ARG WINE_BRANCH=stable
+# Use bash with pipefail for safety in scripts
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Set DEBIAN_FRONTEND to avoid interactive prompts during installation
+# General environment variables
 ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG='en_US.UTF-8'
+ENV LANGUAGE='en_US:en'
+ENV LC_ALL='en_US.UTF-8'
+ENV WINEARCH=win64
+ENV HOME=/home/steam
 
-# Update system and install dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        curl \
-        wget \
-        cabextract \
-        winbind \
-        xvfb \
-        software-properties-common \
-        lsb-release && \
-    dpkg --add-architecture i386 && \
-    mkdir -pm755 /etc/apt/keyrings && \
-    curl -o /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
-    curl -O --output-dir /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/$(grep VERSION_CODENAME= /etc/os-release | cut -d= -f2)/winehq-$(grep VERSION_CODENAME= /etc/os-release | cut -d= -f2).sources && \
-    apt-get update && \
-    apt-get install -y --install-recommends winehq-${WINE_BRANCH} && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# Enshrouded-specific server environment variables
+ENV ENSHROUDED_SERVER_NAME="myservername"
+ENV ENSHROUDED_SERVER_PASSWORD="changepw"
+ENV ENSHROUDED_SERVER_MAXPLAYERS="16"
 
-# Create the user 'enshrouded'
-RUN groupadd -g 1000 enshrouded && useradd -m -u 1000 -g enshrouded enshrouded
+# Enable i386 architecture for 32-bit compatibility
+RUN dpkg --add-architecture i386 && apt update
 
-# Switch to the enshrouded user to isolate server installation from root
-USER enshrouded
-WORKDIR /home/enshrouded
+# Accept Steam EULA automatically
+RUN echo steam steam/question select "I AGREE" | debconf-set-selections && \
+    echo steam steam/license note '' | debconf-set-selections
 
-# Create necessary directories
-RUN mkdir -p ${STEAMCMDDIR} ${SERVERDIR}
+# Install necessary packages
+RUN apt install -y --no-install-recommends \
+    locales \
+    ca-certificates \
+    software-properties-common \
+    wget \
+    vim \
+    cabextract \
+    winbind \
+    screen \
+    lib32z1 \
+    lib32gcc-s1 \
+    lib32stdc++6 \
+    steamcmd
 
-# Install the server via SteamCMD
-RUN steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir ${SERVERDIR} +login anonymous +app_update 2278520 validate +quit
+# Generate locale
+RUN locale-gen en_US.UTF-8
 
-# Copy server config (optional)
-COPY --chown=enshrouded:enshrouded enshrouded_server.json ${SERVERDIR}/enshrouded_server.json
+# Create a non-root steam user
+RUN groupadd steam && useradd -m steam -g steam && passwd -d steam && \
+    chown -R steam:steam /usr/games
 
-# Expose ports
-EXPOSE 15636/tcp
-EXPOSE 15637/tcp
+# Link SteamCMD into user home directory
+RUN ln -s /usr/games/steamcmd /home/steam/steamcmd
 
-# Start the Windows server executable via Wine
-ENTRYPOINT ["wine", "/home/enshrouded/enshroudedserver/enshrouded_server.exe"]
+# Install WineHQ-Staging from official repository
+RUN mkdir -pm755 /etc/apt/keyrings && \
+    wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
+    wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources && \
+    apt update && \
+    apt install -y --install-recommends winehq-staging
 
-# Reset DEBIAN_FRONTEND
-ENV DEBIAN_FRONTEND=dialog
+# Prepare Enshrouded directories
+RUN mkdir -p /home/steam/enshrouded/savegame /home/steam/enshrouded/logs && \
+    chown -R steam:steam /home/steam
+
+# Add entrypoint script
+ADD ./entrypoint.sh /home/steam/entrypoint.sh
+RUN chmod +x /home/steam/entrypoint.sh
+
+# Switch to steam user
+USER steam
+WORKDIR /home/steam
+
+# Run SteamCMD once to initialize
+RUN /home/steam/steamcmd +quit
+
+# Set up symlinks for Steam client libraries required by Wine
+RUN mkdir -p $HOME/.steam && \
+    ln -s $HOME/.local/share/Steam/steamcmd/linux32 $HOME/.steam/sdk32 && \
+    ln -s $HOME/.local/share/Steam/steamcmd/linux64 $HOME/.steam/sdk64 && \
+    ln -s $HOME/.steam/sdk32/steamclient.so $HOME/.steam/sdk32/steamservice.so && \
+    ln -s $HOME/.steam/sdk64/steamclient.so $HOME/.steam/sdk64/steamservice.so
+
+# Declare volume for persistent save data
+VOLUME /home/steam/enshrouded
+
+# Expose network ports used by Enshrouded
+EXPOSE 15636 15637
+
+# Run the entrypoint script
+ENTRYPOINT ["/home/steam/entrypoint.sh"]
