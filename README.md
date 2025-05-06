@@ -187,6 +187,19 @@ nano enshrouded_server.json
 
 ... [View full server settings here](https://github.com/bonsaibauer/enshrouded_server_docker/blob/main/enshrouded_server.md)
 
+> **ℹ️ Note: Nano editor**
+>
+> After editing the `enshrouded_server.json` file, follow these steps to save your changes and exit the Nano editor:
+>
+> 1. **Save**:
+>    - Press `CTRL + O` (this means "Write Out").
+>    - Press `Enter` to confirm and save the file with the current name.
+>
+> 2. **Exit**:
+>    - Press `CTRL + X` to close the Nano editor.
+>
+> You will then return to the regular command line.
+
 # 5. Build the Docker image
 
 Run the following command in the project directory:
