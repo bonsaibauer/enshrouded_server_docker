@@ -5,7 +5,6 @@
 [![Docker Image Size (tag)](https://img.shields.io/docker/image-size/bonsaibauer/enshrouded_server_docker/latest)](https://hub.docker.com/r/bonsaibauer/enshrouded_server_docker)
 
 [![Report Problem](https://img.shields.io/badge/Report-new_Problem_or_Issue-critical?style=flat&logo=github)](https://github.com/bonsaibauer/enshrouded_server_docker/issues/new)
-[![Discussions](https://img.shields.io/badge/Discussions-Share_Ideas-blue?style=flat&logo=github)](https://github.com/bonsaibauer/enshrouded_server_docker/discussions/new/choose)
 
 ![GitHub Stars](https://img.shields.io/github/stars/bonsaibauer/enshrouded_server_docker?style=social)
 ![GitHub Forks](https://img.shields.io/github/forks/bonsaibauer/enshrouded_server_docker?style=social)
