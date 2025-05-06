@@ -157,12 +157,6 @@ sudo git clone https://github.com/bonsaibauer/enshrouded_server_docker.git
 cd enshrouded_server_docker
 ```
 
-(Optional) Adjust ownership:
-
-```bash
-sudo chown -R enshrouded:enshrouded .
-```
-
 # 4. Build the Docker image
 
 Run the following command in the project directory:
