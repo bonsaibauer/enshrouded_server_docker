@@ -168,7 +168,41 @@ docker build -t enshrouded-server .
 
 This builds the image using the provided Dockerfile which includes SteamCMD, downloads the server, and sets up the environment.
 
-# 5. Start the server
+# 5. Option: (A) Start the Server (Simplified Version)
+You can launch the Enshrouded server container with just the essential Docker options. 
+Since all configuration can be handled later through the `enshrouded_server.json` file, 
+there's no need to set environment variables during startup.
+
+Use the following command to run the server:
+
+```bash
+docker run -d \
+  --name enshroudedserver \
+  --restart=always \
+  -p 15637:15637/udp \
+  -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
+  enshrouded-server
+```
+
+> Explanation of the Command
+>
+> - `-d`: Runs the container in detached mode (in the background).
+> - `--name enshroudedserver`: Names the container so you can reference it easily.
+> - `--restart=always`: Ensures the container automatically restarts if the server or host restarts.
+> - `-p 15637:15637/udp`: Exposes the necessary UDP port for the game.
+> - `-v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded`: Mounts a local directory for persistent data like the configuration file (`enshrouded_server.json`).
+> - `enshrouded-server`: The name of the Docker image you're using to run the server.
+> Once the container is running, you can stop it, edit the `enshrouded_server.json` file in the mounted volume (`/home/enshrouded/enshrouded_server_docker`), and then start the container again.
+
+Once your server has started, the following two lines should appear within the terminal. While you can connect to the server now, you will likely want to adjust the configuration file.
+
+```bash
+[Session] 'HostOnline' (up)!
+[Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
+```
+
+# 5.1 Option: (B) Launch the Container (with Environment Variables)
+This command runs the Enshrouded dedicated server using Docker and sets several environment variables directly when launching the container.
 
 Launch the container:
 
@@ -190,15 +224,39 @@ docker run -d \
   enshrouded-server
 ```
 
+> Explanation of each Part
+> - `-d`: Run in detached mode (in the background).
+> - `--name enshroudedserver`: Names the container “enshroudedserver”.
+> - `--restart=always`: Automatically restarts the container if it stops or the host reboots.
+> - `-p 15637:15637/udp`: Maps the UDP port 15637 from the container to the host, required for the game server.
+> - `-v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded`: Mounts a local directory for persistent data and configuration.
+> - `-e ENSHROUDED_SERVER_NAME="myservername"`: Sets the server's visible name.
+> - `-e ENSHROUDED_SERVER_MAXPLAYERS=16`: Limits the number of players to 16.
+> - `-e ENSHROUDED_VOICE_CHAT_MODE="Proximity"`: Enables proximity-based voice chat.
+> - `-e ENSHROUDED_ENABLE_VOICE_CHAT=false`: Disables voice chat (this overrides the mode setting).
+> - `-e ENSHROUDED_ENABLE_TEXT_CHAT=false`: Disables text chat in-game.
+> - `-e ENSHROUDED_GAME_PRESET="Default"`: Sets the game rules preset.
+> - `-e ENSHROUDED_ADMIN_PW="AdminXXXXXXXX"`: Password for admin access.
+> - `-e ENSHROUDED_FRIEND_PW="FriendXXXXXXXX"`: Password for friends to join.
+> - `-e ENSHROUDED_GUEST_PW="GuestXXXXXXXX"`: Password for guest access.
+> - `enshrouded-server`: The Docker image used to run the server.
+> 💡 **Tip:** You can skip the `-e` environment variables if you prefer to manage all server settings later in the `enshrouded_server.json` file inside the mounted volume.
+
 # 6. Edit server configuration
 
-Edit the `enshrouded_server.json` file to configure your server:
-- You can edit this configuration file to control the number of players and set a password for the server.
-- Set the server IP (important!), server name, password, and slot count as desired.
+## ⚠️ IMPORTANT: SET THE SERVER IP ADDRESS! ⚠️
+
+You **must** set the correct IP address of your server in the `enshrouded_server.json` file.  
+This is **crucial** for your server to be discoverable and function properly on the network.
+
+> 🔧 This file is located in the mounted directory:
+> `/home/enshrouded/enshrouded_server_docker/enshrouded_server.json`
 
 ```bash
 nano enshrouded_server.json
 ```
+
+Edit the `enshrouded_server.json` file to configure your server settings.
 
 ---
 
@@ -226,13 +284,6 @@ nano enshrouded_server.json
 >    - Press `CTRL + X` to close the Nano editor.
 >
 > You will then return to the regular command line.
-
-# 🚧 Work in Progress 😊
-.
-.
-.
-.
-.
 
 ## Buy Me A Coffee
 If this project has helped you in any way, do buy me a coffee so I can continue to build more of such projects in the future and share them with the community!
