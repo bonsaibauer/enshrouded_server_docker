@@ -159,7 +159,35 @@ sudo git clone https://github.com/bonsaibauer/enshrouded_server_docker.git
 cd enshrouded_server_docker
 ```
 
-# 4. Build the Docker image
+# 4. Deploy and Start docker container
+## 4.1 Option: (A) Use the Prebuilt Image from Docker Hub
+
+If you prefer not to build the image yourself, you can run the **official prebuilt Docker image** directly from Docker Hub. This is the fastest and easiest way to get your server up and running.
+
+### Run the Server Using the Docker Hub Image:
+
+```bash
+docker run -d \
+  --name enshroudedserver \
+  --restart=always \
+  -p 15637:15637/udp \
+  -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
+  bonsaibauer/enshrouded_server_docker:latest
+```
+
+### Explanation:
+> - `bonsaibauer/enshrouded_server_docker:latest` is the **official prebuilt image** available on Docker Hub  
+> - You **don’t need to build the image yourself**, just pull and run it  
+> - The rest of the parameters are the same as in Option B and C
+>
+> ✅ **Tip:** Configuration (`enshrouded_server.json`) is done in the mounted directory `/home/enshrouded/enshrouded_server_docker` as usual.
+
+## 4.2 Option: (B) Start the Server (Simplified Version)
+You can launch the Enshrouded server container with just the essential Docker options. 
+Since all configuration can be handled later through the `enshrouded_server.json` file, 
+there's no need to set environment variables during startup.
+
+### 1. Step: Build the Docker image
 
 Run the following command in the project directory:
 
@@ -167,15 +195,7 @@ Run the following command in the project directory:
 docker build -t enshrouded-server .
 ```
 
-This builds the image using the provided Dockerfile which includes SteamCMD, downloads the server, and sets up the environment.
-
-# 5. Start docker container
-## 5.1 Option: (A) Start the Server (Simplified Version)
-You can launch the Enshrouded server container with just the essential Docker options. 
-Since all configuration can be handled later through the `enshrouded_server.json` file, 
-there's no need to set environment variables during startup.
-
-Use the following command to run the server:
+### 2. Step: Use the following command to run the server:
 
 ```bash
 docker run -d \
@@ -215,8 +235,18 @@ docker run -d \
 > Ctrl + C
 > ```
 
-## 5.2 Option: (B) Launch the Container (with Environment Variables)
+## 4.3 Option: (C) Launch the Container (with Environment Variables)
 This command runs the Enshrouded dedicated server using Docker and sets several environment variables directly when launching the container.
+
+### 1. Step: Build the Docker image
+
+Run the following command in the project directory:
+
+```bash
+docker build -t enshrouded-server .
+```
+
+### 2. Step: Use the following command to run the server:
 
 Launch the container:
 
@@ -275,7 +305,7 @@ docker run -d \
 > Ctrl + C
 > ```
 
-# 6. Edit server configuration
+# 5. Edit server configuration
 
 ## ⚠️ IMPORTANT: SET THE SERVER IP ADDRESS! ⚠️
 
@@ -318,7 +348,7 @@ Edit the `enshrouded_server.json` file to configure your server settings.
 >
 > You will then return to the regular command line.
 
-# 7. Docker commands to manage Enshrouded Server
+# 6. Docker commands to manage Enshrouded Server
 ## Start the Enshrouded Server
 
 If the container has already been created (e.g. from a previous `docker run`), you can start it again with:
