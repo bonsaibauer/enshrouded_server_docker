@@ -169,6 +169,45 @@ docker run -d \
 
 ---
 
+### Run the Server Using Environmental Variables:
+
+```bash
+docker run -d \
+  --name enshroudedserver \
+  --restart=always \
+  -p 15637:15637/udp \
+  -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
+  -e ENSHROUDED_SERVER_NAME="myservername" \
+  -e ENSHROUDED_SERVER_MAXPLAYERS=16 \
+  -e ENSHROUDED_VOICE_CHAT_MODE="Proximity" \
+  -e ENSHROUDED_ENABLE_VOICE_CHAT=false \
+  -e ENSHROUDED_ENABLE_TEXT_CHAT=false \
+  -e ENSHROUDED_GAME_PRESET="Default" \
+  -e ENSHROUDED_ADMIN_PW="AdminXXXXXXXX" \
+  -e ENSHROUDED_FRIEND_PW="FriendXXXXXXXX" \
+  -e ENSHROUDED_GUEST_PW="GuestXXXXXXXX" \
+  bonsaibauer/enshrouded_server_docker:latest
+```
+
+### Explanation of Environmental Variables
+> - `-d`: Run in detached mode (in the background).
+> - `--name enshroudedserver`: Names the container “enshroudedserver”.
+> - `--restart=always`: Automatically restarts the container if it stops or the host reboots.
+> - `-p 15637:15637/udp`: Maps the UDP port 15637 from the container to the host, required for the game server.
+> - `-v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded`: Mounts a local directory for persistent data and configuration.
+> - `-e ENSHROUDED_SERVER_NAME="myservername"`: Sets the server's visible name.
+> - `-e ENSHROUDED_SERVER_MAXPLAYERS=16`: Limits the number of players to 16.
+> - `-e ENSHROUDED_VOICE_CHAT_MODE="Proximity"`: Enables proximity-based voice chat.
+> - `-e ENSHROUDED_ENABLE_VOICE_CHAT=false`: Disables voice chat (this overrides the mode setting).
+> - `-e ENSHROUDED_ENABLE_TEXT_CHAT=false`: Disables text chat in-game.
+> - `-e ENSHROUDED_GAME_PRESET="Default"`: Sets the game rules preset.
+> - `-e ENSHROUDED_ADMIN_PW="AdminXXXXXXXX"`: Password for admin access.
+> - `-e ENSHROUDED_FRIEND_PW="FriendXXXXXXXX"`: Password for friends to join.
+> - `-e ENSHROUDED_GUEST_PW="GuestXXXXXXXX"`: Password for guest access.
+> - `bonsaibauer/enshrouded_server_docker:latest`: The Docker Hub image used to run the server.
+> 
+> 💡 **Tip:** You can skip the `-e` environment variables if you prefer to manage all server settings later in the `enshrouded_server.json` file inside the mounted volume.
+
 ## 3.2 Option: (B) Launch the Container (Simplified Version)
 You can launch the Enshrouded server container with just the essential Docker options. 
 Since all configuration can be handled later through the `enshrouded_server.json` file, 
