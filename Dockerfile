@@ -60,7 +60,10 @@ RUN mkdir -pm755 /etc/apt/keyrings && \
 # SteamCMD manuell installieren
 RUN mkdir -p /opt/steamcmd && \
     curl -sSL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar -xz -C /opt/steamcmd && \
+    chmod +x /opt/steamcmd/steamcmd.sh && \
+    chown -R steam:steam /opt/steamcmd && \
     ln -s /opt/steamcmd/steamcmd.sh /usr/bin/steamcmd
+
 
 # Enshrouded-Verzeichnisse vorbereiten
 RUN mkdir -p /home/steam/enshrouded/savegame /home/steam/enshrouded/logs && \
