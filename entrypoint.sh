@@ -1,26 +1,15 @@
 #!/bin/bash
 
-set -e
+# If this is the first initialization of the container, create the server config
+if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
 
-CONFIG_PATH="/home/steam/enshrouded/enshrouded_server.json"
+    echo " ----- Starting initial configuration -----"
 
-# Standard-IP, falls nicht gesetzt
-: "${ENSHROUDED_SERVER_NAME:=Enshrouded Server}"
-: "${ENSHROUDED_SERVER_MAXPLAYERS:=16}"
-: "${ENSHROUDED_SERVER_IP:=0.0.0.0}"
-: "${ENSHROUDED_VOICE_CHAT_MODE:=Proximity}"
-: "${ENSHROUDED_ENABLE_VOICE_CHAT:=false}"
-: "${ENSHROUDED_ENABLE_TEXT_CHAT:=false}"
-: "${ENSHROUDED_GAME_PRESET:=Default}"
-: "${ENSHROUDED_ADMIN_PW:=AdminXXXXXXXX}"
-: "${ENSHROUDED_FRIEND_PW:=FriendXXXXXXXX}"
-: "${ENSHROUDED_GUEST_PW:=GuestXXXXXXXX}"
+    # Create server properties file using environment variables
+    echo "Creating server configuration file..."
 
-# Initial configuration
-if [ ! -e "$CONFIG_PATH" ]; then
-    echo " ----- Creating server config: enshrouded_server.json -----"
-
-    cat << EOF > "$CONFIG_PATH"
+    touch /home/steam/enshrouded/enshrouded_server.json
+    cat << EOF >> /home/steam/enshrouded/enshrouded_server.json
 {
   "name": "${ENSHROUDED_SERVER_NAME}",
   "saveDirectory": "./savegame",
@@ -100,16 +89,18 @@ if [ ! -e "$CONFIG_PATH" ]; then
 }
 EOF
 
-    echo " ----- Server config created successfully -----"
+    echo "enshrouded_server.json created."
+
+    echo " ----- Initial configuration complete -----"
 else
-    echo " ----- Existing config found, skipping creation -----"
+    echo " ----- Server configuration already exists -----"
 fi
 
 # Update or install the Enshrouded dedicated server using SteamCMD
 su steam -c "./steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /home/steam/enshrouded +login anonymous +app_update 2278520 +quit"
 echo "Server files updated."
 
-# Launch server
+# Launch the Enshrouded server executable using Wine
 su steam -c "wine /home/steam/enshrouded/enshrouded_server.exe"
 echo "Server launched successfully."
 /bin/bash
