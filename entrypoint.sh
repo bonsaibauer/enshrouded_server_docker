@@ -105,9 +105,11 @@ else
     echo " ----- Existing config found, skipping creation -----"
 fi
 
-# Update server files
-steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /home/steam/enshrouded +login anonymous +app_update 2278520 validate +quit
+# Update or install the Enshrouded dedicated server using SteamCMD
+su steam -c "./steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /home/steam/enshrouded +login anonymous +app_update 2278520 +quit"
+echo "Server files updated."
 
 # Launch server
-cd /home/steam/enshrouded
-wine enshrouded_server.exe
+su steam -c "wine /home/steam/enshrouded/enshrouded_server.exe"
+echo "Server launched successfully."
+/bin/bash
