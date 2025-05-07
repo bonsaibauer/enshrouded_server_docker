@@ -30,7 +30,14 @@ RUN set -x \
 && apt install -y \
     vim \
     wget \
-    software-properties-common
+    software-properties-common \
+    locales \
+&& locale-gen en_US.UTF-8 \
+&& update-locale LANG=en_US.UTF-8
+
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
 
 # --------------------------
 # Install SteamCMD and Dependencies
@@ -50,7 +57,6 @@ RUN add-apt-repository -y multiverse \
 && chown -R steam:steam /usr/games \
 && ln -s /usr/games/steamcmd /home/steam/steamcmd
 
-
 # --------------------------
 # Install Wine and Winetricks
 # --------------------------
@@ -69,9 +75,9 @@ RUN dpkg --add-architecture amd64 \
 # --------------------------
 # Create Server Directories
 # --------------------------
-RUN mkdir /home/steam/enshrouded \
-&& mkdir /home/steam/enshrouded/savegame \
-&& mkdir /home/steam/enshrouded/logs \
+RUN mkdir -p /home/steam/.steam \
+&& mkdir -p /home/steam/enshrouded/savegame \
+&& mkdir -p /home/steam/enshrouded/logs \
 && chown -R steam:steam /home/steam
 
 # --------------------------
