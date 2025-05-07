@@ -1,19 +1,20 @@
 ######## Enshrouded Dedicated Server - SteamCMD & Wine ########
 
+# Base image: Ubuntu 22.04 for WineHQ-Staging compatibility
 FROM ubuntu:22.04
 
+# Use bash with pipefail for safety in scripts
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# System-Umgebungsvariablen
+# General environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG='en_US.UTF-8'
 ENV LANGUAGE='en_US:en'
 ENV LC_ALL='en_US.UTF-8'
 ENV WINEARCH=win64
 ENV HOME=/home/steam
-ENV XDG_RUNTIME_DIR=/tmp/runtime
 
-# ==== Enshrouded Server Konfiguration mit Defaults ====
+# Enshrouded-specific server environment variables
 ENV ENSHROUDED_SERVER_NAME="Enshrouded Server"
 ENV ENSHROUDED_SERVER_MAXPLAYERS=16
 ENV ENSHROUDED_SERVER_IP="0.0.0.0"
@@ -25,14 +26,19 @@ ENV ENSHROUDED_ADMIN_PW="AdminXXXXXXXX"
 ENV ENSHROUDED_FRIEND_PW="FriendXXXXXXXX"
 ENV ENSHROUDED_GUEST_PW="GuestXXXXXXXX"
 
-# 32-bit Architektur für Wine aktivieren und System vorbereiten
-RUN dpkg --add-architecture i386 && apt update && apt install -y --no-install-recommends \
+# Enable i386 architecture for 32-bit compatibility
+RUN dpkg --add-architecture i386 && apt update
+
+# Accept Steam EULA automatically
+RUN echo steam steam/question select "I AGREE" | debconf-set-selections && \
+    echo steam steam/license note '' | debconf-set-selections
+
+# Install necessary packages
+RUN apt install -y --no-install-recommends \
     locales \
     ca-certificates \
     software-properties-common \
     wget \
-    curl \
-    tar \
     vim \
     cabextract \
     winbind \
@@ -40,49 +46,52 @@ RUN dpkg --add-architecture i386 && apt update && apt install -y --no-install-re
     lib32z1 \
     lib32gcc-s1 \
     lib32stdc++6 \
-    libvulkan1 \
-    mesa-vulkan-drivers
+    steamcmd
 
-# Locale setzen
+# Generate locale
 RUN locale-gen en_US.UTF-8
 
-# Benutzer 'steam' einrichten
+# Create a non-root steam user
 RUN groupadd steam && useradd -m steam -g steam && passwd -d steam && \
-    mkdir -p /tmp/runtime && chown -R steam:steam /tmp/runtime
+    chown -R steam:steam /usr/games
 
-# WineHQ-Staging installieren
+# Link SteamCMD into user home directory
+RUN ln -s /usr/games/steamcmd /home/steam/steamcmd
+
+# Install WineHQ-Staging from official repository
 RUN mkdir -pm755 /etc/apt/keyrings && \
     wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
     wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources && \
     apt update && \
     apt install -y --install-recommends winehq-staging
 
-# SteamCMD manuell installieren
-RUN mkdir -p /opt/steamcmd && \
-    curl -sSL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar -xz -C /opt/steamcmd && \
-    chmod +x /opt/steamcmd/steamcmd.sh && \
-    chown -R steam:steam /opt/steamcmd && \
-    ln -s /opt/steamcmd/steamcmd.sh /usr/bin/steamcmd
-
-
-# Enshrouded-Verzeichnisse vorbereiten
+# Prepare Enshrouded directories
 RUN mkdir -p /home/steam/enshrouded/savegame /home/steam/enshrouded/logs && \
     chown -R steam:steam /home/steam
 
-# Entrypoint hinzufügen
-COPY --chown=steam:steam entrypoint.sh /home/steam/entrypoint.sh
+# Add entrypoint script
+ADD ./entrypoint.sh /home/steam/entrypoint.sh
 RUN chmod +x /home/steam/entrypoint.sh
 
-# Benutzer wechseln
+# Switch to steam user
 USER steam
 WORKDIR /home/steam
 
-# Volume für Spielstände und Konfiguration
+# Run SteamCMD once to initialize
+RUN /home/steam/steamcmd +quit
+
+# Set up symlinks for Steam client libraries required by Wine
+RUN mkdir -p $HOME/.steam && \
+    ln -s $HOME/.local/share/Steam/steamcmd/linux32 $HOME/.steam/sdk32 && \
+    ln -s $HOME/.local/share/Steam/steamcmd/linux64 $HOME/.steam/sdk64 && \
+    ln -s $HOME/.steam/sdk32/steamclient.so $HOME/.steam/sdk32/steamservice.so && \
+    ln -s $HOME/.steam/sdk64/steamclient.so $HOME/.steam/sdk64/steamservice.so
+
+# Declare volume for persistent save data
 VOLUME /home/steam/enshrouded
 
-# Nur Query-Port (gamePort ist veraltet)
-EXPOSE 15637/udp
+# Expose network ports used by Enshrouded
+EXPOSE 15636 15637
 
-# Serverstart
+# Run the entrypoint script
 ENTRYPOINT ["/home/steam/entrypoint.sh"]
-
