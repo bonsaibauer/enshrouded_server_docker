@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Ensure .steam directory exists to avoid symlink issues
+mkdir -p /home/steam/.steam
+
 # If this is the first initialization of the container, create the server config
 if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
 
