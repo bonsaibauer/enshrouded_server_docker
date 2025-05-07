@@ -318,6 +318,37 @@ Edit the `enshrouded_server.json` file to configure your server settings.
 >
 > You will then return to the regular command line.
 
+# 7. Docker commands to manage Enshrouded Server
+## Start the Enshrouded Server
+
+If the container has already been created (e.g. from a previous `docker run`), you can start it again with:
+
+```bash
+docker start enshroudedserver
+```
+
+## Stop the Enshrouded Server
+
+To safely stop the server without deleting the container:
+
+```bash
+docker stop enshroudedserver
+```
+
+## Update the Enshrouded Server
+
+To restart the container (stop and start again):
+
+```bash
+docker restart enshroudedserver
+```
+
+## Stop and remove the container
+   ```bash
+   docker stop enshroudedserver
+   docker rm enshroudedserver
+   ```
+
 ## Buy Me A Coffee
 If this project has helped you in any way, do buy me a coffee so I can continue to build more of such projects in the future and share them with the community!
 
