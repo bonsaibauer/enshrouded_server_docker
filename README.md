@@ -182,6 +182,8 @@ docker run -d \
 >
 > ✅ **Tip:** Configuration (`enshrouded_server.json`) is done in the mounted directory `/home/enshrouded/enshrouded_server_docker` as usual.
 
+---
+
 ## 4.2 Option: (B) Start the Server (Simplified Version)
 You can launch the Enshrouded server container with just the essential Docker options. 
 Since all configuration can be handled later through the `enshrouded_server.json` file, 
@@ -234,6 +236,8 @@ docker run -d \
 > ```bash
 > Ctrl + C
 > ```
+
+---
 
 ## 4.3 Option: (C) Launch the Container (with Environment Variables)
 This command runs the Enshrouded dedicated server using Docker and sets several environment variables directly when launching the container.
@@ -304,6 +308,8 @@ docker run -d \
 > ```bash
 > Ctrl + C
 > ```
+
+---
 
 # 5. Edit server configuration
 
