@@ -14,7 +14,7 @@ if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
   "name": "${ENSHROUDED_SERVER_NAME}",
   "saveDirectory": "./savegame",
   "logDirectory": "./logs",
-  "ip": "${ENSHROUDED_SERVER_IP}",
+  "ip": "0.0.0.0",
   "queryPort": 15637,
   "slotCount": ${ENSHROUDED_SERVER_MAXPLAYERS},
   "voiceChatMode": "${ENSHROUDED_VOICE_CHAT_MODE}",
