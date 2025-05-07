@@ -91,7 +91,7 @@ RUN mkdir -p $HOME/.steam && \
 VOLUME /home/steam/enshrouded
 
 # Expose network ports used by Enshrouded
-EXPOSE 15636 15637
+EXPOSE 15637/udp
 
 # Run the entrypoint script
 ENTRYPOINT ["/home/steam/entrypoint.sh"]
