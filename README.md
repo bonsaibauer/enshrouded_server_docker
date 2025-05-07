@@ -177,7 +177,7 @@ docker run -d \
   --name enshroudedserver \
   --restart=always \
   -p 15637:15637/udp \
-  -v /home/enshrouded:/home/steam/enshrouded \
+  -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
   -e ENSHROUDED_SERVER_NAME="myservername" \
   -e ENSHROUDED_SERVER_MAXPLAYERS=16 \
   -e ENSHROUDED_SERVER_IP="0.0.0.0" \
