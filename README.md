@@ -168,7 +168,8 @@ docker build -t enshrouded-server .
 
 This builds the image using the provided Dockerfile which includes SteamCMD, downloads the server, and sets up the environment.
 
-# 5. Option: (A) Start the Server (Simplified Version)
+# 5. Start docker container
+## 5.1 Option: (A) Start the Server (Simplified Version)
 You can launch the Enshrouded server container with just the essential Docker options. 
 Since all configuration can be handled later through the `enshrouded_server.json` file, 
 there's no need to set environment variables during startup.
@@ -201,7 +202,7 @@ Once your server has started, the following two lines should appear within the t
 [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
 ```
 
-# 5.1 Option: (B) Launch the Container (with Environment Variables)
+## 5.2 Option: (B) Launch the Container (with Environment Variables)
 This command runs the Enshrouded dedicated server using Docker and sets several environment variables directly when launching the container.
 
 Launch the container:
@@ -241,6 +242,13 @@ docker run -d \
 > - `-e ENSHROUDED_GUEST_PW="GuestXXXXXXXX"`: Password for guest access.
 > - `enshrouded-server`: The Docker image used to run the server.
 > 💡 **Tip:** You can skip the `-e` environment variables if you prefer to manage all server settings later in the `enshrouded_server.json` file inside the mounted volume.
+
+Once your server has started, the following two lines should appear within the terminal. While you can connect to the server now, you will likely want to adjust the configuration file.
+
+```bash
+[Session] 'HostOnline' (up)!
+[Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
+```
 
 # 6. Edit server configuration
 
