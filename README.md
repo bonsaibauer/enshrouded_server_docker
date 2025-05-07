@@ -253,6 +253,7 @@ docker run -d \
 > - `-e ENSHROUDED_FRIEND_PW="FriendXXXXXXXX"`: Password for friends to join.
 > - `-e ENSHROUDED_GUEST_PW="GuestXXXXXXXX"`: Password for guest access.
 > - `enshrouded-server`: The Docker image used to run the server.
+> 
 > 💡 **Tip:** You can skip the `-e` environment variables if you prefer to manage all server settings later in the `enshrouded_server.json` file inside the mounted volume.
 
 ### Monitoring Enshrouded Docker Server Logs for successful start
