@@ -42,7 +42,6 @@ RUN dpkg --add-architecture i386 && apt update && apt install -y --no-install-re
     steamcmd \
     libvulkan1 \
     mesa-vulkan-drivers \
-    vulkan-utils \
     curl
 
 # Locale setzen
