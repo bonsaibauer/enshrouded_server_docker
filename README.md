@@ -45,11 +45,11 @@ You’ll need:
 - sudo or administrative privileges
 - `ufw` or firewall configuration (ensure port **15637** is open and forwarded)
 
-# 1. Installing Docker (Ubuntu 22.04 and Other Linux Systems)
+# 1. Installing Docker (Ubuntu 24.04 and Other Linux Systems)
 
 Docker allows you to run applications in isolated containers. It's ideal for deploying an Enshrouded dedicated server because it ensures consistency, portability, and easy management.
 
-This guide will walk you through installing Docker on Ubuntu 22.04. These steps also work on most other Linux distributions with minor adjustments.
+This guide will walk you through installing Docker on Ubuntu 24.04. These steps also work on most other Linux distributions with minor adjustments.
 
 ### Step 1: Update Your Package Index
 
