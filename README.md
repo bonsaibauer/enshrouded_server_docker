@@ -180,7 +180,6 @@ docker run -d \
   -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
   -e ENSHROUDED_SERVER_NAME="myservername" \
   -e ENSHROUDED_SERVER_MAXPLAYERS=16 \
-  -e ENSHROUDED_SERVER_IP="0.0.0.0" \
   -e ENSHROUDED_VOICE_CHAT_MODE="Proximity" \
   -e ENSHROUDED_ENABLE_VOICE_CHAT=false \
   -e ENSHROUDED_ENABLE_TEXT_CHAT=false \
