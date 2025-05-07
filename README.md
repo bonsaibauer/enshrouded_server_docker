@@ -169,7 +169,7 @@ docker run -d \
 
 ---
 
-## 3.2 Option: (B) Start the Server (Simplified Version)
+## 3.2 Option: (B) Launch the Container (Simplified Version)
 You can launch the Enshrouded server container with just the essential Docker options. 
 Since all configuration can be handled later through the `enshrouded_server.json` file, 
 there's no need to set environment variables during startup.
