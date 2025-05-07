@@ -62,15 +62,16 @@ sudo apt update && sudo apt upgrade -y
 - `sudo apt update`: Refreshes the package index.
 - `sudo apt upgrade -y`: Upgrades installed packages automatically.
 
-`Fedora`
-```
-sudo dnf upgrade --refresh
-```
+> `Fedora`
+> ```
+> sudo dnf upgrade --refresh
+> ```
+> 
+> `Arch Linux`
+> ```
+> sudo pacman -Syu
+> ```
 
-`Arch Linux`
-```
-sudo pacman -Syu
-```
 ### Step 2: Install Required Dependencies
 
 Docker relies on a few helper packages. Install them with:
