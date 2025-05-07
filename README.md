@@ -328,11 +328,6 @@ docker run -d \
 
 # 4. Edit server configuration
 
-## ⚠️ IMPORTANT: SET THE SERVER IP ADDRESS! ⚠️
-
-You **must** set the correct IP address of your server in the `enshrouded_server.json` file.  
-This is **crucial** for your server to be discoverable and function properly on the network.
-
 > 🔧 This file is located in the mounted directory:
 > `/home/enshrouded/enshrouded_server_docker/enshrouded_server.json`
 
