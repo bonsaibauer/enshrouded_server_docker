@@ -135,6 +135,7 @@ sudo useradd -m -r -s /bin/false enshrouded
 
 # Ensure the home directory exists
 sudo mkdir -p /home/enshrouded
+sudo mkdir -p /home/enshrouded/enshrouded_server_docker
 
 # Set proper ownership
 sudo chown 1000:1000 /home/enshrouded/enshrouded_server_docker
