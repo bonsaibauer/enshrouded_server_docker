@@ -76,6 +76,7 @@ RUN dpkg --add-architecture amd64 \
 # Create Server Directories
 # --------------------------
 RUN mkdir -p /home/steam/.steam \
+&& mkdir -p /home/steam/enshrouded \
 && mkdir -p /home/steam/enshrouded/savegame \
 && mkdir -p /home/steam/enshrouded/logs \
 && chown -R steam:steam /home/steam
