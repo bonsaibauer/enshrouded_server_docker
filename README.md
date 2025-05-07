@@ -185,7 +185,7 @@ docker run -d \
   enshrouded-server
 ```
 
-> Explanation of the Command
+### Explanation of the Command
 >
 > - `-d`: Runs the container in detached mode (in the background).
 > - `--name enshroudedserver`: Names the container so you can reference it easily.
@@ -195,12 +195,24 @@ docker run -d \
 > - `enshrouded-server`: The name of the Docker image you're using to run the server.
 > Once the container is running, you can stop it, edit the `enshrouded_server.json` file in the mounted volume (`/home/enshrouded/enshrouded_server_docker`), and then start the container again.
 
-Once your server has started, the following two lines should appear within the terminal. While you can connect to the server now, you will likely want to adjust the configuration file.
-
-```bash
-[Session] 'HostOnline' (up)!
-[Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
-```
+### Monitoring Enshrouded Docker Server Logs for successful start
+> ```bash
+> docker logs -f enshroudedserver
+> ```
+> The `-f` flag means "follow", which shows real-time output.
+> 
+> Wait until you see the following logs to confirm it's running:
+> 
+> ```bash
+> [Session] 'HostOnline' (up)!
+> [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
+> ```
+> 
+> To exit the log view safely and keep the server running, press:
+> 
+> ```bash
+> Ctrl + C
+> ```
 
 ## 5.2 Option: (B) Launch the Container (with Environment Variables)
 This command runs the Enshrouded dedicated server using Docker and sets several environment variables directly when launching the container.
@@ -224,8 +236,7 @@ docker run -d \
   -e ENSHROUDED_GUEST_PW="GuestXXXXXXXX" \
   enshrouded-server
 ```
-
-> Explanation of each Part
+### Explanation of Environmental Variables
 > - `-d`: Run in detached mode (in the background).
 > - `--name enshroudedserver`: Names the container “enshroudedserver”.
 > - `--restart=always`: Automatically restarts the container if it stops or the host reboots.
@@ -243,12 +254,24 @@ docker run -d \
 > - `enshrouded-server`: The Docker image used to run the server.
 > 💡 **Tip:** You can skip the `-e` environment variables if you prefer to manage all server settings later in the `enshrouded_server.json` file inside the mounted volume.
 
-Once your server has started, the following two lines should appear within the terminal. While you can connect to the server now, you will likely want to adjust the configuration file.
-
-```bash
-[Session] 'HostOnline' (up)!
-[Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
-```
+### Monitoring Enshrouded Docker Server Logs for successful start
+> ```bash
+> docker logs -f enshroudedserver
+> ```
+> The `-f` flag means "follow", which shows real-time output.
+> 
+> Wait until you see the following logs to confirm it's running:
+> 
+> ```bash
+> [Session] 'HostOnline' (up)!
+> [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
+> ```
+> 
+> To exit the log view safely and keep the server running, press:
+> 
+> ```bash
+> Ctrl + C
+> `
 
 # 6. Edit server configuration
 
