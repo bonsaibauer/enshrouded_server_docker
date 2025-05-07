@@ -175,8 +175,7 @@ Launch the container:
 docker run -d \
   --name enshroudedserver \
   --restart=always \
-  -p 15636:15636 \
-  -p 15637:15637/udp \
+  -p 15637:15637 \
   -v /home/enshrouded:/home/steam/enshrouded \
   -e ENSHROUDED_SERVER_NAME=myservername \
   -e ENSHROUDED_SERVER_PASSWORD=changepw \
