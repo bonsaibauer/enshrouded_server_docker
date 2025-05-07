@@ -271,7 +271,7 @@ docker run -d \
 > 
 > ```bash
 > Ctrl + C
-> `
+> ```
 
 # 6. Edit server configuration
 
