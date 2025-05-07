@@ -175,11 +175,18 @@ Launch the container:
 docker run -d \
   --name enshroudedserver \
   --restart=always \
-  -p 15637:15637 \
+  -p 15637:15637/udp \
   -v /home/enshrouded:/home/steam/enshrouded \
-  -e ENSHROUDED_SERVER_NAME=myservername \
-  -e ENSHROUDED_SERVER_PASSWORD=changepw \
+  -e ENSHROUDED_SERVER_NAME="myservername" \
   -e ENSHROUDED_SERVER_MAXPLAYERS=16 \
+  -e ENSHROUDED_SERVER_IP="0.0.0.0" \
+  -e ENSHROUDED_VOICE_CHAT_MODE="Proximity" \
+  -e ENSHROUDED_ENABLE_VOICE_CHAT=false \
+  -e ENSHROUDED_ENABLE_TEXT_CHAT=false \
+  -e ENSHROUDED_GAME_PRESET="Default" \
+  -e ENSHROUDED_ADMIN_PW="AdminXXXXXXXX" \
+  -e ENSHROUDED_FRIEND_PW="FriendXXXXXXXX" \
+  -e ENSHROUDED_GUEST_PW="GuestXXXXXXXX" \
   enshrouded-server
 ```
 
