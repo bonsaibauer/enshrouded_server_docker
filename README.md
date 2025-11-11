@@ -195,7 +195,6 @@ docker run -d \
   --name enshroudedserver \
   --restart=always \
   -p 15637:15637/udp \
-  -p 15637:15637/tcp \
   -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
   -e ENSHROUDED_SERVER_NAME="myservername" \
   -e ENSHROUDED_SERVER_MAXPLAYERS=16 \
@@ -263,7 +262,6 @@ docker run -d \
   --name enshroudedserver \
   --restart=always \
   -p 15637:15637/udp \
-  -p 15637:15637/tcp \
   -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
   enshrouded-server
 ```
@@ -334,7 +332,6 @@ docker run -d \
   --name enshroudedserver \
   --restart=always \
   -p 15637:15637/udp \
-  -p 15637:15637/tcp \
   -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
   -e ENSHROUDED_SERVER_NAME="myservername" \
   -e ENSHROUDED_SERVER_MAXPLAYERS=16 \

@@ -99,7 +99,6 @@ WORKDIR /home/steam
 # --------------------------
 VOLUME /home/steam/enshrouded
 EXPOSE 15637/udp
-EXPOSE 15637/tcp
 
 # --------------------------
 # Default Entrypoint
