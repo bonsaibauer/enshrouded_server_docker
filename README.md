@@ -188,6 +188,28 @@ docker run -d \
 
 ---
 
+### Monitoring Enshrouded Docker Server Logs for successful start
+> ```bash
+> docker logs -f enshroudedserver
+> ```
+> The `-f` flag means "follow", which shows real-time output.
+> 
+> Wait until you see the following logs to confirm it's running:
+> 
+> ```bash
+> [Session] 'HostOnline' (up)!
+> [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
+> ```
+> 
+> To exit the log view safely and keep the server running, press:
+> 
+> ```bash
+> Ctrl + C
+> ```
+
+[Go to „4. Edit server configuration“](#4-edit-server-configuration)
+---
+
 ### Run the Server Using Environmental Variables:
 
 ```bash
