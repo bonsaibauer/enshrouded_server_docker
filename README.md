@@ -208,6 +208,7 @@ docker run -d \
 > ```
 
 [Go to „4. Edit server configuration“](#4-edit-server-configuration)
+
 ---
 
 ### Run the Server Using Environmental Variables:
