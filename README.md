@@ -22,8 +22,22 @@ Embark on an adventure in the mystical world of Embervale with your own dedicate
 
 **Enshrouded** is an immersive survival action RPG set in a vast, voxel-based open world. Players must explore dangerous lands, craft for survival, and battle mystical creatures. The game supports cooperative multiplayer for up to 16 players, creating the perfect environment for shared adventures.
 
-![Enshrouded Docker Server Setup](enshrouded_docker_v2.png)  
+![Enshrouded Docker Server Setup](images/enshrouded_docker_v2.png)  
 <sub>Image generated with the help of [ChatGPT](https://openai.com/chatgpt)</sub>
+
+## Update v1.4 – Wake of the Water
+
+![Wake of the Water Update](images/update_wake_of_water.jpeg)
+
+- Dynamically simulated water, water tools, and flooding safeguards bring bases to life.
+- Veilwater Basin biome, new quests, enemies, and gear raise the progression cap to level 45.
+- Fishing, greatswords, rebalanced loot, and workstation force requirements deepen crafting/combat.
+- Dedicated servers now expose tags, a visitor role with terraforming limits, and improved admin tools.
+
+### Full Settings + Example Config
+
+- All server/gameplay fields are documented in [`docs/enshrouded_server.md`](docs/enshrouded_server.md).
+- A complete sample with every setting populated ships in [`ressources/enshrouded_server.json`](ressources/enshrouded_server.json).
 
 ---
 
@@ -393,7 +407,7 @@ Edit the `enshrouded_server.json` file to configure your server settings.
 | **ip**             | Server IP binding                          | "0.0.0.0"                | Server ip adress          |
 | ...                | ...                                        | ...                      | ...                       |
 
-... [View full server settings here](https://github.com/bonsaibauer/enshrouded_server_docker/blob/main/enshrouded_server.md)
+... [View full server settings here](https://github.com/bonsaibauer/enshrouded_server_docker/blob/main/docs/enshrouded_server.md)
 
 > **ℹ️ Note: Nano editor**
 >
