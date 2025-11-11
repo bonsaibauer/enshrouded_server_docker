@@ -25,7 +25,7 @@ Embark on an adventure in the mystical world of Embervale with your own dedicate
 ![Enshrouded Docker Server Setup](images/enshrouded_docker_v2.png)  
 <sub>Image generated with the help of [ChatGPT](https://openai.com/chatgpt)</sub>
 
-## Update v1.4 – Wake of the Water
+## Update v1.1 – Wake of the Water 2025-11 release
 
 ![Wake of the Water Update](images/update_wake_of_water.jpeg)
 
