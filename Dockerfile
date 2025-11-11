@@ -1,7 +1,7 @@
 # --------------------------
 # Base Image
 # --------------------------
-FROM ubuntu:22.04
+FROM docker.io/library/ubuntu:24.04
 
 # --------------------------
 # General Environment Variables
@@ -27,6 +27,7 @@ ENV ENSHROUDED_GUEST_PW="GuestXXXXXXXX"
 # --------------------------
 RUN set -x \
 && apt update \
+&& apt upgrade -y \
 && apt install -y \
     vim \
     wget \
@@ -63,14 +64,16 @@ RUN add-apt-repository -y multiverse \
 RUN dpkg --add-architecture amd64 \
 && mkdir -pm755 /etc/apt/keyrings \
 && wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key \
-&& wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources \
+&& wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources \
 && apt update \
 && apt install -y --install-recommends \
     winehq-staging \
 && apt install -y --allow-unauthenticated \
     cabextract \
     winbind \
-    screen
+    screen \
+&& apt-get clean \
+&& rm -rf /var/lib/apt/lists/*
 
 # --------------------------
 # Create Server Directories
