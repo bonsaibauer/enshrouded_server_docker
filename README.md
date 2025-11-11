@@ -22,8 +22,22 @@ Embark on an adventure in the mystical world of Embervale with your own dedicate
 
 **Enshrouded** is an immersive survival action RPG set in a vast, voxel-based open world. Players must explore dangerous lands, craft for survival, and battle mystical creatures. The game supports cooperative multiplayer for up to 16 players, creating the perfect environment for shared adventures.
 
-![Enshrouded Docker Server Setup](enshrouded_docker_v2.png)  
+![Enshrouded Docker Server Setup](images/enshrouded_docker_v2.png)  
 <sub>Image generated with the help of [ChatGPT](https://openai.com/chatgpt)</sub>
+
+## Update v1.1 – Wake of the Water 2025-11 release
+
+![Wake of the Water Update](images/update_wake_of_water.jpeg)
+
+- Dynamically simulated water, water tools, and flooding safeguards bring bases to life.
+- Veilwater Basin biome, new quests, enemies, and gear raise the progression cap to level 45.
+- Fishing, greatswords, rebalanced loot, and workstation force requirements deepen crafting/combat.
+- Dedicated servers now expose tags, a visitor role with terraforming limits, and improved admin tools.
+
+### Full Settings + Example Config
+
+- All server/gameplay fields are documented in [`docs/enshrouded_server.md`](docs/enshrouded_server.md).
+- A complete sample with every setting populated ships in [`ressources/enshrouded_server.json`](ressources/enshrouded_server.json).
 
 ---
 
@@ -143,13 +157,20 @@ sudo useradd -m -r -s /bin/false enshrouded
 sudo mkdir -p /home/enshrouded
 sudo mkdir -p /home/enshrouded/enshrouded_server_docker
 
-# Set proper ownership
-sudo chown 1000:1000 /home/enshrouded/enshrouded_server_docker
+# Set proper ownership 
+sudo chown 1001:1001 /home/enshrouded/enshrouded_server_docker
 ```
 
 > 🛡️ This ensures that the container can write to `/home/enshrouded` and all server data stays in one clean location.
 
 # 3. Deploy and Start docker container
+
+Looking for the build-it-yourself workflows? Choose the option that fits best:
+
+- Option (A) Use the Prebuilt Image from Docker Hub (following)
+- [Option (B) Launch the Container (Simplified Version)](docs/launch_container_option_b.md)
+- [Option (C) Launch the Container (with Environment Variables)](docs/launch_container_option_c.md)
+
 ## 3.1 Option: (A) Use the Prebuilt Image from Docker Hub
 
 If you prefer not to build the image yourself, you can run the **official prebuilt Docker image** directly from Docker Hub. This is the fastest and easiest way to get your server up and running.
@@ -171,6 +192,29 @@ docker run -d \
 > - The rest of the parameters are the same as in Option B and C
 >
 > ✅ **Tip:** Configuration (`enshrouded_server.json`) is done in the mounted directory `/home/enshrouded/enshrouded_server_docker` as usual.
+
+---
+
+### Monitoring Enshrouded Docker Server Logs for successful start
+> ```bash
+> docker logs -f enshroudedserver
+> ```
+> The `-f` flag means "follow", which shows real-time output.
+> 
+> Wait until you see the following logs to confirm it's running:
+> 
+> ```bash
+> [Session] 'HostOnline' (up)!
+> [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
+> ```
+> 
+> To exit the log view safely and keep the server running, press:
+> 
+> ```bash
+> Ctrl + C
+> ```
+
+[Go to „4. Edit server configuration“](#4-edit-server-configuration)
 
 ---
 
@@ -213,163 +257,6 @@ docker run -d \
 > 
 > 💡 **Tip:** You can skip the `-e` environment variables if you prefer to manage all server settings later in the `enshrouded_server.json` file inside the mounted volume.
 
-## 3.2 Option: (B) Launch the Container (Simplified Version)
-You can launch the Enshrouded server container with just the essential Docker options. 
-Since all configuration can be handled later through the `enshrouded_server.json` file, 
-there's no need to set environment variables during startup.
-
-### 1. Step: Download the repository
-
-Change to the working directory:
-
-```bash
-cd /home/enshrouded
-```
-
-Clone the project from GitHub:
-
-```bash
-sudo git clone https://github.com/bonsaibauer/enshrouded_server_docker.git
-cd enshrouded_server_docker
-```
-
-### 2. Step: Build the Docker image
-
-Run the following command in the project directory:
-
-```bash
-docker build -t enshrouded-server .
-```
-
-### 3. Step: Use the following command to run the server:
-
-```bash
-docker run -d \
-  --name enshroudedserver \
-  --restart=always \
-  -p 15637:15637/udp \
-  -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
-  enshrouded-server
-```
-
-### Explanation of the Command
->
-> - `-d`: Runs the container in detached mode (in the background).
-> - `--name enshroudedserver`: Names the container so you can reference it easily.
-> - `--restart=always`: Ensures the container automatically restarts if the server or host restarts.
-> - `-p 15637:15637/udp`: Exposes the necessary UDP port for the game.
-> - `-v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded`: Mounts a local directory for persistent data like the configuration file (`enshrouded_server.json`).
-> - `enshrouded-server`: The name of the Docker image you're using to run the server.
-> Once the container is running, you can stop it, edit the `enshrouded_server.json` file in the mounted volume (`/home/enshrouded/enshrouded_server_docker`), and then start the container again.
-
-### Monitoring Enshrouded Docker Server Logs for successful start
-> ```bash
-> docker logs -f enshroudedserver
-> ```
-> The `-f` flag means "follow", which shows real-time output.
-> 
-> Wait until you see the following logs to confirm it's running:
-> 
-> ```bash
-> [Session] 'HostOnline' (up)!
-> [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
-> ```
-> 
-> To exit the log view safely and keep the server running, press:
-> 
-> ```bash
-> Ctrl + C
-> ```
-
----
-
-## 3.3 Option: (C) Launch the Container (with Environment Variables)
-This command runs the Enshrouded dedicated server using Docker and sets several environment variables directly when launching the container.
-
-### 1. Step: Download the repository
-
-Change to the working directory:
-
-```bash
-cd /home/enshrouded
-```
-
-Clone the project from GitHub:
-
-```bash
-sudo git clone https://github.com/bonsaibauer/enshrouded_server_docker.git
-cd enshrouded_server_docker
-```
-
-### 2. Step: Build the Docker image
-
-Run the following command in the project directory:
-
-```bash
-docker build -t enshrouded-server .
-```
-
-### 3. Step: Use the following command to run the server:
-
-Launch the container:
-
-```bash
-docker run -d \
-  --name enshroudedserver \
-  --restart=always \
-  -p 15637:15637/udp \
-  -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
-  -e ENSHROUDED_SERVER_NAME="myservername" \
-  -e ENSHROUDED_SERVER_MAXPLAYERS=16 \
-  -e ENSHROUDED_VOICE_CHAT_MODE="Proximity" \
-  -e ENSHROUDED_ENABLE_VOICE_CHAT=false \
-  -e ENSHROUDED_ENABLE_TEXT_CHAT=false \
-  -e ENSHROUDED_GAME_PRESET="Default" \
-  -e ENSHROUDED_ADMIN_PW="AdminXXXXXXXX" \
-  -e ENSHROUDED_FRIEND_PW="FriendXXXXXXXX" \
-  -e ENSHROUDED_GUEST_PW="GuestXXXXXXXX" \
-  enshrouded-server
-```
-### Explanation of Environmental Variables
-> - `-d`: Run in detached mode (in the background).
-> - `--name enshroudedserver`: Names the container “enshroudedserver”.
-> - `--restart=always`: Automatically restarts the container if it stops or the host reboots.
-> - `-p 15637:15637/udp`: Maps the UDP port 15637 from the container to the host, required for the game server.
-> - `-v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded`: Mounts a local directory for persistent data and configuration.
-> - `-e ENSHROUDED_SERVER_NAME="myservername"`: Sets the server's visible name.
-> - `-e ENSHROUDED_SERVER_MAXPLAYERS=16`: Limits the number of players to 16.
-> - `-e ENSHROUDED_VOICE_CHAT_MODE="Proximity"`: Enables proximity-based voice chat.
-> - `-e ENSHROUDED_ENABLE_VOICE_CHAT=false`: Disables voice chat (this overrides the mode setting).
-> - `-e ENSHROUDED_ENABLE_TEXT_CHAT=false`: Disables text chat in-game.
-> - `-e ENSHROUDED_GAME_PRESET="Default"`: Sets the game rules preset.
-> - `-e ENSHROUDED_ADMIN_PW="AdminXXXXXXXX"`: Password for admin access.
-> - `-e ENSHROUDED_FRIEND_PW="FriendXXXXXXXX"`: Password for friends to join.
-> - `-e ENSHROUDED_GUEST_PW="GuestXXXXXXXX"`: Password for guest access.
-> - `enshrouded-server`: The Docker image used to run the server.
-> 
-> 💡 **Tip:** You can skip the `-e` environment variables if you prefer to manage all server settings later in the `enshrouded_server.json` file inside the mounted volume.
-
-### Monitoring Enshrouded Docker Server Logs for successful start
-> ```bash
-> docker logs -f enshroudedserver
-> ```
-> The `-f` flag means "follow", which shows real-time output.
-> 
-> Wait until you see the following logs to confirm it's running:
-> 
-> ```bash
-> [Session] 'HostOnline' (up)!
-> [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
-> ```
-> 
-> To exit the log view safely and keep the server running, press:
-> 
-> ```bash
-> Ctrl + C
-> ```
-
----
-
 # 4. Edit server configuration
 
 > 🔧 This file is located in the mounted directory:
@@ -393,7 +280,7 @@ Edit the `enshrouded_server.json` file to configure your server settings.
 | **ip**             | Server IP binding                          | "0.0.0.0"                | Server ip adress          |
 | ...                | ...                                        | ...                      | ...                       |
 
-... [View full server settings here](https://github.com/bonsaibauer/enshrouded_server_docker/blob/main/enshrouded_server.md)
+... [View full server settings here](https://github.com/bonsaibauer/enshrouded_server_docker/blob/main/docs/enshrouded_server.md)
 
 > **ℹ️ Note: Nano editor**
 >
@@ -443,3 +330,4 @@ docker restart enshroudedserver
 If this project has helped you in any way, do buy me a coffee so I can continue to build more of such projects in the future and share them with the community!
 
 <a href="https://buymeacoffee.com/bonsaibauer" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
+
