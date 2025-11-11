@@ -98,7 +98,8 @@ WORKDIR /home/steam
 # Volume and Port Configuration
 # --------------------------
 VOLUME /home/steam/enshrouded
-EXPOSE 15637
+EXPOSE 15637/udp
+EXPOSE 15637/tcp
 
 # --------------------------
 # Default Entrypoint
