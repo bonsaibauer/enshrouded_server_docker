@@ -1,4 +1,4 @@
-# Option (C) Launch the Container (with Environment Variables)
+# 3.3 Option (C) Launch the Container (with Environment Variables)
 
 This command runs the Enshrouded dedicated server using Docker and sets several environment variables directly when launching the container.
 

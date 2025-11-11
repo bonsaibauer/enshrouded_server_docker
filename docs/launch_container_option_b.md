@@ -1,4 +1,4 @@
-# Option (B) Launch the Container (Simplified Version)
+# 3.2 Option (B) Launch the Container (Simplified Version)
 
 You can launch the Enshrouded server container with just the essential Docker options.
 Since all configuration can be handled later through the `enshrouded_server.json` file,
