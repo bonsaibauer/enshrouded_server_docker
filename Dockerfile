@@ -33,6 +33,7 @@ RUN set -x \
     wget \
     software-properties-common \
     locales \
+    tini \
 && locale-gen en_US.UTF-8 \
 && update-locale LANG=en_US.UTF-8
 
@@ -106,4 +107,4 @@ EXPOSE 15637
 # --------------------------
 # Default Entrypoint
 # --------------------------
-ENTRYPOINT [ "/home/steam/entrypoint.sh" ]
+ENTRYPOINT [ "/usr/bin/tini", "--", "/home/steam/entrypoint.sh" ]
