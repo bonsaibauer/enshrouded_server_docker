@@ -48,9 +48,8 @@ Road to Release — Enshrouded is slated for an Autumn 2026 launch; the roadmap 
 
 ---
 
-## 0. Preparing Your Environment
-
-### Prerequisites
+<details>
+<summary><strong>0. Preparing Your Environment (Prerequisites)</strong></summary>
 
 You can run the Enshrouded server inside a Docker container on **any operating system that supports Docker**, including but not limited to:
 
@@ -70,6 +69,8 @@ You’ll need:
 - A system with Docker and Docker Compose installed
 - sudo or administrative privileges
 - `ufw` or firewall configuration (ensure port **15637** is open and forwarded)
+
+</details>
 
 # 1. Installing Docker (Ubuntu 24.04 and Other Linux Systems)
 
