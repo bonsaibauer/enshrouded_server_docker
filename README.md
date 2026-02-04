@@ -160,19 +160,32 @@ To allow the Docker container to persist game data and configurations, we create
 
 Run these commands as root or with `sudo`:
 
+Create the system user (no login shell):
 ```bash
-# Create a system user 'enshrouded' without login shell
 sudo useradd -m -r -s /bin/false enshrouded
-
-# Ensure the home directory exists
-sudo mkdir -p /home/enshrouded
-sudo mkdir -p /home/enshrouded/enshrouded_server_docker
-
-# Set proper ownership 
-sudo chown 1001:1001 /home/enshrouded/enshrouded_server_docker
 ```
 
-> 🛡️ This ensures that the container can write to `/home/enshrouded` and all server data stays in one clean location.
+Ensure the home directories exist:
+```bash
+sudo mkdir -p /home/enshrouded
+```
+
+```bash
+sudo mkdir -p /home/enshrouded/enshrouded_server_docker
+```
+
+Add default ACLs (persistent permissions for new files). `setfacl` manages POSIX ACLs (extra permission entries beyond owner/group/others); `-d` applies to new files/dirs, `-m` modifies the ACL, `u:` targets a user, `rwx` = read/write/execute.  
+The container writes as user `steam` (see Dockerfile). Keep ownership as-is, but allow the host account `enshrouded` and your current shell user to read/write the mounted directory:
+```bash
+sudo setfacl -R -d -m u:enshrouded:rwx /home/enshrouded/enshrouded_server_docker
+sudo setfacl -R -d -m u:$(whoami):rwx /home/enshrouded/enshrouded_server_docker
+```
+
+Optional: add both users to the `docker` group to run Docker without `sudo` (re-login required):
+```bash
+sudo usermod -aG docker enshrouded
+sudo usermod -aG docker $(whoami)
+```
 
 # 3. Deploy and Start docker container
 
