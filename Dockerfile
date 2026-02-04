@@ -13,12 +13,11 @@ ENV WINEARCH="win64"
 # Install Essential Packages
 # --------------------------
 RUN set -x \
-&& apt-get update -o Acquire::Retries=5 -o Acquire::http::No-Cache=true \
-&& apt-get upgrade -y \
-&& apt-get install -y \
+&& apt update \
+&& apt upgrade -y \
+&& apt install -y \
     vim \
     wget \
-    gosu \
     software-properties-common \
     locales \
     tini \
@@ -34,9 +33,9 @@ ENV LC_ALL=en_US.UTF-8
 # --------------------------
 RUN add-apt-repository -y multiverse \
 && dpkg --add-architecture i386 \
-&& apt-get update -o Acquire::Retries=5 -o Acquire::http::No-Cache=true \
+&& apt update \
 && echo steam steam/question select "I AGREE" | debconf-set-selections && echo steam steam/license note '' | debconf-set-selections \
-&& apt-get install -y \
+&& apt install -y \
     lib32z1 \
     lib32gcc-s1 \
     lib32stdc++6 \
@@ -54,20 +53,13 @@ RUN dpkg --add-architecture amd64 \
 && mkdir -pm755 /etc/apt/keyrings \
 && wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key \
 && wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources \
-&& apt-get update -o Acquire::Retries=5 -o Acquire::http::No-Cache=true \
-&& apt-get install -y --install-recommends \
+&& apt update \
+&& apt install -y --install-recommends \
     winehq-staging \
-&& apt-get install -y --allow-unauthenticated \
+&& apt install -y --allow-unauthenticated \
     cabextract \
     winbind \
     screen \
-    xvfb \
-    xauth \
-    libgl1-mesa-dri \
-    libgl1-mesa-glx \
-    libegl1 \
-    mesa-vulkan-drivers \
-    vulkan-tools \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/*
 
@@ -89,9 +81,13 @@ RUN chmod +x /home/steam/entrypoint.sh
 # --------------------------
 # Prepare SteamCMD Environment
 # --------------------------
-RUN su -s /bin/bash steam -c "/home/steam/steamcmd +quit"
+USER steam
+RUN /home/steam/steamcmd +quit
 WORKDIR /home/steam
-# Keep runtime as root; entrypoint remaps and drops privileges
+
+# --------------------------
+# Runtime user (required for PUID/PGID mapping)
+# --------------------------
 USER root
 
 # --------------------------
