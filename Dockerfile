@@ -61,7 +61,12 @@ RUN set -x \
  && mkdir -p /home/steam/.steam \
  && mkdir -p /home/steam/enshrouded/savegame \
  && mkdir -p /home/steam/enshrouded/logs \
- && ln -s /usr/games/steamcmd /home/steam/steamcmd \
+ && mkdir -p /home/steam \
+# steam user/group may or may not be present in the base image; ensure they exist
+ && if ! getent group steam >/dev/null; then groupadd -r steam; fi \
+ && if ! id -u steam >/dev/null 2>&1; then useradd -r -g steam -d /home/steam -s /bin/bash steam; fi \
+# link steamcmd for the steam user if available
+ && if [ -e /usr/games/steamcmd ]; then ln -sf /usr/games/steamcmd /home/steam/steamcmd; fi \
  && chown -R steam:steam /home/steam
 
 # --------------------------
