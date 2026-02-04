@@ -10,19 +10,19 @@ ENV DEBIAN_FRONTEND="noninteractive"
 ENV WINEARCH="win64"
 
 # --------------------------
-# Install Essential Packages (minimal, no recommends)
+# Install Essential Packages
 # --------------------------
 RUN set -x \
 && apt update \
-&& apt install -y --no-install-recommends \
+&& apt upgrade -y \
+&& apt install -y \
     vim \
     wget \
+    software-properties-common \
     locales \
     tini \
 && locale-gen en_US.UTF-8 \
-&& update-locale LANG=en_US.UTF-8 \
-&& apt-get clean \
-&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+&& update-locale LANG=en_US.UTF-8
 
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
@@ -31,14 +31,11 @@ ENV LC_ALL=en_US.UTF-8
 # --------------------------
 # Install SteamCMD and Dependencies
 # --------------------------
-RUN set -x \
-&& apt update \
-&& apt install -y --no-install-recommends software-properties-common \
-&& add-apt-repository -y multiverse \
+RUN add-apt-repository -y multiverse \
 && dpkg --add-architecture i386 \
 && apt update \
 && echo steam steam/question select "I AGREE" | debconf-set-selections && echo steam steam/license note '' | debconf-set-selections \
-&& apt install -y --no-install-recommends \
+&& apt install -y \
     lib32z1 \
     lib32gcc-s1 \
     lib32stdc++6 \
@@ -47,33 +44,24 @@ RUN set -x \
 && useradd -m steam -g steam \
 && passwd -d steam \
 && chown -R steam:steam /usr/games \
-&& ln -s /usr/games/steamcmd /home/steam/steamcmd \
-&& apt purge -y software-properties-common python3-cryptography 'golang-*' \
-&& apt autoremove -y \
-&& apt-get clean \
-&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+&& ln -s /usr/games/steamcmd /home/steam/steamcmd
 
 # --------------------------
-# Install Wine and Winetricks (add repo without software-properties-common)
+# Install Wine and Winetricks
 # --------------------------
-RUN set -x \
-&& dpkg --add-architecture amd64 \
+RUN dpkg --add-architecture amd64 \
 && mkdir -pm755 /etc/apt/keyrings \
 && wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key \
-&& . /etc/os-release \
-&& wget -O /etc/apt/sources.list.d/winehq.sources \
-     https://dl.winehq.org/wine-builds/ubuntu/dists/$VERSION_CODENAME/winehq-$VERSION_CODENAME.sources \
+&& wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources \
 && apt update \
 && apt install -y --install-recommends \
     winehq-staging \
-&& apt install -y --no-install-recommends \
+&& apt install -y --allow-unauthenticated \
     cabextract \
     winbind \
     screen \
-&& apt purge -y python3-cryptography 'golang-*' \
-&& apt autoremove -y \
 && apt-get clean \
-&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+&& rm -rf /var/lib/apt/lists/*
 
 # --------------------------
 # Create Server Directories
