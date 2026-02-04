@@ -13,9 +13,9 @@ ENV WINEARCH="win64"
 # Install Essential Packages
 # --------------------------
 RUN set -x \
-&& apt update \
-&& apt upgrade -y \
-&& apt install -y \
+&& apt-get update -o Acquire::Retries=5 -o Acquire::http::No-Cache=true \
+&& apt-get upgrade -y \
+&& apt-get install -y \
     vim \
     wget \
     gosu \
@@ -34,9 +34,9 @@ ENV LC_ALL=en_US.UTF-8
 # --------------------------
 RUN add-apt-repository -y multiverse \
 && dpkg --add-architecture i386 \
-&& apt update \
+&& apt-get update -o Acquire::Retries=5 -o Acquire::http::No-Cache=true \
 && echo steam steam/question select "I AGREE" | debconf-set-selections && echo steam steam/license note '' | debconf-set-selections \
-&& apt install -y \
+&& apt-get install -y \
     lib32z1 \
     lib32gcc-s1 \
     lib32stdc++6 \
@@ -54,10 +54,10 @@ RUN dpkg --add-architecture amd64 \
 && mkdir -pm755 /etc/apt/keyrings \
 && wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key \
 && wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources \
-&& apt update \
-&& apt install -y --install-recommends \
+&& apt-get update -o Acquire::Retries=5 -o Acquire::http::No-Cache=true \
+&& apt-get install -y --install-recommends \
     winehq-staging \
-&& apt install -y --allow-unauthenticated \
+&& apt-get install -y --allow-unauthenticated \
     cabextract \
     winbind \
     screen \
