@@ -18,6 +18,7 @@ RUN set -x \
 && apt install -y \
     vim \
     wget \
+    gosu \
     software-properties-common \
     locales \
     tini \
@@ -81,9 +82,10 @@ RUN chmod +x /home/steam/entrypoint.sh
 # --------------------------
 # Prepare SteamCMD Environment
 # --------------------------
-USER steam
-RUN /home/steam/steamcmd +quit
+RUN su -s /bin/bash steam -c "/home/steam/steamcmd +quit"
 WORKDIR /home/steam
+# Keep runtime as root; entrypoint remaps and drops privileges
+USER root
 
 # --------------------------
 # Volume and Port Configuration

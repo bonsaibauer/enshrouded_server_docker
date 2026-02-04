@@ -1,32 +1,83 @@
 #!/bin/bash
+set -euo pipefail
 
-# Ensure .steam directory exists to avoid symlink issues
-mkdir -p /home/steam/.steam
+# --- helpers ---
 
-# If this is the first initialization of the container, create the server config
-if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
+ensure_dirs() {
+    # Guarantee base directories exist for Steam and server data
+    mkdir -p /home/steam/.steam
+    mkdir -p /home/steam/enshrouded
+}
 
+detect_ids_from_volume() {
+    # Read owner UID/GID of the mounted data volume
+    local uid gid
+    uid=$(stat -c '%u' /home/steam/enshrouded)
+    gid=$(stat -c '%g' /home/steam/enshrouded)
+    echo "$uid" "$gid"
+}
+
+remap_uid_gid() {
+    # Remap steam to match host volume ownership (or env overrides)
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "Not running as root; skipping UID/GID remap. Ensure host volume ownership matches container user."
+        return
+    fi
+
+    local target_uid target_gid
+    read -r target_uid target_gid <<<"$(detect_ids_from_volume)"
+
+    # Use volume owner only (no env overrides)
+    target_uid=$target_uid
+    target_gid=$target_gid
+
+    # If the volume is owned by root, don't remap steam to UID 0; just fix ownership.
+    if [ "$target_uid" = "0" ] || [ "$target_gid" = "0" ]; then
+        echo "Volume owned by root; keeping steam UID/GID and chowning data instead."
+        chown -R steam:steam /home/steam/enshrouded || true
+        return
+    fi
+
+    current_uid=$(id -u steam)
+    current_gid=$(id -g steam)
+
+    if [ "$current_uid" != "$target_uid" ]; then
+        usermod -o -u "$target_uid" steam
+    fi
+    if [ "$current_gid" != "$target_gid" ]; then
+        groupmod -o -g "$target_gid" steam
+    fi
+
+    # Align ownership of home (steam cache + data) with remapped steam user
+    chown -R "$target_uid:$target_gid" /home/steam || true
+}
+
+run_as_steam() {
+    # Drop privileges to steam via gosu
+    gosu steam "$@"
+}
+
+generate_password() {
+    # Generate 8-char alphanumeric password
+    head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 8
+}
+
+# --- main flow ---
+
+ensure_dirs           # create required dirs
+remap_uid_gid         # align steam UID/GID with volume
+
+# Create config on first run
+ADMIN_PW=""
+if [ ! -e "/home/steam/enshrouded/enshrouded_server.json" ]; then
     echo " ----- Starting initial configuration -----"
-    echo "Changing UID and GID to host IDs"
-    usermod -u "$ENSHROUDED_USER_ID" steam
-    groupmod -g "$ENSHROUDED_GROUP_ID" steam
-
-    # Create server properties file using default settings (passwords stay configurable via env or auto-generated)
-
-    generate_password() {
-        # 8-char alphanumeric password
-        head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 8
-    }
 
     ADMIN_PW=$(generate_password)
     FRIEND_PW=$(generate_password)
     GUEST_PW=$(generate_password)
     VISITOR_PW=$(generate_password)
 
-    echo "Creating server configuration file..."
-
-    touch /home/steam/enshrouded/enshrouded_server.json
-    cat << EOF >> /home/steam/enshrouded/enshrouded_server.json
+    cat << EOF > "/home/steam/enshrouded/enshrouded_server.json"
 {
   "name": "Enshrouded Server",
   "saveDirectory": "./savegame",
@@ -125,33 +176,30 @@ if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
 EOF
 
     echo "enshrouded_server.json created."
-
     echo " ----- Initial configuration complete -----"
 else
     echo " ----- Server configuration already exists -----"
 fi
 
-# Update or install the Enshrouded dedicated server using SteamCMD
-./steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /home/steam/enshrouded +login anonymous +app_update 2278520 +quit
+run_as_steam ./steamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /home/steam/enshrouded +login anonymous +app_update 2278520 +quit
 echo "Server files updated."
 
-# Launch the Enshrouded server executable using Wine
-# Using exec to replace the shell with wine, making it tini's direct child.
-# This allows tini to forward signals (SIGTERM, SIGINT, etc.) directly to wine
 echo ""
 echo "================================================================"
 echo "   ENSHROUDED SERVER is READY — Starting now!"
 echo "================================================================"
 echo ""
 
-exec wine /home/steam/enshrouded/enshrouded_server.exe &
+run_as_steam wine /home/steam/enshrouded/enshrouded_server.exe &
 SERVER_PID=$!
 
-echo ""
-echo "================================================================"
-echo " In-game Admin login password (randomly generated): ${ADMIN_PW}"
-echo " Change it anytime in enshrouded_server.json."
-echo "================================================================"
-echo ""
+if [ -n "$ADMIN_PW" ]; then
+    echo ""
+    echo "================================================================"
+    echo " In-game Admin login password: ${ADMIN_PW}"
+    echo " Change it anytime in enshrouded_server.json."
+    echo "================================================================"
+    echo ""
+fi
 
 wait $SERVER_PID

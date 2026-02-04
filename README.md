@@ -188,13 +188,10 @@ Run the container with:
   docker run \
     --name enshroudedserver \
     --restart=unless-stopped \
-    -e ENSHROUDED_PORT=15637 \
     -p 15637:15637/udp \
-    -e ENSHROUDED_USER_ID="$(id -u enshrouded)" \
-    -e ENSHROUDED_GROUP_ID="$(id -g enshrouded)" \
     -v /home/enshrouded/server_1:/home/steam/enshrouded \
     bonsaibauer/enshrouded_server_docker:latest
-  ```
+```
 
 ---
 
