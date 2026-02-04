@@ -1,0 +1,143 @@
+name: Dev Build
+
+on:
+  push:
+    branches:
+      - 'dev_v*'
+    paths-ignore:
+      - '.github/**'
+      - 'README.md'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dev:
+    name: Build & Push dev_latest
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_USER: ${{ secrets.DOCKER_USER }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+    steps:
+      - name: Ensure DOCKER_USER is set
+        if: env.DOCKER_USER == ''
+        run: |
+          echo "DOCKER_USER repo variable is missing" >&2
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Hub login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USER }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Derive branch slug
+        id: vars
+        run: |
+          set -euo pipefail
+          slug=${GITHUB_REF_NAME//\//-}
+          echo "branch_slug=$slug" >> "$GITHUB_OUTPUT"
+
+      - name: Build and load dev image (scan first)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: |
+            ${{ env.DOCKER_USER }}/enshrouded_server_docker:dev_latest
+            ${{ env.DOCKER_USER }}/enshrouded_server_docker:${{ steps.vars.outputs.branch_slug }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Docker Scout block (CRITICAL/HIGH)
+        uses: docker/scout-action@v1
+        with:
+          command: quickview,cves
+          image: ${{ env.DOCKER_USER }}/enshrouded_server_docker:dev_latest
+          write-comment: false
+          summary: true
+          only-severities: critical,high
+          exit-code: true
+
+      - name: Docker Scout SARIF (all severities)
+        uses: docker/scout-action@v1
+        with:
+          command: quickview,cves
+          image: ${{ env.DOCKER_USER }}/enshrouded_server_docker:dev_latest
+          sarif-file: scout.sarif
+          write-comment: false
+          summary: true
+          only-severities: critical,high,medium
+
+      - name: Trim Scout SARIF (limit locations)
+        run: |
+          jq '
+            .runs[0].results |= map(
+              if (.locations | length) > 1000
+              then .locations = (.locations[:1000]) | .
+              else .
+              end
+            )
+          ' scout.sarif > scout.limited.sarif
+
+      - name: Upload Scout SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: scout.limited.sarif
+          category: docker-scout
+
+      - name: Trivy scan (block on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ env.DOCKER_USER }}/enshrouded_server_docker:dev_latest
+          format: table
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+          exit-code: 1
+
+      - name: Trivy SARIF (all severities)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ env.DOCKER_USER }}/enshrouded_server_docker:dev_latest
+          format: sarif
+          output: trivy.sarif
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: 0
+
+      - name: Trim Trivy SARIF (limit locations)
+        run: |
+          jq '
+            .runs[0].results |= map(
+              if (.locations | length) > 1000
+              then .locations = (.locations[:1000]) | .
+              else .
+              end
+            )
+          ' trivy.sarif > trivy.limited.sarif
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy.limited.sarif
+          category: trivy
+
+      - name: Push dev tags (after successful scans)
+        run: |
+          set -euo pipefail
+          docker push ${{ env.DOCKER_USER }}/enshrouded_server_docker:dev_latest
+          docker push ${{ env.DOCKER_USER }}/enshrouded_server_docker:${{ steps.vars.outputs.branch_slug }}

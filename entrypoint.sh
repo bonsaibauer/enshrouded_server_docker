@@ -7,28 +7,44 @@ mkdir -p /home/steam/.steam
 if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
 
     echo " ----- Starting initial configuration -----"
+    echo "Changing UID and GID to host IDs"
+    usermod -u "$ENSHROUDED_USER_ID" steam
+    groupmod -g "$ENSHROUDED_GROUP_ID" steam
 
-    # Create server properties file using environment variables
+    # Create server properties file using default settings (passwords stay configurable via env or auto-generated)
+
+    generate_password() {
+        # 8-char alphanumeric password
+        head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 8
+    }
+
+    ADMIN_PW=$(generate_password)
+    FRIEND_PW=$(generate_password)
+    GUEST_PW=$(generate_password)
+    VISITOR_PW=$(generate_password)
+
     echo "Creating server configuration file..."
 
     touch /home/steam/enshrouded/enshrouded_server.json
     cat << EOF >> /home/steam/enshrouded/enshrouded_server.json
 {
-  "name": "${ENSHROUDED_SERVER_NAME}",
+  "name": "Enshrouded Server",
   "saveDirectory": "./savegame",
   "logDirectory": "./logs",
   "ip": "0.0.0.0",
   "queryPort": 15637,
-  "slotCount": ${ENSHROUDED_SERVER_MAXPLAYERS},
-  "voiceChatMode": "${ENSHROUDED_VOICE_CHAT_MODE}",
-  "enableVoiceChat": ${ENSHROUDED_ENABLE_VOICE_CHAT},
-  "enableTextChat": ${ENSHROUDED_ENABLE_TEXT_CHAT},
-  "gameSettingsPreset": "${ENSHROUDED_GAME_PRESET}",
+  "slotCount": 16,
+  "tags": [],
+  "voiceChatMode": "Proximity",
+  "enableVoiceChat": false,
+  "enableTextChat": false,
+  "gameSettingsPreset": "Default",
   "gameSettings": {
     "playerHealthFactor": 1,
     "playerManaFactor": 1,
     "playerStaminaFactor": 1,
     "playerBodyHeatFactor": 1,
+    "playerDivingTimeFactor": 1,
     "enableDurability": true,
     "enableStarvingDebuff": false,
     "foodBuffDurationFactor": 1,
@@ -37,6 +53,7 @@ if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
     "tombstoneMode": "AddBackpackMaterials",
     "enableGliderTurbulences": true,
     "weatherFrequency": "Normal",
+    "fishingDifficulty": "Normal",
     "miningDamageFactor": 1,
     "plantGrowthSpeedFactor": 1,
     "resourceDropStackAmountFactor": 1,
@@ -58,37 +75,52 @@ if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
     "pacifyAllEnemies": false,
     "tamingStartleRepercussion": "LoseSomeProgress",
     "dayTimeDuration": 1800000000000,
-    "nightTimeDuration": 720000000000
+    "nightTimeDuration": 720000000000,
+    "curseModifier": "Normal"
   },
   "userGroups": [
     {
       "name": "Admin",
-      "password": "${ENSHROUDED_ADMIN_PW}",
+      "password": "${ADMIN_PW}",
       "canKickBan": true,
       "canAccessInventories": true,
+      "canEditWorld": true,
       "canEditBase": true,
       "canExtendBase": true,
       "reservedSlots": 0
     },
     {
       "name": "Friend",
-      "password": "${ENSHROUDED_FRIEND_PW}",
+      "password": "${FRIEND_PW}",
       "canKickBan": false,
       "canAccessInventories": true,
+      "canEditWorld": true,
       "canEditBase": true,
       "canExtendBase": false,
       "reservedSlots": 0
     },
     {
       "name": "Guest",
-      "password": "${ENSHROUDED_GUEST_PW}",
+      "password": "${GUEST_PW}",
       "canKickBan": false,
       "canAccessInventories": false,
+      "canEditWorld": true,
+      "canEditBase": false,
+      "canExtendBase": false,
+      "reservedSlots": 0
+    },
+    {
+      "name": "Visitor",
+      "password": "${VISITOR_PW}",
+      "canKickBan": false,
+      "canAccessInventories": false,
+      "canEditWorld": false,
       "canEditBase": false,
       "canExtendBase": false,
       "reservedSlots": 0
     }
-  ]
+  ],
+  "bans": []
 }
 EOF
 
@@ -106,5 +138,20 @@ echo "Server files updated."
 # Launch the Enshrouded server executable using Wine
 # Using exec to replace the shell with wine, making it tini's direct child.
 # This allows tini to forward signals (SIGTERM, SIGINT, etc.) directly to wine
-echo "Launching Enshrouded server..."
-exec wine /home/steam/enshrouded/enshrouded_server.exe
+echo ""
+echo "================================================================"
+echo "   ENSHROUDED SERVER is READY — Starting now!"
+echo "================================================================"
+echo ""
+
+exec wine /home/steam/enshrouded/enshrouded_server.exe &
+SERVER_PID=$!
+
+echo ""
+echo "================================================================"
+echo " In-game Admin login password (randomly generated): ${ADMIN_PW}"
+echo " Change it anytime in enshrouded_server.json."
+echo "================================================================"
+echo ""
+
+wait $SERVER_PID

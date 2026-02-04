@@ -10,19 +10,6 @@ ENV DEBIAN_FRONTEND="noninteractive"
 ENV WINEARCH="win64"
 
 # --------------------------
-# Enshrouded Server Configuration
-# --------------------------
-ENV ENSHROUDED_SERVER_NAME="Enshrouded Server"
-ENV ENSHROUDED_SERVER_MAXPLAYERS=16
-ENV ENSHROUDED_VOICE_CHAT_MODE="Proximity"
-ENV ENSHROUDED_ENABLE_VOICE_CHAT=false
-ENV ENSHROUDED_ENABLE_TEXT_CHAT=false
-ENV ENSHROUDED_GAME_PRESET="Default"
-ENV ENSHROUDED_ADMIN_PW="AdminXXXXXXXX"
-ENV ENSHROUDED_FRIEND_PW="FriendXXXXXXXX"
-ENV ENSHROUDED_GUEST_PW="GuestXXXXXXXX"
-
-# --------------------------
 # Install Essential Packages
 # --------------------------
 RUN set -x \

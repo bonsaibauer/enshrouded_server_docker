@@ -25,7 +25,12 @@ Embark on an adventure in the mystical world of Embervale with your own dedicate
 ![Enshrouded Docker Server Setup](images/enshrouded_docker_v2.png)  
 <sub>Image generated with the help of [ChatGPT](https://openai.com/chatgpt)</sub>
 
-## Update v1.1 – Wake of the Water 2025-11 release
+Road to Release — Enshrouded is slated for an Autumn 2026 launch; the roadmap below shows the milestones to release.
+
+![Road to Release 2026](images/road_to_release_2026.png)
+
+<details>
+<summary><strong>Patch #10 v0.9.0.1 – Wake of the Water (2025-11)</strong></summary>
 
 ![Wake of the Water Update](images/update_wake_of_water.jpeg)
 
@@ -34,6 +39,8 @@ Embark on an adventure in the mystical world of Embervale with your own dedicate
 - Fishing, greatswords, rebalanced loot, and workstation force requirements deepen crafting/combat.
 - Dedicated servers now expose tags, a visitor role with terraforming limits, and improved admin tools.
 
+</details>
+
 ### Full Settings + Example Config
 
 - All server/gameplay fields are documented in [`docs/enshrouded_server.md`](docs/enshrouded_server.md).
@@ -41,11 +48,13 @@ Embark on an adventure in the mystical world of Embervale with your own dedicate
 
 ---
 
-## 0. Preparing Your Environment
+## 0. Preparing Your Environment (Prerequisites)
 
-### Prerequisites
+You can run the Enshrouded server inside a Docker container on **any operating system that supports Docker**.  
+Open the section below for the supported OS matrix and prerequisites.
 
-You can run the Enshrouded server inside a Docker container on **any operating system that supports Docker**, including but not limited to:
+<details>
+<summary><strong>OS matrix & prerequisites (click to expand)</strong></summary>
 
 | Production-Ready Linux               | Desktop/Test Only                  | Notes                                                  |
 |-------------------------------------|------------------------------------|--------------------------------------------------------|
@@ -63,6 +72,11 @@ You’ll need:
 - A system with Docker and Docker Compose installed
 - sudo or administrative privileges
 - `ufw` or firewall configuration (ensure port **15637** is open and forwarded)
+
+> [!TIP]
+> Open UDP **15637** on both your host firewall *and* your router’s port forward. This is the #1 reason friends cannot see your server.
+
+</details>
 
 # 1. Installing Docker (Ubuntu 24.04 and Other Linux Systems)
 
@@ -154,113 +168,52 @@ Run these commands as root or with `sudo`:
 sudo useradd -m -r -s /bin/false enshrouded
 
 # Ensure the home directory exists
-sudo mkdir -p /home/enshrouded
-sudo mkdir -p /home/enshrouded/enshrouded_server_docker
+sudo mkdir -p /home/enshrouded/server_1
 
 # Set proper ownership 
-sudo chown 1001:1001 /home/enshrouded/enshrouded_server_docker
+sudo sudo chown enshrouded:enshrouded /home/enshrouded/server_1
 ```
 
-> 🛡️ This ensures that the container can write to `/home/enshrouded` and all server data stays in one clean location.
+> 🛡️ This ensures that the container can write to `/home/enshrouded/server_1` and all server data stays in one clean location.
 
-# 3. Deploy and Start docker container
+# 3. Quickstart
+Go to ...
+```bash
+cd /home/enshrouded/server_1
+```
 
-Looking for the build-it-yourself workflows? Choose the option that fits best:
-
-- Option (A) Use the Prebuilt Image from Docker Hub (following)
-- [Option (B) Launch the Container (Simplified Version)](docs/launch_container_option_b.md)
-- [Option (C) Launch the Container (with Environment Variables)](docs/launch_container_option_c.md)
-
-## 3.1 Option: (A) Use the Prebuilt Image from Docker Hub
-
-If you prefer not to build the image yourself, you can run the **official prebuilt Docker image** directly from Docker Hub. This is the fastest and easiest way to get your server up and running.
-
-### Run the Server Using the Docker Hub Image:
+Run the container with:
 
 ```bash
-docker run -d \
-  --name enshroudedserver \
-  --restart=always \
-  -p 15637:15637/udp \
-  -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
-  bonsaibauer/enshrouded_server_docker:latest
-```
-
-### Explanation:
-> - `bonsaibauer/enshrouded_server_docker:latest` is the **official prebuilt image** available on Docker Hub  
-> - You **don’t need to build the image yourself**, just pull and run it  
-> - The rest of the parameters are the same as in Option B and C
->
-> ✅ **Tip:** Configuration (`enshrouded_server.json`) is done in the mounted directory `/home/enshrouded/enshrouded_server_docker` as usual.
+  docker run \
+    --name enshroudedserver \
+    --restart=unless-stopped \
+    -e ENSHROUDED_PORT=15637 \
+    -p 15637:15637/udp \
+    -e ENSHROUDED_USER_ID="$(id -u enshrouded)" \
+    -e ENSHROUDED_GROUP_ID="$(id -g enshrouded)" \
+    -v /home/enshrouded/server_1:/home/steam/enshrouded \
+    bonsaibauer/enshrouded_server_docker:latest
+  ```
 
 ---
 
-### Monitoring Enshrouded Docker Server Logs for successful start
-> ```bash
-> docker logs -f enshroudedserver
-> ```
-> The `-f` flag means "follow", which shows real-time output.
-> 
-> Wait until you see the following logs to confirm it's running:
-> 
-> ```bash
-> [Session] 'HostOnline' (up)!
-> [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
-> ```
-> 
-> To exit the log view safely and keep the server running, press:
-> 
-> ```bash
-> Ctrl + C
-> ```
-
-[Go to „4. Edit server configuration“](#4-edit-server-configuration)
-
----
-
-### Run the Server Using Environmental Variables:
-
+Wait until you see the following logs to confirm it's running:
 ```bash
-docker run -d \
-  --name enshroudedserver \
-  --restart=always \
-  -p 15637:15637/udp \
-  -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
-  -e ENSHROUDED_SERVER_NAME="myservername" \
-  -e ENSHROUDED_SERVER_MAXPLAYERS=16 \
-  -e ENSHROUDED_VOICE_CHAT_MODE="Proximity" \
-  -e ENSHROUDED_ENABLE_VOICE_CHAT=false \
-  -e ENSHROUDED_ENABLE_TEXT_CHAT=false \
-  -e ENSHROUDED_GAME_PRESET="Default" \
-  -e ENSHROUDED_ADMIN_PW="AdminXXXXXXXX" \
-  -e ENSHROUDED_FRIEND_PW="FriendXXXXXXXX" \
-  -e ENSHROUDED_GUEST_PW="GuestXXXXXXXX" \
-  bonsaibauer/enshrouded_server_docker:latest
+[Session] 'HostOnline' (up)!
+[Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
 ```
 
-### Explanation of Environmental Variables
-> - `-d`: Run in detached mode (in the background).
-> - `--name enshroudedserver`: Names the container “enshroudedserver”.
-> - `--restart=always`: Automatically restarts the container if it stops or the host reboots.
-> - `-p 15637:15637/udp`: Maps the UDP port 15637 from the container to the host, required for the game server.
-> - `-v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded`: Mounts a local directory for persistent data and configuration.
-> - `-e ENSHROUDED_SERVER_NAME="myservername"`: Sets the server's visible name.
-> - `-e ENSHROUDED_SERVER_MAXPLAYERS=16`: Limits the number of players to 16.
-> - `-e ENSHROUDED_VOICE_CHAT_MODE="Proximity"`: Enables proximity-based voice chat.
-> - `-e ENSHROUDED_ENABLE_VOICE_CHAT=false`: Disables voice chat (this overrides the mode setting).
-> - `-e ENSHROUDED_ENABLE_TEXT_CHAT=false`: Disables text chat in-game.
-> - `-e ENSHROUDED_GAME_PRESET="Default"`: Sets the game rules preset.
-> - `-e ENSHROUDED_ADMIN_PW="AdminXXXXXXXX"`: Password for admin access.
-> - `-e ENSHROUDED_FRIEND_PW="FriendXXXXXXXX"`: Password for friends to join.
-> - `-e ENSHROUDED_GUEST_PW="GuestXXXXXXXX"`: Password for guest access.
-> - `bonsaibauer/enshrouded_server_docker:latest`: The Docker Hub image used to run the server.
-> 
-> 💡 **Tip:** You can skip the `-e` environment variables if you prefer to manage all server settings later in the `enshrouded_server.json` file inside the mounted volume.
+To exit the log view safely and keep the server running, press:
+```bash
+Ctrl + C
+```
+
+---
 
 # 4. Edit server configuration
-
 > 🔧 This file is located in the mounted directory:
-> `/home/enshrouded/enshrouded_server_docker/enshrouded_server.json`
+> `/home/enshrouded/server_1/enshrouded_server.json`
 
 ```bash
 nano enshrouded_server.json
@@ -325,6 +278,14 @@ docker restart enshroudedserver
    docker stop enshroudedserver
    docker rm enshroudedserver
    ```
+
+## View live logs
+
+Follow the server logs in real time (use `Ctrl+C` to leave log view; the container keeps running):
+
+```bash
+docker logs -f enshroudedserver
+```
 
 ## Buy Me A Coffee
 If this project has helped you in any way, do buy me a coffee so I can continue to build more of such projects in the future and share them with the community!
