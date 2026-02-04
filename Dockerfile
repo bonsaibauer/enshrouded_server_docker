@@ -61,6 +61,13 @@ RUN dpkg --add-architecture amd64 \
     cabextract \
     winbind \
     screen \
+    xvfb \
+    xauth \
+    libgl1-mesa-dri \
+    libgl1-mesa-glx \
+    libegl1 \
+    mesa-vulkan-drivers \
+    vulkan-tools \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/*
 

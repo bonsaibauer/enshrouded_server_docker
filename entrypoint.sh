@@ -9,6 +9,19 @@ ensure_dirs() {
     mkdir -p /home/steam/enshrouded
 }
 
+prepare_runtime_dir() {
+    # Wine expects XDG_RUNTIME_DIR; create a private tmp dir when none exists
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-steam}"
+    mkdir -p "$XDG_RUNTIME_DIR"
+    chmod 700 "$XDG_RUNTIME_DIR" || true
+}
+
+configure_wine_headless() {
+    # Disable GPU-dependent DLLs and quiet Wine logging for headless usage
+    export WINEDLLOVERRIDES="dxgi,dxgkrnl,d3d12,d3d11=d;winemenubuilder.exe=d"
+    export WINEDEBUG="-all"
+}
+
 detect_ids_from_volume() {
     # Read owner UID/GID of the mounted data volume
     local uid gid
@@ -65,7 +78,9 @@ generate_password() {
 # --- main flow ---
 
 ensure_dirs           # create required dirs
+prepare_runtime_dir   # provide XDG_RUNTIME_DIR for Wine
 remap_uid_gid         # align steam UID/GID with volume
+configure_wine_headless  # tweak Wine defaults for headless servers
 
 # Create config on first run
 ADMIN_PW=""
@@ -190,7 +205,7 @@ echo "   ENSHROUDED SERVER is READY — Starting now!"
 echo "================================================================"
 echo ""
 
-run_as_steam wine /home/steam/enshrouded/enshrouded_server.exe &
+run_as_steam xvfb-run -a wine /home/steam/enshrouded/enshrouded_server.exe &
 SERVER_PID=$!
 
 if [ -n "$ADMIN_PW" ]; then
