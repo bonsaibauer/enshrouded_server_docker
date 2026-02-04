@@ -192,6 +192,8 @@ docker run -d \
 > - `bonsaibauer/enshrouded_server_docker:latest` is the **official prebuilt image** available on Docker Hub  
 > - You **don’t need to build the image yourself**, just pull and run it  
 > - The rest of the parameters are the same as in Option B and C
+> - `ENSHROUDED_USER_ID="$(id -u enshrouded)"` needed to set the correct User ID for enshrouded inside the container
+> - `ENSHROUDED_GROUP_ID="$(id -g enshrouded)"` needed to set the correct Group ID for enshrouded inside the container
 >
 > ✅ **Tip:** Configuration (`enshrouded_server.json`) is done in the mounted directory `/home/enshrouded/enshrouded_server_docker` as usual.
 
@@ -248,6 +250,8 @@ docker run -d \
 > - `--restart=always`: Automatically restarts the container if it stops or the host reboots.
 > - `-p 15637:15637/udp`: Maps the UDP port 15637 from the container to the host, required for the game server.
 > - `-v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded`: Mounts a local directory for persistent data and configuration.
+> - `ENSHROUDED_USER_ID="$(id -u enshrouded)"` needed to set the correct User ID for enshrouded inside the container
+> - `ENSHROUDED_GROUP_ID="$(id -g enshrouded)"` needed to set the correct Group ID for enshrouded inside the container
 > - `-e ENSHROUDED_SERVER_NAME="myservername"`: Sets the server's visible name.
 > - `-e ENSHROUDED_SERVER_MAXPLAYERS=16`: Limits the number of players to 16.
 > - `-e ENSHROUDED_VOICE_CHAT_MODE="Proximity"`: Enables proximity-based voice chat.
