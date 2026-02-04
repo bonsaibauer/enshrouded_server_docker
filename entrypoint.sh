@@ -3,10 +3,14 @@
 # Ensure .steam directory exists to avoid symlink issues
 mkdir -p /home/steam/.steam
 
-# If this is the first initialization of the container, create the server config
+# If this is the first initialization of the container, create the server config and change UID & GID to host IDs
 if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
 
     echo " ----- Starting initial configuration -----"
+
+    echo "Changing UID and GID to host IDs"
+    usermod -u "$ENSHROUDED_USER_ID" steam
+    groupmod -g "$ENSHROUDED_GROUP_ID" steam
 
     # Create server properties file using environment variables
     echo "Creating server configuration file..."
