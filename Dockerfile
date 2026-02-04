@@ -48,7 +48,7 @@ RUN set -x \
 && passwd -d steam \
 && chown -R steam:steam /usr/games \
 && ln -s /usr/games/steamcmd /home/steam/steamcmd \
-&& apt purge -y software-properties-common python3-cryptography 'golang-*' \
+&& apt purge -y software-properties-common python3-cryptography golang-* \
 && apt autoremove -y \
 && apt-get clean \
 && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -70,10 +70,10 @@ RUN set -x \
     cabextract \
     winbind \
     screen \
-&& apt purge -y python3-cryptography 'golang-*' \
+&& apt purge -y python3-cryptography golang-* \
 && apt autoremove -y \
 && apt-get clean \
-&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+&& rm -rf /usr/local/go /usr/lib/go-1.* /usr/lib/go /usr/share/go /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # --------------------------
 # Create Server Directories
