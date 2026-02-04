@@ -7,18 +7,21 @@ mkdir -p /home/steam/.steam
 if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
 
     echo " ----- Starting initial configuration -----"
+    echo "Changing UID and GID to host IDs"
+    usermod -u "$ENSHROUDED_USER_ID" steam
+    groupmod -g "$ENSHROUDED_GROUP_ID" steam
 
     # Create server properties file using default settings (passwords stay configurable via env or auto-generated)
 
     generate_password() {
-        # 24-char alphanumeric password
-        head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 24
+        # 8-char alphanumeric password
+        head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 8
     }
 
-    ADMIN_PW=${ENSHROUDED_ADMIN_PW:-$(generate_password)}
-    FRIEND_PW=${ENSHROUDED_FRIEND_PW:-$(generate_password)}
-    GUEST_PW=${ENSHROUDED_GUEST_PW:-$(generate_password)}
-    VISITOR_PW=${ENSHROUDED_VISITOR_PW:-$(generate_password)}
+    ADMIN_PW=$(generate_password)
+    FRIEND_PW=$(generate_password)
+    GUEST_PW=$(generate_password)
+    VISITOR_PW=$(generate_password)
 
     echo "Creating server configuration file..."
 
@@ -140,6 +143,7 @@ echo "================================================================"
 echo "   ENSHROUDED SERVER is READY — Starting now!"
 echo "================================================================"
 echo ""
+
 exec wine /home/steam/enshrouded/enshrouded_server.exe &
 SERVER_PID=$!
 

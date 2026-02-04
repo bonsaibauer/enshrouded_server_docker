@@ -157,72 +157,45 @@ sudo systemctl status docker
 
 Press `q` to exit the status screen.
 
-# 2. Create User and Working Directory
+# 2. Create user and working directory
 
-Persisting game data outside the container keeps saves and configs safe. Create a dedicated host user and set the correct permissions.
+To allow the Docker container to persist game data and configurations, we create a dedicated system user and set up the correct directory.
 
-### Step 1: Add the service user and data folder
+Run these commands as root or with `sudo`:
 
 ```bash
+# Create a system user 'enshrouded' without login shell
 sudo useradd -m -r -s /bin/false enshrouded
-sudo mkdir -p /home/enshrouded
+
+# Ensure the home directory exists
+sudo mkdir -p /home/enshrouded/server_1
+
+# Set proper ownership 
+sudo sudo chown enshrouded:enshrouded /home/enshrouded/server_1
 ```
-- `useradd`: Add a user.
-  - `-m`: Create the home directory if missing.
-  - `-r`: Mark as a system account (no password expiry).
-  - `-s /bin/false`: Disable interactive logins.
-  - `enshrouded`: Account that owns server data.
-- `mkdir -p /home/enshrouded`
-  - `-p`: Create parent directories if they do not exist.
-  - `/home/enshrouded`: Host path for persistent saves/configs.
 
-### Step 2: Grant default ACLs for host access
-
-```bash
-sudo setfacl -R -d -m u:enshrouded:rwx /home/enshrouded
-sudo setfacl -R -d -m u:$(whoami):rwx /home/enshrouded
-```
-- `setfacl`: Manage POSIX ACL entries (extra permissions beyond owner/group/others).
-  - `-R`: Recurse into subdirectories.
-  - `-d`: Set defaults for newly created files/dirs.
-  - `-m`: Modify/add entries.
-  - `u:enshrouded:rwx`: Grant read/write/execute to host user `enshrouded`.
-  - `u:$(whoami):rwx`: Grant the same to the current shell user.
-- The container writes as user `steam` (see `Dockerfile`); ACLs let host users manage files without changing ownership.
-
-### Step 3 (Optional): Allow Docker without sudo
-
-```bash
-sudo usermod -aG docker enshrouded
-sudo usermod -aG docker $(whoami)
-```
-- `usermod`: Change account properties.
-  - `-aG`: Append to supplementary group(s) without removing existing ones.
-  - `docker`: Group that allows running Docker without `sudo`.
-- Log out/in after adding to pick up the new group membership.
+> 🛡️ This ensures that the container can write to `/home/enshrouded/server_1` and all server data stays in one clean location.
 
 # 3. Quickstart
-
-If you prefer not to build the image yourself, you can run the **official prebuilt Docker image** directly from Docker Hub. This is the fastest and easiest way to get your server up and running.
-
-Change into your data directory before starting the container:
-
+Go to ...
 ```bash
 cd /home/enshrouded/server_1
 ```
 
+Run the container with:
+
 ```bash
-docker run \
-  --name enshroudedserver \
-  --restart=unless-stopped \
-  -p 15637:15637/udp \
-  -v /home/enshrouded/server_1:/home/steam/enshrouded \
-  bonsaibauer/enshrouded_server_docker:latest
-```
-- `--name enshroudedserver`: Assign your container name here.
-- `--restart=unless-stopped`: Automatically restarts after crash/reboot until you stop it.
-- `-p 15637:15637/udp`: Default Enshrouded UDP port; change if you configured a different port.
-- `-v /home/enshrouded/server_1:/home/steam/enshrouded`: Mounts the data directory on the host.
+  docker run \
+    --name enshroudedserver \
+    --restart=unless-stopped \
+    -e ENSHROUDED_PORT=15637 \
+    -p 15637:15637/udp \
+    -e ENSHROUDED_USER_ID="$(id -u enshrouded)" \
+    -e ENSHROUDED_GROUP_ID="$(id -g enshrouded)" \
+    -v /home/enshrouded/server_1:/home/steam/enshrouded \
+    bonsaibauer/enshrouded_server_docker:latest
+  ```
+
 ---
 
 Wait until you see the following logs to confirm it's running:

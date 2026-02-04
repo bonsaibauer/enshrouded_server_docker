@@ -32,14 +32,40 @@
 
 ## 🧪 Quickstart
 
+### Create user and working directory
+
+To allow the Docker container to persist game data and configurations, we create a dedicated system user and set up the correct directory.
+
+Run these commands as root or with `sudo`:
+
 ```bash
-docker run -d \
-  --name enshroudedserver \
-  --restart=unless-stopped \
-  -p 15637:15637/udp \
-  -v /home/enshrouded/server_1:/home/steam/enshrouded \
-  bonsaibauer/enshrouded_server_docker:latest
+# Create a system user 'enshrouded' without login shell
+sudo useradd -m -r -s /bin/false enshrouded
+
+# Ensure the home directory exists
+sudo mkdir -p /home/enshrouded/server_1
+
+# Set proper ownership 
+sudo sudo chown enshrouded:enshrouded /home/enshrouded/server_1
 ```
+
+> 🛡️ This ensures that the container can write to `/home/enshrouded/server_1` and all server data stays in one clean location.
+
+Go to ...
+```bash
+cd /home/enshrouded/server_1
+```
+
+```bash
+  docker run \
+    --name enshroudedserver \
+    --restart=unless-stopped \
+    -p 15637:15637/udp \
+    -e ENSHROUDED_USER_ID="$(id -u enshrouded)" \
+    -e ENSHROUDED_GROUP_ID="$(id -g enshrouded)" \
+    -v /home/enshrouded/server_1:/home/steam/enshrouded \
+    bonsaibauer/enshrouded_server_docker:latest
+  ```
 
 👉 Make sure to open **UDP port 15637** on your firewall/router.
 👉 Keep using the same `/home/enshrouded/server_1` (or your chosen folder) to preserve saves/configs; adjust the `-v` path accordingly.
