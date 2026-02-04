@@ -25,7 +25,7 @@
 - Official image: `bonsaibauer/enshrouded_server_docker`
 - Persistent storage and config via mounted volumes
 - Configure via `enshrouded_server.json` or environment variables
-- Automatic restart on system reboot (`--restart=always`)
+- Auto-restarts after crash/reboot; if you stop it manually, it stays stopped until you start it (`--restart=unless-stopped`)
 - Minimal or fully customized server setup options
 
 ---
@@ -35,13 +35,14 @@
 ```bash
 docker run -d \
   --name enshroudedserver \
-  --restart=always \
+  --restart=unless-stopped \
   -p 15637:15637/udp \
-  -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
+  -v /home/enshrouded/server_1:/home/steam/enshrouded \
   bonsaibauer/enshrouded_server_docker:latest
 ```
 
 👉 Make sure to open **UDP port 15637** on your firewall/router.
+👉 Keep using the same `/home/enshrouded/server_1` (or your chosen folder) to preserve saves/configs; adjust the `-v` path accordingly.
 
 ---
 
@@ -50,10 +51,10 @@ docker run -d \
 Configure the server via file:
 
 ```
-/home/enshrouded/enshrouded_server_docker/enshrouded_server.json
+/home/enshrouded/server_1/enshrouded_server.json   # adjust `server_1` if you mounted a different folder
 ```
 
-👉 **Note**: You do not need change server IP inside the JSON file (`"ip": "YOUR.IP.ADDRESS"`) to ensure it’s discoverable.
+👉 **Note**: In the normal case just leave `"ip": "0.0.0.0"` — the server stays reachable without adding your public IP.
 
 ---
 
