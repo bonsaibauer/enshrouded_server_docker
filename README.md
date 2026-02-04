@@ -158,7 +158,7 @@ sudo mkdir -p /home/enshrouded
 sudo mkdir -p /home/enshrouded/enshrouded_server_docker
 
 # Set proper ownership 
-sudo chown 1001:1001 /home/enshrouded/enshrouded_server_docker
+sudo chown enshrouded:enshrouded /home/enshrouded/enshrouded_server_docker
 ```
 
 > 🛡️ This ensures that the container can write to `/home/enshrouded` and all server data stays in one clean location.
@@ -182,6 +182,8 @@ docker run -d \
   --name enshroudedserver \
   --restart=always \
   -p 15637:15637/udp \
+  -e ENSHROUDED_USER_ID="$(id -u enshrouded)" \
+  -e ENSHROUDED_USER_ID="$(id -g enshrouded)" \  
   -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
   bonsaibauer/enshrouded_server_docker:latest
 ```
@@ -226,6 +228,8 @@ docker run -d \
   --restart=always \
   -p 15637:15637/udp \
   -v /home/enshrouded/enshrouded_server_docker:/home/steam/enshrouded \
+  -e ENSHROUDED_USER_ID="$(id -u enshrouded)" \
+  -e ENSHROUDED_USER_ID="$(id -g enshrouded)" \  
   -e ENSHROUDED_SERVER_NAME="myservername" \
   -e ENSHROUDED_SERVER_MAXPLAYERS=16 \
   -e ENSHROUDED_VOICE_CHAT_MODE="Proximity" \
