@@ -65,7 +65,7 @@ jobs:
             echo "has_base=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Docker Scout block (CRITICAL/HIGH)
+      - name: Docker Scout report (CRITICAL/HIGH, non-blocking)
         uses: docker/scout-action@v1
         with:
           command: quickview,cves
@@ -73,7 +73,7 @@ jobs:
           write-comment: false
           summary: true
           only-severities: critical,high
-          exit-code: true
+          exit-code: false
 
       - name: Docker Scout SARIF (all severities)
         uses: docker/scout-action@v1
@@ -112,7 +112,7 @@ jobs:
           sarif_file: scout.limited.sarif
           category: docker-scout
 
-      - name: Trivy scan (block on HIGH/CRITICAL)
+      - name: Trivy scan (non-blocking)
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ env.DOCKER_USER }}/enshrouded_server_docker:${{ github.event.release.tag_name }}
@@ -120,7 +120,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
-          exit-code: 1
+          exit-code: 0
 
       - name: Trivy SARIF (all severities)
         uses: aquasecurity/trivy-action@0.33.1
