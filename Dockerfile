@@ -86,6 +86,11 @@ RUN /home/steam/steamcmd +quit
 WORKDIR /home/steam
 
 # --------------------------
+# Runtime user (required for PUID/PGID mapping)
+# --------------------------
+USER root
+
+# --------------------------
 # Volume and Port Configuration
 # --------------------------
 VOLUME /home/steam/enshrouded

@@ -1,17 +1,55 @@
 #!/bin/bash
 
+if [ "${1:-}" != "--as-steam" ]; then
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "ERROR: entrypoint must run as root to apply PUID/PGID." >&2
+        echo "Set -e PUID=\$(id -u enshrouded) -e PGID=\$(id -g enshrouded) and do not use --user." >&2
+        exit 1
+    fi
+
+    if [ -z "${PUID:-}" ] || [ -z "${PGID:-}" ]; then
+        echo "ERROR: PUID and PGID are required." >&2
+        echo "Example: -e PUID=\$(id -u enshrouded) -e PGID=\$(id -g enshrouded)" >&2
+        exit 1
+    fi
+
+    case "$PUID" in
+        ''|*[!0-9]*)
+            echo "ERROR: PUID must be numeric (got: $PUID)." >&2
+            exit 1
+            ;;
+    esac
+
+    case "$PGID" in
+        ''|*[!0-9]*)
+            echo "ERROR: PGID must be numeric (got: $PGID)." >&2
+            exit 1
+            ;;
+    esac
+
+    if [ "$PUID" -eq 0 ] || [ "$PGID" -eq 0 ]; then
+        echo "ERROR: PUID/PGID must not be 0 (root)." >&2
+        exit 1
+    fi
+
+    groupmod -o -g "$PGID" steam
+    usermod -o -u "$PUID" -g "$PGID" steam
+    chown "$PUID:$PGID" /home/steam 2>/dev/null || true
+    chown -R "$PUID:$PGID" /home/steam/enshrouded 2>/dev/null || true
+
+    exec runuser -u steam -p -- "$0" --as-steam "$@"
+fi
+
+if [ "${1:-}" = "--as-steam" ]; then
+    shift
+fi
+
 # Ensure .steam directory exists to avoid symlink issues
 mkdir -p /home/steam/.steam
 
 # If this is the first initialization of the container, create the server config
-if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
-
+if [ ! -e "/home/steam/enshrouded/enshrouded_server.json" ]; then
     echo " ----- Starting initial configuration -----"
-    echo "Changing UID and GID to host IDs"
-    usermod -u "$ENSHROUDED_USER_ID" steam
-    groupmod -g "$ENSHROUDED_GROUP_ID" steam
-
-    # Create server properties file using default settings (passwords stay configurable via env or auto-generated)
 
     generate_password() {
         # 8-char alphanumeric password
@@ -23,10 +61,7 @@ if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
     GUEST_PW=$(generate_password)
     VISITOR_PW=$(generate_password)
 
-    echo "Creating server configuration file..."
-
-    touch /home/steam/enshrouded/enshrouded_server.json
-    cat << EOF >> /home/steam/enshrouded/enshrouded_server.json
+    cat << EOF > "/home/steam/enshrouded/enshrouded_server.json"
 {
   "name": "Enshrouded Server",
   "saveDirectory": "./savegame",
@@ -125,7 +160,6 @@ if [ ! -e /home/steam/enshrouded/enshrouded_server.json ]; then
 EOF
 
     echo "enshrouded_server.json created."
-
     echo " ----- Initial configuration complete -----"
 else
     echo " ----- Server configuration already exists -----"
@@ -136,22 +170,43 @@ fi
 echo "Server files updated."
 
 # Launch the Enshrouded server executable using Wine
-# Using exec to replace the shell with wine, making it tini's direct child.
-# This allows tini to forward signals (SIGTERM, SIGINT, etc.) directly to wine
 echo ""
-echo "================================================================"
-echo "   ENSHROUDED SERVER is READY — Starting now!"
+cat <<'EOF'
+================================================================
+···································································
+:  _____ _             _   _                  _   _               :
+: / ____| |           | | (_)                | \ | |              :
+:| (___ | |_ __ _ _ __| |_ _ _ __   __ _     |  \| | _____      __:
+: \___ \| __/ _` | '__| __| | '_ \ / _` |    | . ` |/ _ \ \ /\ / /:
+: ____) | || (_| | |  | |_| | | | | (_| |    | |\  | (_) \ V  V / :
+:|_____/ \__\__,_|_|   \__|_|_| |_|\__, |    |_| \_|\___/ \_/\_/  :
+:                                   __/ |                         :
+:                                  |___/                          :
+···································································
+EOF
 echo "================================================================"
 echo ""
-
 exec wine /home/steam/enshrouded/enshrouded_server.exe &
 SERVER_PID=$!
 
-echo ""
-echo "================================================================"
-echo " In-game Admin login password (randomly generated): ${ADMIN_PW}"
-echo " Change it anytime in enshrouded_server.json."
-echo "================================================================"
-echo ""
+if [ -n "$ADMIN_PW" ]; then
+    echo ""
+    cat <<'EOF'
+================================================================
+···························································
+: ______           _                         _          _ :
+:|  ____|         | |                       | |        | |:
+:| |__   _ __  ___| |__  _ __ ___  _   _  __| | ___  __| |:
+:|  __| | '_ \/ __| '_ \| '__/ _ \| | | |/ _` |/ _ \/ _` |:
+:| |____| | | \__ \ | | | | | (_) | |_| | (_| |  __/ (_| |:
+:|______|_| |_|___/_| |_|_|  \___/ \__,_|\__,_|\___|\__,_|:
+···························································
+EOF
+    echo "================================================================"
+    echo " In-game Admin login password: ${ADMIN_PW}"
+    echo " Change it anytime in enshrouded_server.json."
+    echo "================================================================"
+    echo ""
+fi
 
 wait $SERVER_PID

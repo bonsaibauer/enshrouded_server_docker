@@ -66,7 +66,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Docker Scout report (CRITICAL/HIGH, non-blocking)
+      - name: Docker Scout run (CRITICAL/HIGH, non-blocking)
         uses: docker/scout-action@v1
         with:
           command: quickview,cves
