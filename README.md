@@ -113,12 +113,12 @@ Docker relies on a few helper packages. Install them with:
 sudo apt install apt-transport-https ca-certificates curl software-properties-common lsb-release gnupg -y
 ```
 
-> - `apt-transport-https`: Allows `apt` to use HTTPS.
-> - `ca-certificates`: Ensures your system trusts SSL certificates.
-> - `curl`: Command-line tool for downloading files.
-> - `software-properties-common`: Adds support for `add-apt-repository`.
-> - `lsb-release`: Provides OS version info.
-> - `gnupg`: Required for managing GPG keys.
+> `apt-transport-https`: Allows `apt` to use HTTPS.
+> `ca-certificates`: Ensures your system trusts SSL certificates.
+> `curl`: Command-line tool for downloading files.
+> `software-properties-common`: Adds support for `add-apt-repository`.
+> `lsb-release`: Provides OS version info.
+> `gnupg`: Required for managing GPG keys.
 
 ### Step 3: Add Docker’s Official GPG Key
 
@@ -145,9 +145,9 @@ sudo apt update
 sudo apt install docker-ce docker-ce-cli containerd.io -y
 ```
 
-> - `docker-ce`: Docker Community Edition
-> - `docker-ce-cli`: Docker command-line interface
-> - `containerd.io`: Container runtime used by Docker
+> `docker-ce`: Docker Community Edition
+> `docker-ce-cli`: Docker command-line interface
+> `containerd.io`: Container runtime used by Docker
 
 Verify Docker is running:
 
@@ -168,35 +168,35 @@ Create the system user:
 ```bash
 sudo useradd -m -r -s /bin/false enshrouded
 ```
-> - `useradd -m -r -s /bin/false enshrouded`: creates a system user with a home directory and no login shell.
+> `useradd -m -r -s /bin/false enshrouded`: creates a system user with a home directory and no login shell.
 
 Ensure the home directory exists:
 
 ```bash
 sudo mkdir -p /home/enshrouded/server_1
 ```
-> - `mkdir -p /home/enshrouded/server_1`: creates the persistent data directory.
+> `mkdir -p /home/enshrouded/server_1`: creates the persistent data directory.
 
 Set proper ownership:
 
 ```bash
 sudo chown enshrouded:enshrouded /home/enshrouded/server_1
 ```
-> - `chown enshrouded:enshrouded /home/enshrouded/server_1`: assigns ownership to the enshrouded user.
+> `chown enshrouded:enshrouded /home/enshrouded/server_1`: assigns ownership to the enshrouded user.
 
 Add the current login user to the enshrouded group (same access as enshrouded):
 
 ```bash
 sudo usermod -aG enshrouded "${SUDO_USER:-$USER}"
 ```
-> - `usermod -aG enshrouded "${SUDO_USER:-$USER}"`: grants the current login user the same access as enshrouded.
+> `usermod -aG enshrouded "${SUDO_USER:-$USER}"`: grants the current login user the same access as enshrouded.
 
 Allow the enshrouded user to run docker without sudo:
 
 ```bash
 sudo usermod -aG docker enshrouded
 ```
-> - `usermod -aG docker enshrouded`: lets enshrouded run docker without sudo.
+> `usermod -aG docker enshrouded`: lets enshrouded run docker without sudo.
 
 Apply group changes without logging out:
 
@@ -204,7 +204,7 @@ Apply group changes without logging out:
 newgrp enshrouded
 newgrp docker
 ```
-> - `newgrp enshrouded` / `newgrp docker`: applies group changes in the current session (each opens a new shell; run the one you need, or open a new terminal for the other).
+> `newgrp enshrouded` / `newgrp docker`: applies group changes in the current session (each opens a new shell; run the one you need, or open a new terminal for the other).
 
 > 🛡️ This ensures that the container can write to `/home/enshrouded/server_1` and all server data stays in one clean location.
 > PUID/PGID are required at container start to map the internal user to your host `enshrouded` user.
