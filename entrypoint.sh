@@ -37,12 +37,19 @@ if [ "${1:-}" != "--as-steam" ]; then
     chown "$PUID:$PGID" /home/steam 2>/dev/null || true
     chown -R "$PUID:$PGID" /home/steam/enshrouded 2>/dev/null || true
 
-    exec runuser -u steam -p -- "$0" --as-steam "$@"
+    exec runuser -u steam -p -- env HOME=/home/steam USER=steam LOGNAME=steam "$0" --as-steam "$@"
 fi
 
 if [ "${1:-}" = "--as-steam" ]; then
     shift
 fi
+
+# Ensure HOME and WINEPREFIX are set for the steam user
+export HOME="/home/steam"
+if [ -z "${WINEPREFIX:-}" ]; then
+    export WINEPREFIX="${HOME}/.wine"
+fi
+mkdir -p "${WINEPREFIX}"
 
 # Ensure .steam directory exists to avoid symlink issues
 mkdir -p /home/steam/.steam
