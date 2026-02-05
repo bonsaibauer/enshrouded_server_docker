@@ -16,7 +16,7 @@
 
 ### `.github/workflows/release.yml`
 - **Triggers:** `release` event (`published`) or manual `workflow_dispatch`.
-- **Behavior:** Builds image, tags `latest` and the release tag, runs Docker Scout + Trivy scans, uploads SARIF, then pushes images on success. Also updates the Docker Hub description from `README_DOCKER_HUB.md`.
+- **Behavior:** Builds image, tags `latest` and the release tag, runs Docker Scout + Trivy scans, uploads SARIF, then pushes images on success. Also updates the Docker Hub description from `docs/README_DOCKER_HUB.md`.
 - **Secrets required:** `DOCKER_USER`, `DOCKER_TOKEN`.
 - **Concurrency:** Serialized per ref via `release-${{ github.ref }}`.
 
