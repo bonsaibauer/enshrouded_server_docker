@@ -111,7 +111,7 @@ These map to `gameSettings` and `gameSettingsPreset` in the JSON. Values are onl
 
 ## Server Manager Runtime
 
-The manager also reads `server_manager.json` next to `enshrouded_server.json`. Values are applied in this order: ENV > `server_manager.json` > defaults. Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `server_manager.json`, but after loading they are still required and must be valid.
+The manager also reads (and creates if missing) `server_manager.json` next to `enshrouded_server.json`. Values are applied in this order: ENV > `server_manager.json` > defaults. Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `server_manager.json`; if they are missing, the manager tries to detect them from `INSTALL_PATH`, the config directory, or `HOME_DIR`.
 
 | Variable | Description | Example / Default Value | Options / Notes |
 |---------|-------------|--------------------------|-----------------|
@@ -122,6 +122,9 @@ The manager also reads `server_manager.json` next to `enshrouded_server.json`. V
 | **LOG_LEVEL** | Log verbosity | "info" | debug / info / warn / error |
 | **LOG_CONTEXT** | Log context label | "manager" | Internal |
 | **UMASK** | Default umask | "027" | Octal string |
+| **AUTO_FIX_PERMS** | Auto-fix ownership/permissions on key dirs | true | true / false |
+| **AUTO_FIX_DIR_MODE** | chmod mode for directories when auto-fix runs | "775" | Octal string |
+| **AUTO_FIX_FILE_MODE** | chmod mode for files when auto-fix runs | "664" | Octal string |
 | **HOME_DIR** | Base home path | "/home/steam" | Defaults to `HOME` |
 | **INSTALL_PATH** | Server install path | "/home/steam/enshrouded" | Used for binaries/config |
 | **CONFIG_FILE** | JSON config path | "/home/steam/enshrouded/enshrouded_server.json" | |

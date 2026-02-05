@@ -84,14 +84,32 @@ ensure_root_and_map_user() {
   if [[ "$(id -u)" -ne 0 ]]; then
     fatal "Manager must run as root to apply PUID/PGID mapping"
   fi
+
+  if [[ -z "${PUID:-}" || -z "${PGID:-}" || ! "$PUID" =~ ^[0-9]+$ || ! "$PGID" =~ ^[0-9]+$ || "$PUID" -eq 0 || "$PGID" -eq 0 ]]; then
+    local detect_path detected_uid detected_gid
+    for detect_path in "$INSTALL_PATH" "$(dirname "$CONFIG_FILE")" "$HOME_DIR"; do
+      if [[ -e "$detect_path" ]]; then
+        detected_uid="$(stat -c '%u' "$detect_path" 2>/dev/null || true)"
+        detected_gid="$(stat -c '%g' "$detect_path" 2>/dev/null || true)"
+        if [[ -n "$detected_uid" && -n "$detected_gid" && "$detected_uid" =~ ^[0-9]+$ && "$detected_gid" =~ ^[0-9]+$ && "$detected_uid" -ne 0 && "$detected_gid" -ne 0 ]]; then
+          PUID="$detected_uid"
+          PGID="$detected_gid"
+          export PUID PGID
+          info "Detected PUID/PGID from $detect_path: $PUID/$PGID"
+          break
+        fi
+      fi
+    done
+  fi
+
   if [[ -z "${PUID:-}" || -z "${PGID:-}" ]]; then
     fatal "PUID and PGID are required"
   fi
-  if [[ "$PUID" -eq 0 || "$PGID" -eq 0 ]]; then
-    fatal "PUID/PGID must not be 0"
-  fi
   if ! [[ "$PUID" =~ ^[0-9]+$ ]] || ! [[ "$PGID" =~ ^[0-9]+$ ]]; then
     fatal "PUID/PGID must be numeric"
+  fi
+  if [[ "$PUID" -eq 0 || "$PGID" -eq 0 ]]; then
+    fatal "PUID/PGID must not be 0"
   fi
   require_cmd runuser
 
@@ -225,6 +243,7 @@ manager_run() {
     update_or_create_manager_config
     init_colors
     ensure_root_and_map_user
+    preflight_permissions
     start_cron_daemon
     exec runuser -u steam -p -- "$MANAGER_BIN" run --as-steam "$@"
   fi

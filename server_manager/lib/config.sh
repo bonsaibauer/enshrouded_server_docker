@@ -189,6 +189,9 @@ declare -a MANAGER_VARS=(
   LOG_LEVEL
   LOG_CONTEXT
   UMASK
+  AUTO_FIX_PERMS
+  AUTO_FIX_DIR_MODE
+  AUTO_FIX_FILE_MODE
   HOME_DIR
   INSTALL_PATH
   CONFIG_FILE
@@ -258,6 +261,9 @@ declare -A MANAGER_JSON_PATH=(
   [LOG_LEVEL]=".logLevel"
   [LOG_CONTEXT]=".logContext"
   [UMASK]=".umask"
+  [AUTO_FIX_PERMS]=".autoFixPerms"
+  [AUTO_FIX_DIR_MODE]=".autoFixDirMode"
+  [AUTO_FIX_FILE_MODE]=".autoFixFileMode"
   [HOME_DIR]=".homeDir"
   [INSTALL_PATH]=".installPath"
   [CONFIG_FILE]=".configFile"
@@ -334,6 +340,7 @@ declare -A MANAGER_TYPE=(
   [STOP_TIMEOUT]="int"
   [A2S_TIMEOUT]="number"
   [A2S_RETRY_DELAY]="number"
+  [AUTO_FIX_PERMS]="bool"
   [AUTO_UPDATE]="bool"
   [AUTO_UPDATE_ON_BOOT]="bool"
   [AUTO_RESTART_ON_UPDATE]="bool"
@@ -523,6 +530,12 @@ validate_manager_value() {
       validate_number_min "$var" "$value" 0 "$mode"
       return $?
       ;;
+    AUTO_FIX_DIR_MODE|AUTO_FIX_FILE_MODE)
+      if [[ -n "$value" ]] && ! [[ "$value" =~ ^[0-7]{3,4}$ ]]; then
+        manager_validation_fail "$mode" "$var must be an octal string like 775 (actual: $value)"
+        return 1
+      fi
+      ;;
     UMASK)
       if [[ -n "$value" ]] && ! [[ "$value" =~ ^[0-7]{3,4}$ ]]; then
         manager_validation_fail "$mode" "$var must be an octal string like 027 (actual: $value)"
@@ -578,6 +591,15 @@ manager_default_for_var() {
       ;;
     UMASK)
       echo "${UMASK:-027}"
+      ;;
+    AUTO_FIX_PERMS)
+      echo "${AUTO_FIX_PERMS:-true}"
+      ;;
+    AUTO_FIX_DIR_MODE)
+      echo "${AUTO_FIX_DIR_MODE:-775}"
+      ;;
+    AUTO_FIX_FILE_MODE)
+      echo "${AUTO_FIX_FILE_MODE:-664}"
       ;;
     HOME_DIR)
       if [[ -n "${HOME_DIR:-}" ]]; then
@@ -1266,25 +1288,86 @@ ensure_base_dirs() {
   mkdir -p "$INSTALL_PATH" "$RUN_DIR" "$REQUEST_DIR"
 }
 
+resolve_save_dir() {
+  if [[ -n "$ENSHROUDED_SAVE_DIR" ]]; then
+    abs_path "$ENSHROUDED_SAVE_DIR"
+  elif command -v jq >/dev/null 2>&1 && [[ -f "$CONFIG_FILE" ]]; then
+    abs_path "$(jq -r '.saveDirectory // "./savegame"' "$CONFIG_FILE" 2>/dev/null || echo "./savegame")"
+  else
+    abs_path "./savegame"
+  fi
+}
+
+resolve_log_dir() {
+  if [[ -n "$ENSHROUDED_LOG_DIR" ]]; then
+    abs_path "$ENSHROUDED_LOG_DIR"
+  elif command -v jq >/dev/null 2>&1 && [[ -f "$CONFIG_FILE" ]]; then
+    abs_path "$(jq -r '.logDirectory // "./logs"' "$CONFIG_FILE" 2>/dev/null || echo "./logs")"
+  else
+    abs_path "./logs"
+  fi
+}
+
+resolve_backup_dir() {
+  abs_path "$BACKUP_DIR"
+}
+
+ensure_writable_dir() {
+  local dir
+  dir="$1"
+  if [[ -z "$dir" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$dir" 2>/dev/null || true
+
+  if runuser -u steam -p -- test -w "$dir" 2>/dev/null; then
+    return 0
+  fi
+
+  warn "Permission check failed for: $dir"
+
+  if ! is_true "$AUTO_FIX_PERMS"; then
+    return 1
+  fi
+
+  info "Attempting to fix permissions for: $dir"
+  chown -R "$PUID:$PGID" "$dir" 2>/dev/null || true
+  if [[ -n "${AUTO_FIX_DIR_MODE:-}" ]]; then
+    find "$dir" -type d -exec chmod "$AUTO_FIX_DIR_MODE" {} + 2>/dev/null || true
+  fi
+  if [[ -n "${AUTO_FIX_FILE_MODE:-}" ]]; then
+    find "$dir" -type f -exec chmod "$AUTO_FIX_FILE_MODE" {} + 2>/dev/null || true
+  fi
+
+  if runuser -u steam -p -- test -w "$dir" 2>/dev/null; then
+    info "Permissions fixed for: $dir"
+    return 0
+  fi
+
+  warn "Still not writable after fix attempt: $dir"
+  return 1
+}
+
+preflight_permissions() {
+  local save_dir log_dir backup_dir
+  save_dir="$(resolve_save_dir)"
+  log_dir="$(resolve_log_dir)"
+  backup_dir="$(resolve_backup_dir)"
+
+  ensure_writable_dir "$INSTALL_PATH" || true
+  ensure_writable_dir "$RUN_DIR" || true
+  ensure_writable_dir "$REQUEST_DIR" || true
+  ensure_writable_dir "$save_dir" || true
+  ensure_writable_dir "$log_dir" || true
+  ensure_writable_dir "$backup_dir" || true
+}
+
 create_folders() {
   local save_dir log_dir backup_dir
-  if [[ -n "$ENSHROUDED_SAVE_DIR" ]]; then
-    save_dir="$(abs_path "$ENSHROUDED_SAVE_DIR")"
-  elif command -v jq >/dev/null 2>&1 && [[ -f "$CONFIG_FILE" ]]; then
-    save_dir="$(abs_path "$(jq -r '.saveDirectory // "./savegame"' "$CONFIG_FILE" 2>/dev/null || echo "./savegame")")"
-  else
-    save_dir="$(abs_path "./savegame")"
-  fi
-
-  if [[ -n "$ENSHROUDED_LOG_DIR" ]]; then
-    log_dir="$(abs_path "$ENSHROUDED_LOG_DIR")"
-  elif command -v jq >/dev/null 2>&1 && [[ -f "$CONFIG_FILE" ]]; then
-    log_dir="$(abs_path "$(jq -r '.logDirectory // "./logs"' "$CONFIG_FILE" 2>/dev/null || echo "./logs")")"
-  else
-    log_dir="$(abs_path "./logs")"
-  fi
-
-  backup_dir="$(abs_path "$BACKUP_DIR")"
+  save_dir="$(resolve_save_dir)"
+  log_dir="$(resolve_log_dir)"
+  backup_dir="$(resolve_backup_dir)"
 
   mkdir -p "$save_dir" "$log_dir" "$backup_dir"
 }
