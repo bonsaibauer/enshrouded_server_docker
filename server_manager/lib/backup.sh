@@ -45,9 +45,17 @@ backup_cleanup() {
 }
 
 backup_now() {
+  log_context_push "backup"
   if [[ -f "$PID_BACKUP_FILE" ]]; then
-    warn "Backup already in progress"
-    return 0
+    local prev_pid
+    prev_pid="$(cat "$PID_BACKUP_FILE" 2>/dev/null || true)"
+    if pid_alive "$prev_pid"; then
+      warn "Backup already in progress (pid: $prev_pid)"
+      log_context_pop
+      return 0
+    fi
+    warn "Stale backup pid file found, clearing"
+    rm -f "$PID_BACKUP_FILE"
   fi
 
   echo "$$" >"$PID_BACKUP_FILE"
@@ -62,6 +70,7 @@ backup_now() {
   if [[ ! -f "$save_dir/$SAVEFILE_NAME-index" ]]; then
     warn "Save index not found, skipping backup"
     clear_pid "$PID_BACKUP_FILE"
+    log_context_pop
     return 0
   fi
 
@@ -75,6 +84,7 @@ backup_now() {
   if [[ ! -f "$save_dir/$latest_savefile_name" ]]; then
     warn "Latest save file missing, skipping backup"
     clear_pid "$PID_BACKUP_FILE"
+    log_context_pop
     return 0
   fi
 
@@ -105,4 +115,5 @@ EOF
 
   clear_pid "$PID_BACKUP_FILE"
   info "Backup complete"
+  log_context_pop
 }

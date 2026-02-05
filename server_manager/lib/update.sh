@@ -103,9 +103,17 @@ update_post_hook() {
 }
 
 update_now() {
+  log_context_push "update"
   if [[ -f "$PID_UPDATE_FILE" ]]; then
-    warn "Update already in progress"
-    return 0
+    local prev_pid
+    prev_pid="$(cat "$PID_UPDATE_FILE" 2>/dev/null || true)"
+    if pid_alive "$prev_pid"; then
+      warn "Update already in progress (pid: $prev_pid)"
+      log_context_pop
+      return 0
+    fi
+    warn "Stale update pid file found, clearing"
+    rm -f "$PID_UPDATE_FILE"
   fi
 
   echo "$$" >"$PID_UPDATE_FILE"
@@ -121,12 +129,14 @@ update_now() {
       start_server
     fi
     clear_pid "$PID_UPDATE_FILE"
+    log_context_pop
     return 0
   fi
 
   if ! check_server_empty update; then
     warn "Server not empty, update skipped"
     clear_pid "$PID_UPDATE_FILE"
+    log_context_pop
     return 0
   fi
 
@@ -145,6 +155,7 @@ update_now() {
         start_server
       fi
       clear_pid "$PID_UPDATE_FILE"
+      log_context_pop
       return 1
     fi
   fi
@@ -158,4 +169,5 @@ update_now() {
 
   update_post_hook
   clear_pid "$PID_UPDATE_FILE"
+  log_context_pop
 }

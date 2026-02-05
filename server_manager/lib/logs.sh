@@ -63,8 +63,10 @@ start_log_streamer() {
     fi
   fi
 
+  log_context_push "logs"
   log_streamer_loop &
   local pid=$!
+  log_context_pop
   echo "$pid" >"$LOG_STREAM_PID_FILE"
 }
 

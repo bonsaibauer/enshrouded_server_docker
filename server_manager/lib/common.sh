@@ -26,6 +26,18 @@ else
 fi
 
 LOG_LEVEL="${LOG_LEVEL:-info}"
+LOG_CONTEXT="${LOG_CONTEXT:-manager}"
+LOG_CONTEXT_STACK=()
+
+# Normalize and validate log level
+LOG_LEVEL="$(echo "$LOG_LEVEL" | tr '[:upper:]' '[:lower:]')"
+case "$LOG_LEVEL" in
+  debug|info|warn|error) ;;
+  *)
+    LOG_LEVEL_INVALID="true"
+    LOG_LEVEL="info"
+    ;;
+esac
 
 level_num() {
   case "${1:-}" in
@@ -38,7 +50,7 @@ level_num() {
 }
 
 timestamp() {
-  date "+%Y-%m-%d %H:%M:%S"
+  date -u "+%Y-%m-%dT%H:%M:%SZ"
 }
 
 level_label() {
@@ -57,7 +69,13 @@ log() {
   shift || true
   message="$*"
   if [ "$(level_num "$level")" -ge "$(level_num "$LOG_LEVEL")" ]; then
-    printf "%s [%s] %s\n" "$(timestamp)" "$(level_label "$level")" "$message"
+    local context prefix
+    context="${LOG_CONTEXT:-manager}"
+    prefix="[manager]"
+    if [[ -n "$context" && "$context" != "manager" ]]; then
+      prefix="$prefix [$context]"
+    fi
+    printf "%s [%s] %s %s\n" "$(timestamp)" "$(level_label "$level")" "$prefix" "$message"
   fi
 }
 
@@ -77,12 +95,17 @@ ui_hr() {
 
 ui_banner() {
   cat <<'EOF'
-  ______                 _                       _
- |  ____|               | |                     | |
- | |__   _ __  ___  __ _| |__  _ __ ___  ___  __| |
- |  __| | '_ \/ __|/ _` | '_ \| '__/ _ \/ _ \/ _` |
- | |____| | | \__ \ (_| | | | | | |  __/  __/ (_| |
- |______|_| |_|___/\__,_|_| |_|_|  \___|\___|\__,_|
+>>=============================================================<<
+|| __  __    _    _   _    _    ____ _____ ____    _           ||
+|||  \/  |  / \  | \ | |  / \  / ___| ____|  _ \  | |__  _   _ ||
+||| |\/| | / _ \ |  \| | / _ \| |  _|  _| | |_) | | '_ \| | | |||
+||| |  | |/ ___ \| |\  |/ ___ \ |_| | |___|  _ <  | |_) | |_| |||
+|||_|  |_/_/   \_\_| \_/_/   \_\____|_____|_| \_\ |_.__/ \__, |||
+||| |__   ___  _ __  ___  __ _(_) |__   __ _ _   _  ___ _|___/ ||
+||| '_ \ / _ \| '_ \/ __|/ _` | | '_ \ / _` | | | |/ _ \ '__|  ||
+||| |_) | (_) | | | \__ \ (_| | | |_) | (_| | |_| |  __/ |     ||
+|||_.__/ \___/|_| |_|___/\__,_|_|_.__/ \__,_|\__,_|\___|_|     ||
+>>=============================================================<<
 EOF
   printf "%s\n" "                 Server Manager"
   ui_hr
@@ -112,6 +135,24 @@ is_true() {
     true|TRUE|yes|YES|1) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+log_context_push() {
+  local ctx
+  ctx="$1"
+  LOG_CONTEXT_STACK+=("${LOG_CONTEXT:-manager}")
+  LOG_CONTEXT="$ctx"
+}
+
+log_context_pop() {
+  local idx
+  idx=$((${#LOG_CONTEXT_STACK[@]} - 1))
+  if [[ "$idx" -ge 0 ]]; then
+    LOG_CONTEXT="${LOG_CONTEXT_STACK[$idx]}"
+    unset "LOG_CONTEXT_STACK[$idx]"
+  else
+    LOG_CONTEXT="manager"
+  fi
 }
 
 abs_path() {
@@ -162,7 +203,15 @@ ENABLE_CRON="${ENABLE_CRON:-true}"
 LOG_TO_STDOUT="${LOG_TO_STDOUT:-true}"
 LOG_TAIL_LINES="${LOG_TAIL_LINES:-200}"
 LOG_POLL_INTERVAL="${LOG_POLL_INTERVAL:-2}"
-LOG_FILE_PATTERN="${LOG_FILE_PATTERN:-*}"
+LOG_FILE_PATTERN="${LOG_FILE_PATTERN:-*.log}"
+AUTO_RESTART="${AUTO_RESTART:-true}"
+AUTO_RESTART_DELAY="${AUTO_RESTART_DELAY:-10}"
+AUTO_RESTART_MAX_ATTEMPTS="${AUTO_RESTART_MAX_ATTEMPTS:-0}"
+HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-300}"
+HEALTH_CHECK_ON_START="${HEALTH_CHECK_ON_START:-true}"
+A2S_TIMEOUT="${A2S_TIMEOUT:-2}"
+A2S_RETRIES="${A2S_RETRIES:-2}"
+A2S_RETRY_DELAY="${A2S_RETRY_DELAY:-1}"
 
 UPDATE_CHECK_PLAYERS="${UPDATE_CHECK_PLAYERS:-false}"
 RESTART_CHECK_PLAYERS="${RESTART_CHECK_PLAYERS:-false}"

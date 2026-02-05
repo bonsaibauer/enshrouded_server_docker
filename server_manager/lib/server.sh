@@ -67,12 +67,29 @@ query_player_count() {
     return
   fi
   local result
-  result="$(python3 - <<PY 2>/dev/null || true
+  result="$(QUERY_PORT="$QUERY_PORT" A2S_TIMEOUT="$A2S_TIMEOUT" A2S_RETRIES="$A2S_RETRIES" A2S_RETRY_DELAY="$A2S_RETRY_DELAY" python3 - <<'PY' 2>/dev/null || true
+import os
+import time
 try:
     import a2s
-    port = int("${QUERY_PORT}")
-    players = a2s.players(("127.0.0.1", port))
-    print(len(players))
+    port = int(os.environ.get("QUERY_PORT", "15637"))
+    timeout = float(os.environ.get("A2S_TIMEOUT", "2"))
+    retries = int(os.environ.get("A2S_RETRIES", "2"))
+    delay = float(os.environ.get("A2S_RETRY_DELAY", "1"))
+
+    for attempt in range(1, retries + 1):
+        try:
+            try:
+                players = a2s.players(("127.0.0.1", port), timeout=timeout)
+            except TypeError:
+                # Older versions might not support timeout parameter
+                players = a2s.players(("127.0.0.1", port))
+            print(len(players))
+            raise SystemExit(0)
+        except Exception:
+            if attempt < retries:
+                time.sleep(delay)
+    print("unknown")
 except Exception:
     print("unknown")
 PY
@@ -82,6 +99,29 @@ PY
   else
     echo "$result"
   fi
+}
+
+health_check() {
+  log_context_push "health"
+  local port players
+  port="$(get_query_port)"
+  if ! is_server_running; then
+    warn "Health check: server not running"
+    log_context_pop
+    return 1
+  fi
+
+  QUERY_PORT="$port"
+  players="$(query_player_count)"
+  if [[ "$players" == "unknown" ]]; then
+    warn "Health check: server running, no A2S response on port $port"
+    log_context_pop
+    return 1
+  fi
+
+  info "Health check: server running, players=$players, port=$port"
+  log_context_pop
+  return 0
 }
 
 check_server_empty() {
@@ -134,8 +174,10 @@ wait_for_server_download() {
 }
 
 start_server() {
+  log_context_push "server"
   if is_server_running; then
     warn "Server already running"
+    log_context_pop
     return 0
   fi
 
@@ -155,11 +197,14 @@ start_server() {
   local pid=$!
   echo "$pid" >"$PID_SERVER_FILE"
   info "Server PID: $pid"
+  log_context_pop
 }
 
 stop_server() {
+  log_context_push "server"
   if ! is_server_running; then
     warn "Server is not running"
+    log_context_pop
     return 0
   fi
 
@@ -193,11 +238,14 @@ stop_server() {
   cleanup_wine
   clear_pid "$PID_SERVER_FILE"
   info "Server stopped"
+  log_context_pop
 }
 
 restart_server() {
+  log_context_push "restart"
   if ! check_server_empty restart; then
     warn "Server not empty, restart skipped"
+    log_context_pop
     return 0
   fi
   restart_pre_hook
@@ -205,6 +253,7 @@ restart_server() {
   start_server
   start_log_streamer || true
   restart_post_hook
+  log_context_pop
 }
 
 cleanup_wine() {

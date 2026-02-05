@@ -150,6 +150,186 @@ validate_number_range_soft() {
   return 1
 }
 
+json_has_value() {
+  local path
+  path="$1"
+  jq -e "$path != null" "$CONFIG_FILE" >/dev/null 2>&1
+}
+
+validate_tags() {
+  local tag_list tag trimmed
+  tag_list="$1"
+  IFS=',' read -r -a tags <<<"$tag_list"
+  for tag in "${tags[@]}"; do
+    trimmed="$(echo "$tag" | xargs)"
+    if [[ -z "$trimmed" ]]; then
+      warn "ENSHROUDED_TAGS contains an empty tag"
+      return 1
+    fi
+    if ! [[ "$trimmed" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      warn "ENSHROUDED_TAGS contains invalid tag: $trimmed"
+      return 1
+    fi
+  done
+  return 0
+}
+
+validate_core_json_values() {
+  local qp sc tags t
+  qp="$(jq -r '.queryPort // empty' "$CONFIG_FILE" 2>/dev/null || true)"
+  if [[ -n "$qp" ]]; then
+    if ! [[ "$qp" =~ ^[0-9]+$ ]] || [[ "$qp" -lt 1 ]] || [[ "$qp" -gt 65535 ]]; then
+      warn "queryPort in JSON is invalid (actual: $qp)"
+    fi
+  fi
+
+  sc="$(jq -r '.slotCount // empty' "$CONFIG_FILE" 2>/dev/null || true)"
+  if [[ -n "$sc" ]]; then
+    if ! [[ "$sc" =~ ^[0-9]+$ ]] || [[ "$sc" -lt 1 ]] || [[ "$sc" -gt 16 ]]; then
+      warn "slotCount in JSON is invalid (actual: $sc)"
+    fi
+  fi
+
+  if jq -e '.tags != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    tags="$(jq -r '.tags[]?' "$CONFIG_FILE" 2>/dev/null || true)"
+    if [[ -n "$tags" ]]; then
+      while read -r t; do
+        if [[ -z "$t" ]]; then
+          warn "tags in JSON contains empty value"
+          continue
+        fi
+        if ! [[ "$t" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          warn "tags in JSON contains invalid tag: $t"
+        fi
+      done <<<"$tags"
+    fi
+  fi
+}
+
+ensure_core_defaults() {
+  if ! jq -e '.name != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default name=Enshrouded Server"
+    config_set --arg name "Enshrouded Server" '.name = $name'
+  fi
+
+  if ! jq -e '.saveDirectory != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default saveDirectory=./savegame"
+    config_set --arg saveDirectory "./savegame" '.saveDirectory = $saveDirectory'
+  fi
+
+  if ! jq -e '.logDirectory != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default logDirectory=./logs"
+    config_set --arg logDirectory "./logs" '.logDirectory = $logDirectory'
+  fi
+
+  if ! jq -e '.ip != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default ip=0.0.0.0"
+    config_set --arg ip "0.0.0.0" '.ip = $ip'
+  fi
+
+  if ! jq -e '.queryPort != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default queryPort=15637"
+    config_set --argjson queryPort 15637 '.queryPort = $queryPort'
+  fi
+
+  if ! jq -e '.slotCount != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default slotCount=16"
+    config_set --argjson slotCount 16 '.slotCount = $slotCount'
+  fi
+
+  if ! jq -e '.tags != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default tags=[]"
+    config_set '.tags = []'
+  fi
+
+  if ! jq -e '.voiceChatMode != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default voiceChatMode=Proximity"
+    config_set --arg voiceChatMode "Proximity" '.voiceChatMode = $voiceChatMode'
+  fi
+
+  if ! jq -e '.enableVoiceChat != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default enableVoiceChat=false"
+    config_set --argjson enableVoiceChat false '.enableVoiceChat = $enableVoiceChat'
+  fi
+
+  if ! jq -e '.enableTextChat != null' "$CONFIG_FILE" >/dev/null 2>&1; then
+    debug "Applied default enableTextChat=false"
+    config_set --argjson enableTextChat false '.enableTextChat = $enableTextChat'
+  fi
+}
+
+gs_default_for_suffix() {
+  case "$1" in
+    PRESET) echo "Default" ;;
+    PLAYER_HEALTH_FACTOR) echo "1" ;;
+    PLAYER_MANA_FACTOR) echo "1" ;;
+    PLAYER_STAMINA_FACTOR) echo "1" ;;
+    PLAYER_BODY_HEAT_FACTOR) echo "1" ;;
+    PLAYER_DIVING_TIME_FACTOR) echo "1" ;;
+    ENABLE_DURABILITY) echo "true" ;;
+    ENABLE_STARVING_DEBUFF) echo "false" ;;
+    FOOD_BUFF_DURATION_FACTOR) echo "1" ;;
+    FROM_HUNGER_TO_STARVING) echo "600000000000" ;;
+    SHROUD_TIME_FACTOR) echo "1" ;;
+    TOMBSTONE_MODE) echo "AddBackpackMaterials" ;;
+    ENABLE_GLIDER_TURBULENCES) echo "true" ;;
+    WEATHER_FREQUENCY) echo "Normal" ;;
+    FISHING_DIFFICULTY) echo "Normal" ;;
+    MINING_DAMAGE_FACTOR) echo "1" ;;
+    PLANT_GROWTH_SPEED_FACTOR) echo "1" ;;
+    RESOURCE_DROP_STACK_AMOUNT_FACTOR) echo "1" ;;
+    FACTORY_PRODUCTION_SPEED_FACTOR) echo "1" ;;
+    PERK_UPGRADE_RECYCLING_FACTOR) echo "0.5" ;;
+    PERK_COST_FACTOR) echo "1" ;;
+    EXPERIENCE_COMBAT_FACTOR) echo "1" ;;
+    EXPERIENCE_MINING_FACTOR) echo "1" ;;
+    EXPERIENCE_EXPLORATION_QUESTS_FACTOR) echo "1" ;;
+    RANDOM_SPAWNER_AMOUNT) echo "Normal" ;;
+    AGGRO_POOL_AMOUNT) echo "Normal" ;;
+    ENEMY_DAMAGE_FACTOR) echo "1" ;;
+    ENEMY_HEALTH_FACTOR) echo "1" ;;
+    ENEMY_STAMINA_FACTOR) echo "1" ;;
+    ENEMY_PERCEPTION_RANGE_FACTOR) echo "1" ;;
+    BOSS_DAMAGE_FACTOR) echo "1" ;;
+    BOSS_HEALTH_FACTOR) echo "1" ;;
+    THREAT_BONUS) echo "1" ;;
+    PACIFY_ALL_ENEMIES) echo "false" ;;
+    TAMING_STARTLE_REPERCUSSION) echo "LoseSomeProgress" ;;
+    DAY_TIME_DURATION) echo "1800000000000" ;;
+    NIGHT_TIME_DURATION) echo "720000000000" ;;
+    CURSE_MODIFIER) echo "Normal" ;;
+    *) echo "" ;;
+  esac
+}
+
+apply_game_setting() {
+  local suffix value jq_key_name full_jq_path jq_arg_option temp_json_file
+  suffix="$1"
+  value="$2"
+
+  jq_key_name=$(echo "$suffix" | tr '[:upper:]' '[:lower:]' | awk -F_ '{for(i=1;i<=NF;i++){if(i==1){out=$i}else{out=out toupper(substr($i,1,1)) substr($i,2)}}}END{print out}')
+
+  if [[ "$suffix" == "PRESET" ]]; then
+    full_jq_path=".gameSettingsPreset"
+    jq_arg_option="--arg"
+  else
+    full_jq_path=".gameSettings.$jq_key_name"
+    if [[ "$value" == "true" || "$value" == "false" || "$value" =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]; then
+      jq_arg_option="--argjson"
+    else
+      jq_arg_option="--arg"
+    fi
+  fi
+
+  temp_json_file="$(mktemp)"
+  if jq "$jq_arg_option" val "$value" "$full_jq_path = \$val" "$CONFIG_FILE" >"$temp_json_file"; then
+    mv "$temp_json_file" "$CONFIG_FILE"
+  else
+    warn "Failed to update ENSHROUDED_GS_${suffix} in $CONFIG_FILE"
+    rm -f "$temp_json_file"
+  fi
+}
+
 validate_game_setting() {
   local suffix value name
   suffix="$1"
@@ -474,51 +654,69 @@ config_set() {
 }
 
 update_or_create_config() {
+  log_context_push "config"
   create_default_config
   require_cmd jq
 
   if [[ -n "$ENSHROUDED_NAME" ]]; then
+    debug "Applied ENSHROUDED_NAME=$ENSHROUDED_NAME"
     config_set --arg name "$ENSHROUDED_NAME" '.name = $name'
   fi
 
   if [[ -n "$ENSHROUDED_SAVE_DIR" ]]; then
+    debug "Applied ENSHROUDED_SAVE_DIR=$ENSHROUDED_SAVE_DIR"
     config_set --arg saveDirectory "$ENSHROUDED_SAVE_DIR" '.saveDirectory = $saveDirectory'
   fi
 
   if [[ -n "$ENSHROUDED_LOG_DIR" ]]; then
+    debug "Applied ENSHROUDED_LOG_DIR=$ENSHROUDED_LOG_DIR"
     config_set --arg logDirectory "$ENSHROUDED_LOG_DIR" '.logDirectory = $logDirectory'
   fi
 
   if [[ -n "$ENSHROUDED_IP" ]]; then
+    debug "Applied ENSHROUDED_IP=$ENSHROUDED_IP"
     config_set --arg ip "$ENSHROUDED_IP" '.ip = $ip'
   fi
 
   if [[ -n "$ENSHROUDED_QUERY_PORT" ]]; then
+    debug "Applied ENSHROUDED_QUERY_PORT=$ENSHROUDED_QUERY_PORT"
     config_set --argjson queryPort "$ENSHROUDED_QUERY_PORT" '.queryPort = $queryPort'
   fi
 
   if [[ -n "$ENSHROUDED_SLOT_COUNT" ]]; then
+    debug "Applied ENSHROUDED_SLOT_COUNT=$ENSHROUDED_SLOT_COUNT"
     config_set --argjson slotCount "$ENSHROUDED_SLOT_COUNT" '.slotCount = $slotCount'
   fi
 
   if [[ -n "$ENSHROUDED_VOICE_CHAT_MODE" ]]; then
+    debug "Applied ENSHROUDED_VOICE_CHAT_MODE=$ENSHROUDED_VOICE_CHAT_MODE"
     config_set --arg voiceChatMode "$ENSHROUDED_VOICE_CHAT_MODE" '.voiceChatMode = $voiceChatMode'
   fi
 
   if [[ -n "$ENSHROUDED_ENABLE_VOICE_CHAT" ]]; then
+    debug "Applied ENSHROUDED_ENABLE_VOICE_CHAT=$ENSHROUDED_ENABLE_VOICE_CHAT"
     config_set --argjson enableVoiceChat "$ENSHROUDED_ENABLE_VOICE_CHAT" '.enableVoiceChat = $enableVoiceChat'
   fi
 
   if [[ -n "$ENSHROUDED_ENABLE_TEXT_CHAT" ]]; then
+    debug "Applied ENSHROUDED_ENABLE_TEXT_CHAT=$ENSHROUDED_ENABLE_TEXT_CHAT"
     config_set --argjson enableTextChat "$ENSHROUDED_ENABLE_TEXT_CHAT" '.enableTextChat = $enableTextChat'
   fi
 
   if [[ -n "$ENSHROUDED_TAGS" ]]; then
-    config_set --arg tags "$ENSHROUDED_TAGS" '.tags = ($tags | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)))'
+    if validate_tags "$ENSHROUDED_TAGS"; then
+      debug "Applied ENSHROUDED_TAGS=$ENSHROUDED_TAGS"
+      config_set --arg tags "$ENSHROUDED_TAGS" '.tags = ($tags | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)))'
+    else
+      warn "ENSHROUDED_TAGS invalid; keeping existing value"
+    fi
   fi
 
+  ensure_core_defaults
   update_user_group_config
   update_game_settings_config
+  validate_core_json_values
+  log_context_pop
 }
 
 update_user_group_config() {
@@ -546,35 +744,43 @@ update_user_group_config() {
 
     case "$group_param" in
       NAME)
+        debug "Applied ENSHROUDED_ROLE_${group_index}_NAME=$group_value"
         config_set --argjson group_index "$group_index" --arg name "$group_value" '.userGroups[$group_index].name = $name'
         ;;
       PASSWORD)
+        debug "Applied ENSHROUDED_ROLE_${group_index}_PASSWORD=***"
         config_set --argjson group_index "$group_index" --arg password "$group_value" '.userGroups[$group_index].password = $password'
         ;;
       CAN_KICK_BAN)
         validate_bool "ENSHROUDED_ROLE_${group_index}_CAN_KICK_BAN" "$group_value"
+        debug "Applied ENSHROUDED_ROLE_${group_index}_CAN_KICK_BAN=$group_value"
         config_set --argjson group_index "$group_index" --argjson canKickBan "$group_value" '.userGroups[$group_index].canKickBan = $canKickBan'
         ;;
       CAN_ACCESS_INVENTORIES)
         validate_bool "ENSHROUDED_ROLE_${group_index}_CAN_ACCESS_INVENTORIES" "$group_value"
+        debug "Applied ENSHROUDED_ROLE_${group_index}_CAN_ACCESS_INVENTORIES=$group_value"
         config_set --argjson group_index "$group_index" --argjson canAccessInventories "$group_value" '.userGroups[$group_index].canAccessInventories = $canAccessInventories'
         ;;
       CAN_EDIT_WORLD)
         validate_bool "ENSHROUDED_ROLE_${group_index}_CAN_EDIT_WORLD" "$group_value"
+        debug "Applied ENSHROUDED_ROLE_${group_index}_CAN_EDIT_WORLD=$group_value"
         config_set --argjson group_index "$group_index" --argjson canEditWorld "$group_value" '.userGroups[$group_index].canEditWorld = $canEditWorld'
         ;;
       CAN_EDIT_BASE)
         validate_bool "ENSHROUDED_ROLE_${group_index}_CAN_EDIT_BASE" "$group_value"
+        debug "Applied ENSHROUDED_ROLE_${group_index}_CAN_EDIT_BASE=$group_value"
         config_set --argjson group_index "$group_index" --argjson canEditBase "$group_value" '.userGroups[$group_index].canEditBase = $canEditBase'
         ;;
       CAN_EXTEND_BASE)
         validate_bool "ENSHROUDED_ROLE_${group_index}_CAN_EXTEND_BASE" "$group_value"
+        debug "Applied ENSHROUDED_ROLE_${group_index}_CAN_EXTEND_BASE=$group_value"
         config_set --argjson group_index "$group_index" --argjson canExtendBase "$group_value" '.userGroups[$group_index].canExtendBase = $canExtendBase'
         ;;
       RESERVED_SLOTS)
         if [[ ! "$group_value" =~ ^[0-9]+$ ]]; then
           fatal "ENSHROUDED_ROLE_${group_index}_RESERVED_SLOTS must be numeric (actual: $group_value)"
         fi
+        debug "Applied ENSHROUDED_ROLE_${group_index}_RESERVED_SLOTS=$group_value"
         config_set --argjson group_index "$group_index" --argjson reservedSlots "$group_value" '.userGroups[$group_index].reservedSlots = $reservedSlots'
         ;;
     esac
@@ -584,6 +790,11 @@ update_user_group_config() {
 update_game_settings_config() {
   local suffix var_name var_value jq_key_name full_jq_path jq_arg_option temp_json_file
   local gs_keys
+  local missing_keys
+  local allowed_vars
+  local default_value
+  missing_keys=()
+  allowed_vars=""
   gs_keys=(
     PRESET
     PLAYER_HEALTH_FACTOR
@@ -627,10 +838,26 @@ update_game_settings_config() {
 
   for suffix in "${gs_keys[@]}"; do
     var_name="ENSHROUDED_GS_${suffix}"
+    allowed_vars="${allowed_vars} ${var_name}"
     var_value="${!var_name:-}"
 
+    if [[ "$suffix" == "PRESET" ]]; then
+      full_jq_path=".gameSettingsPreset"
+    else
+      jq_key_name=$(echo "$suffix" | tr '[:upper:]' '[:lower:]' | awk -F_ '{for(i=1;i<=NF;i++){if(i==1){out=$i}else{out=out toupper(substr($i,1,1)) substr($i,2)}}}END{print out}')
+      full_jq_path=".gameSettings.$jq_key_name"
+    fi
+
     if [[ -z "$var_value" ]]; then
-      info "$var_name not set; keeping existing value"
+      if ! json_has_value "$full_jq_path"; then
+        default_value="$(gs_default_for_suffix "$suffix")"
+        if [[ -n "$default_value" ]] && validate_game_setting "$suffix" "$default_value"; then
+          debug "Applied default $var_name=$default_value"
+          apply_game_setting "$suffix" "$default_value"
+        fi
+      else
+        missing_keys+=("$var_name")
+      fi
       continue
     fi
 
@@ -639,28 +866,22 @@ update_game_settings_config() {
       continue
     fi
 
-    jq_key_name=$(echo "$suffix" | tr '[:upper:]' '[:lower:]' | awk -F_ '{for(i=1;i<=NF;i++){if(i==1){out=$i}else{out=out toupper(substr($i,1,1)) substr($i,2)}}}END{print out}')
-
-    if [[ "$suffix" == "PRESET" ]]; then
-      full_jq_path=".gameSettingsPreset"
-      jq_arg_option="--arg"
-    else
-      full_jq_path=".gameSettings.$jq_key_name"
-      if [[ "$var_value" == "true" || "$var_value" == "false" || "$var_value" =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]; then
-        jq_arg_option="--argjson"
-      else
-        jq_arg_option="--arg"
-      fi
-    fi
-
-    temp_json_file="$(mktemp)"
-    if jq "$jq_arg_option" val "$var_value" "$full_jq_path = \$val" "$CONFIG_FILE" >"$temp_json_file"; then
-      mv "$temp_json_file" "$CONFIG_FILE"
-    else
-      warn "Failed to update $var_name in $CONFIG_FILE"
-      rm -f "$temp_json_file"
-    fi
+    debug "Applied $var_name=$var_value"
+    apply_game_setting "$suffix" "$var_value"
   done
+
+  if [[ "${#missing_keys[@]}" -gt 0 ]]; then
+    debug "Game settings not set (using existing values): ${missing_keys[*]}"
+  fi
+
+  local unknown_vars pattern
+  pattern="^($(echo "$allowed_vars" | xargs | sed 's/ /|/g'))$"
+  if [[ -n "$pattern" ]]; then
+    unknown_vars="$(compgen -A variable | grep '^ENSHROUDED_GS_' | grep -v -E "$pattern" || true)"
+  fi
+  if [[ -n "$unknown_vars" ]]; then
+    warn "Unknown game setting env vars detected: $(echo "$unknown_vars" | xargs)"
+  fi
 }
 
 bootstrap_hook() {

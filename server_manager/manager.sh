@@ -41,6 +41,43 @@ Notes:
 EOF
 }
 
+startup_summary() {
+  local name ip qport slots save_dir log_dir preset
+  if command -v jq >/dev/null 2>&1 && [[ -f "$CONFIG_FILE" ]]; then
+    name="$(jq -r '.name // "n/a"' "$CONFIG_FILE" 2>/dev/null || echo "n/a")"
+    ip="$(jq -r '.ip // "n/a"' "$CONFIG_FILE" 2>/dev/null || echo "n/a")"
+    qport="$(jq -r '.queryPort // "n/a"' "$CONFIG_FILE" 2>/dev/null || echo "n/a")"
+    slots="$(jq -r '.slotCount // "n/a"' "$CONFIG_FILE" 2>/dev/null || echo "n/a")"
+    save_dir="$(jq -r '.saveDirectory // "./savegame"' "$CONFIG_FILE" 2>/dev/null || echo "./savegame")"
+    log_dir="$(jq -r '.logDirectory // "./logs"' "$CONFIG_FILE" 2>/dev/null || echo "./logs")"
+    preset="$(jq -r '.gameSettingsPreset // "n/a"' "$CONFIG_FILE" 2>/dev/null || echo "n/a")"
+  else
+    name="n/a"
+    ip="n/a"
+    qport="n/a"
+    slots="n/a"
+    save_dir="./savegame"
+    log_dir="./logs"
+    preset="n/a"
+  fi
+
+  ui_hr
+  ui_kv "Server Name" "$name"
+  ui_kv "Bind IP" "$ip"
+  ui_kv "Query Port" "$qport"
+  ui_kv "Slots" "$slots"
+  ui_kv "Save Dir" "$(abs_path "$save_dir")"
+  ui_kv "Log Dir" "$(abs_path "$log_dir")"
+  ui_kv "Preset" "$preset"
+  ui_kv "Auto Update" "$AUTO_UPDATE"
+  ui_kv "Update Interval" "${AUTO_UPDATE_INTERVAL}s"
+  ui_kv "Auto Restart" "$AUTO_RESTART"
+  ui_kv "Health Check" "${HEALTH_CHECK_INTERVAL}s"
+  ui_kv "Safe Mode" "$SAFE_MODE"
+  ui_kv "Log To Stdout" "$LOG_TO_STDOUT"
+  ui_hr
+}
+
 ensure_root_and_map_user() {
   if [[ "$(id -u)" -ne 0 ]]; then
     fatal "Manager must run as root to apply PUID/PGID mapping"
@@ -103,6 +140,7 @@ status_summary() {
   fi
   pid="$(read_server_pid)"
   version="$(cat "$VERSION_FILE_PATH" 2>/dev/null || echo "unknown")"
+  QUERY_PORT="$(get_query_port)"
   players="$(query_player_count)"
 
   ui_hr
@@ -134,7 +172,11 @@ tail_logs() {
 
 manager_loop() {
   local next_update_check now
+  local restart_attempts
+  local next_health_check
   next_update_check=$(( $(date +%s) + AUTO_UPDATE_INTERVAL ))
+  next_health_check=$(( $(date +%s) + HEALTH_CHECK_INTERVAL ))
+  restart_attempts=0
 
   while true; do
     handle_requests
@@ -146,9 +188,28 @@ manager_loop() {
       next_update_check=$(( now + AUTO_UPDATE_INTERVAL ))
     fi
 
+    if [[ "$HEALTH_CHECK_INTERVAL" -gt 0 ]] && [[ "$now" -ge "$next_health_check" ]]; then
+      health_check || true
+      next_health_check=$(( now + HEALTH_CHECK_INTERVAL ))
+    fi
+
     if ! is_server_running; then
       warn "Server process exited"
+      if is_true "$AUTO_RESTART"; then
+        restart_attempts=$((restart_attempts + 1))
+        if [[ "$AUTO_RESTART_MAX_ATTEMPTS" -gt 0 && "$restart_attempts" -gt "$AUTO_RESTART_MAX_ATTEMPTS" ]]; then
+          warn "Auto restart limit reached, stopping manager loop"
+          return 1
+        fi
+        warn "Auto restart enabled, restarting in ${AUTO_RESTART_DELAY}s (attempt ${restart_attempts})"
+        sleep "$AUTO_RESTART_DELAY"
+        start_server || true
+        start_log_streamer || true
+        continue
+      fi
       return 0
+    else
+      restart_attempts=0
     fi
 
     sleep 2
@@ -177,6 +238,12 @@ manager_run() {
 
   setup_environment
 
+  if [[ "${LOG_LEVEL_INVALID:-}" == "true" ]]; then
+    warn "LOG_LEVEL invalid, falling back to info"
+  fi
+
+  startup_summary
+
   if is_true "$AUTO_UPDATE_ON_BOOT"; then
     update_now || true
   fi
@@ -186,6 +253,10 @@ manager_run() {
   fi
 
   start_log_streamer
+
+  if is_true "$HEALTH_CHECK_ON_START"; then
+    health_check || true
+  fi
 
   manager_loop
 }
