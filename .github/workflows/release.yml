@@ -169,17 +169,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Skip description update (password missing)
-        if: env.DOCKER_PASSWORD == ''
-        run: echo "DOCKER_PASSWORD secret is missing; skipping description update."
+        if: env.DOCKER_TOKEN == ''
+        run: echo "DOCKER_TOKEN secret is missing; skipping description update."
       - name: Update Docker Hub description
-        if: env.DOCKER_PASSWORD != ''
+        if: env.DOCKER_TOKEN != ''
         uses: peter-evans/dockerhub-description@v5
         with:
           username: ${{ env.DOCKER_USER }}
-          password: ${{ env.DOCKER_PASSWORD }}
+          password: ${{ env.DOCKER_TOKEN }}
           repository: ${{ env.DOCKER_USER }}/enshrouded_server_docker
           readme-filepath: README_DOCKER_HUB.md
