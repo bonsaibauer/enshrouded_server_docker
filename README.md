@@ -113,12 +113,12 @@ Docker relies on a few helper packages. Install them with:
 sudo apt install apt-transport-https ca-certificates curl software-properties-common lsb-release gnupg -y
 ```
 
-> `apt-transport-https`: Allows `apt` to use HTTPS.
-> `ca-certificates`: Ensures your system trusts SSL certificates.
-> `curl`: Command-line tool for downloading files.
-> `software-properties-common`: Adds support for `add-apt-repository`.
-> `lsb-release`: Provides OS version info.
-> `gnupg`: Required for managing GPG keys.
+> - `apt-transport-https`: Allows `apt` to use HTTPS.
+> - `ca-certificates`: Ensures your system trusts SSL certificates.
+> - `curl`: Command-line tool for downloading files.
+> - `software-properties-common`: Adds support for `add-apt-repository`.
+> - `lsb-release`: Provides OS version info.
+> - `gnupg`: Required for managing GPG keys.
 
 ### Step 3: Add Docker’s Official GPG Key
 
@@ -145,9 +145,9 @@ sudo apt update
 sudo apt install docker-ce docker-ce-cli containerd.io -y
 ```
 
-> `docker-ce`: Docker Community Edition
-> `docker-ce-cli`: Docker command-line interface
-> `containerd.io`: Container runtime used by Docker
+> - `docker-ce`: Docker Community Edition
+> - `docker-ce-cli`: Docker command-line interface
+> - `containerd.io`: Container runtime used by Docker
 
 Verify Docker is running:
 
@@ -211,7 +211,7 @@ newgrp docker
 
 
 # 3. Quickstart
-Go to ...
+## Step 1: Go to ...
 ```bash
 cd /home/enshrouded/server_1
 ```
@@ -228,6 +228,9 @@ docker run \
   -v /home/enshrouded/server_1:/home/steam/enshrouded \
   bonsaibauer/enshrouded_server_docker:latest
 ```
+--- 
+
+## Step 2: (not necessary)
 
 <details>
 <summary><strong>Visual guide (changeable parts marked with <>):</strong></summary>
