@@ -245,7 +245,15 @@ manager_run() {
     ensure_root_and_map_user
     preflight_permissions
     start_cron_daemon
-    exec runuser -u steam -p -- "$MANAGER_BIN" run --as-steam "$@"
+    exec runuser -u steam -p -- env \
+      HOME="$HOME_DIR" \
+      HOME_DIR="$HOME_DIR" \
+      INSTALL_PATH="$INSTALL_PATH" \
+      CONFIG_FILE="$CONFIG_FILE" \
+      STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH" \
+      STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH" \
+      WINEPREFIX="$WINEPREFIX" \
+      "$MANAGER_BIN" run --as-steam "$@"
   fi
 
   shift || true

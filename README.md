@@ -226,7 +226,7 @@ docker run \
   -e PUID="$(id -u enshrouded)" \
   -e PGID="$(id -g enshrouded)" \
   -v /home/enshrouded/server_1:/home/steam/enshrouded \
-  bonsaibauer/enshrouded_server_docker:latest
+  bonsaibauer/enshrouded_server_docker:dev_latest
 ```
 --- 
 
