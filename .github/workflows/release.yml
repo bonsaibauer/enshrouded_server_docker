@@ -42,11 +42,19 @@ jobs:
           username: ${{ env.DOCKER_USER }}
           password: ${{ env.DOCKER_TOKEN }}
 
+      - name: Prepare build context
+        run: |
+          set -euo pipefail
+          rm -rf ./image_context
+          mkdir -p ./image_context
+          cp -a Dockerfile ./image_context/Dockerfile
+          cp -a server_manager ./image_context/
+
       - name: Build and load (no push yet)
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./image_context
+          file: ./image_context/Dockerfile
           platforms: linux/amd64
           tags: |
             ${{ env.DOCKER_USER }}/enshrouded_server_docker:latest

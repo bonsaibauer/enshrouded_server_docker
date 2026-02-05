@@ -52,11 +52,19 @@ jobs:
           slug=${GITHUB_REF_NAME//\//-}
           echo "branch_slug=$slug" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare build context
+        run: |
+          set -euo pipefail
+          rm -rf ./image_context
+          mkdir -p ./image_context
+          cp -a Dockerfile ./image_context/Dockerfile
+          cp -a server_manager ./image_context/
+
       - name: Build and load dev image (scan first)
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./image_context
+          file: ./image_context/Dockerfile
           platforms: linux/amd64
           push: false
           load: true
