@@ -51,6 +51,11 @@ mkdir -p /home/steam/.steam
 if [ ! -e "/home/steam/enshrouded/enshrouded_server.json" ]; then
     echo " ----- Starting initial configuration -----"
 
+    generate_password() {
+        # 8-char alphanumeric password
+        head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 8
+    }
+
     ADMIN_PW=$(generate_password)
     FRIEND_PW=$(generate_password)
     GUEST_PW=$(generate_password)
