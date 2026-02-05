@@ -156,6 +156,776 @@ json_has_value() {
   jq -e "$path != null" "$CONFIG_FILE" >/dev/null 2>&1
 }
 
+env_was_set() {
+  local name value
+  name="$1"
+
+  if [[ -n "${MANAGER_ENV_IGNORE[$name]-}" ]]; then
+    return 1
+  fi
+
+  if [[ -n "${MANAGER_ENV_SNAPSHOT:-}" ]]; then
+    case " $MANAGER_ENV_SNAPSHOT " in
+      *" $name "*) ;;
+      *) return 1 ;;
+    esac
+  fi
+
+  value="$(printenv "$name" 2>/dev/null || true)"
+  [[ -n "$value" ]]
+}
+
+manager_config_path() {
+  local dir
+  dir="$(dirname "$CONFIG_FILE")"
+  printf "%s/server_manager.json" "$dir"
+}
+
+declare -a MANAGER_VARS=(
+  PUID
+  PGID
+  MANAGER_BIN
+  NO_COLOR
+  LOG_LEVEL
+  LOG_CONTEXT
+  UMASK
+  HOME_DIR
+  INSTALL_PATH
+  CONFIG_FILE
+  VERSION_FILE_PATH
+  SAVEFILE_NAME
+  ENSHROUDED_BINARY
+  STOP_TIMEOUT
+  RUN_DIR
+  REQUEST_DIR
+  PID_MANAGER_FILE
+  PID_SERVER_FILE
+  PID_UPDATE_FILE
+  PID_BACKUP_FILE
+  STEAM_APP_ID
+  GAME_BRANCH
+  STEAMCMD_ARGS
+  STEAMCMD_PATH
+  PROTON_CMD
+  WINESERVER_PATH
+  STEAM_COMPAT_CLIENT_INSTALL_PATH
+  STEAM_COMPAT_DATA_PATH
+  WINEPREFIX
+  WINEDEBUG
+  WINETRICKS
+  AUTO_UPDATE
+  AUTO_UPDATE_INTERVAL
+  AUTO_UPDATE_ON_BOOT
+  AUTO_RESTART_ON_UPDATE
+  AUTO_RESTART
+  AUTO_RESTART_DELAY
+  AUTO_RESTART_MAX_ATTEMPTS
+  SAFE_MODE
+  HEALTH_CHECK_INTERVAL
+  HEALTH_CHECK_ON_START
+  UPDATE_CHECK_PLAYERS
+  RESTART_CHECK_PLAYERS
+  A2S_TIMEOUT
+  A2S_RETRIES
+  A2S_RETRY_DELAY
+  LOG_TO_STDOUT
+  LOG_TAIL_LINES
+  LOG_POLL_INTERVAL
+  LOG_FILE_PATTERN
+  LOG_STREAM_PID_FILE
+  LOG_STREAM_TAIL_PID_FILE
+  BACKUP_DIR
+  BACKUP_MAX_COUNT
+  BACKUP_PRE_HOOK
+  BACKUP_POST_HOOK
+  ENABLE_CRON
+  UPDATE_CRON
+  BACKUP_CRON
+  RESTART_CRON
+  BOOTSTRAP_HOOK
+  UPDATE_PRE_HOOK
+  UPDATE_POST_HOOK
+  RESTART_PRE_HOOK
+  RESTART_POST_HOOK
+  PRINT_ADMIN_PASSWORD
+)
+
+declare -A MANAGER_JSON_PATH=(
+  [PUID]=".puid"
+  [PGID]=".pgid"
+  [MANAGER_BIN]=".managerBin"
+  [NO_COLOR]=".noColor"
+  [LOG_LEVEL]=".logLevel"
+  [LOG_CONTEXT]=".logContext"
+  [UMASK]=".umask"
+  [HOME_DIR]=".homeDir"
+  [INSTALL_PATH]=".installPath"
+  [CONFIG_FILE]=".configFile"
+  [VERSION_FILE_PATH]=".versionFilePath"
+  [SAVEFILE_NAME]=".savefileName"
+  [ENSHROUDED_BINARY]=".enshroudedBinary"
+  [STOP_TIMEOUT]=".stopTimeout"
+  [RUN_DIR]=".runDir"
+  [REQUEST_DIR]=".requestDir"
+  [PID_MANAGER_FILE]=".pidManagerFile"
+  [PID_SERVER_FILE]=".pidServerFile"
+  [PID_UPDATE_FILE]=".pidUpdateFile"
+  [PID_BACKUP_FILE]=".pidBackupFile"
+  [STEAM_APP_ID]=".steamAppId"
+  [GAME_BRANCH]=".gameBranch"
+  [STEAMCMD_ARGS]=".steamcmdArgs"
+  [STEAMCMD_PATH]=".steamcmdPath"
+  [PROTON_CMD]=".protonCmd"
+  [WINESERVER_PATH]=".wineserverPath"
+  [STEAM_COMPAT_CLIENT_INSTALL_PATH]=".steamCompatClientInstallPath"
+  [STEAM_COMPAT_DATA_PATH]=".steamCompatDataPath"
+  [WINEPREFIX]=".wineprefix"
+  [WINEDEBUG]=".winedebug"
+  [WINETRICKS]=".winetricks"
+  [AUTO_UPDATE]=".autoUpdate"
+  [AUTO_UPDATE_INTERVAL]=".autoUpdateInterval"
+  [AUTO_UPDATE_ON_BOOT]=".autoUpdateOnBoot"
+  [AUTO_RESTART_ON_UPDATE]=".autoRestartOnUpdate"
+  [AUTO_RESTART]=".autoRestart"
+  [AUTO_RESTART_DELAY]=".autoRestartDelay"
+  [AUTO_RESTART_MAX_ATTEMPTS]=".autoRestartMaxAttempts"
+  [SAFE_MODE]=".safeMode"
+  [HEALTH_CHECK_INTERVAL]=".healthCheckInterval"
+  [HEALTH_CHECK_ON_START]=".healthCheckOnStart"
+  [UPDATE_CHECK_PLAYERS]=".updateCheckPlayers"
+  [RESTART_CHECK_PLAYERS]=".restartCheckPlayers"
+  [A2S_TIMEOUT]=".a2sTimeout"
+  [A2S_RETRIES]=".a2sRetries"
+  [A2S_RETRY_DELAY]=".a2sRetryDelay"
+  [LOG_TO_STDOUT]=".logToStdout"
+  [LOG_TAIL_LINES]=".logTailLines"
+  [LOG_POLL_INTERVAL]=".logPollInterval"
+  [LOG_FILE_PATTERN]=".logFilePattern"
+  [LOG_STREAM_PID_FILE]=".logStreamPidFile"
+  [LOG_STREAM_TAIL_PID_FILE]=".logStreamTailPidFile"
+  [BACKUP_DIR]=".backupDir"
+  [BACKUP_MAX_COUNT]=".backupMaxCount"
+  [BACKUP_PRE_HOOK]=".backupPreHook"
+  [BACKUP_POST_HOOK]=".backupPostHook"
+  [ENABLE_CRON]=".enableCron"
+  [UPDATE_CRON]=".updateCron"
+  [BACKUP_CRON]=".backupCron"
+  [RESTART_CRON]=".restartCron"
+  [BOOTSTRAP_HOOK]=".bootstrapHook"
+  [UPDATE_PRE_HOOK]=".updatePreHook"
+  [UPDATE_POST_HOOK]=".updatePostHook"
+  [RESTART_PRE_HOOK]=".restartPreHook"
+  [RESTART_POST_HOOK]=".restartPostHook"
+  [PRINT_ADMIN_PASSWORD]=".printAdminPassword"
+)
+
+declare -A MANAGER_TYPE=(
+  [PUID]="int"
+  [PGID]="int"
+  [STEAM_APP_ID]="int"
+  [AUTO_UPDATE_INTERVAL]="int"
+  [AUTO_RESTART_DELAY]="int"
+  [AUTO_RESTART_MAX_ATTEMPTS]="int"
+  [HEALTH_CHECK_INTERVAL]="int"
+  [A2S_RETRIES]="int"
+  [LOG_TAIL_LINES]="int"
+  [LOG_POLL_INTERVAL]="int"
+  [BACKUP_MAX_COUNT]="int"
+  [STOP_TIMEOUT]="int"
+  [A2S_TIMEOUT]="number"
+  [A2S_RETRY_DELAY]="number"
+  [AUTO_UPDATE]="bool"
+  [AUTO_UPDATE_ON_BOOT]="bool"
+  [AUTO_RESTART_ON_UPDATE]="bool"
+  [AUTO_RESTART]="bool"
+  [SAFE_MODE]="bool"
+  [HEALTH_CHECK_ON_START]="bool"
+  [UPDATE_CHECK_PLAYERS]="bool"
+  [RESTART_CHECK_PLAYERS]="bool"
+  [LOG_TO_STDOUT]="bool"
+  [ENABLE_CRON]="bool"
+  [PRINT_ADMIN_PASSWORD]="bool"
+)
+
+declare -A MANAGER_EXPLICIT_VARS=()
+declare -A MANAGER_ENV_IGNORE=()
+declare -A MANAGER_JSON_INVALID=()
+
+manager_config_set() {
+  local file temp_file
+  file="$1"
+  shift
+  temp_file="$(mktemp)"
+  if jq "$@" "$file" >"$temp_file"; then
+    mv "$temp_file" "$file"
+  else
+    rm -f "$temp_file"
+    fatal "Failed to update $file (jq error)"
+  fi
+}
+
+manager_json_get() {
+  local file var path
+  file="$1"
+  var="$2"
+  path="${MANAGER_JSON_PATH[$var]-}"
+  if [[ -z "$path" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path // empty" "$file" 2>/dev/null || true
+}
+
+manager_config_set_value() {
+  local file var value path type
+  file="$1"
+  var="$2"
+  value="${3-}"
+  path="${MANAGER_JSON_PATH[$var]-}"
+  type="${MANAGER_TYPE[$var]-string}"
+  if [[ -z "$path" ]]; then
+    return 0
+  fi
+  if [[ -z "$value" ]]; then
+    manager_config_set "$file" "$path = null"
+    return 0
+  fi
+  case "$type" in
+    bool|int|number)
+      manager_config_set "$file" --argjson val "$value" "$path = \$val"
+      ;;
+    *)
+      manager_config_set "$file" --arg val "$value" "$path = \$val"
+      ;;
+  esac
+}
+
+normalize_log_level() {
+  local value lowered
+  value="$1"
+  lowered="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    debug|info|warn|error)
+      echo "$lowered"
+      return 0
+      ;;
+    *)
+      echo "info"
+      return 1
+      ;;
+  esac
+}
+
+manager_validation_fail() {
+  local mode
+  mode="$1"
+  shift
+  if [[ "$mode" == "hard" ]]; then
+    fatal "$@"
+  else
+    warn "$@"
+    return 1
+  fi
+}
+
+validate_int_min() {
+  local name value min mode
+  name="$1"
+  value="$2"
+  min="$3"
+  mode="$4"
+  if ! [[ "$value" =~ ^[0-9]+$ ]] || [[ "$value" -lt "$min" ]]; then
+    manager_validation_fail "$mode" "$name must be an integer >= $min (actual: $value)"
+    return 1
+  fi
+  return 0
+}
+
+validate_number_min() {
+  local name value min mode
+  name="$1"
+  value="$2"
+  min="$3"
+  mode="$4"
+  if ! is_number "$value"; then
+    manager_validation_fail "$mode" "$name must be numeric (actual: $value)"
+    return 1
+  fi
+  if awk -v v="$value" -v min="$min" 'BEGIN { exit !(v >= min) }'; then
+    return 0
+  fi
+  manager_validation_fail "$mode" "$name must be >= $min (actual: $value)"
+  return 1
+}
+
+validate_manager_value() {
+  local var value mode normalized
+  var="$1"
+  value="$2"
+  mode="$3"
+
+  case "$var" in
+    PUID|PGID)
+      if [[ -z "$value" ]]; then
+        return 0
+      fi
+      validate_int_min "$var" "$value" 1 "$mode"
+      return $?
+      ;;
+    STEAM_APP_ID)
+      if [[ -z "$value" ]]; then
+        return 0
+      fi
+      validate_int_min "$var" "$value" 1 "$mode"
+      return $?
+      ;;
+    STOP_TIMEOUT)
+      validate_int_min "$var" "$value" 1 "$mode"
+      return $?
+      ;;
+    AUTO_UPDATE_INTERVAL)
+      validate_int_min "$var" "$value" 1 "$mode"
+      return $?
+      ;;
+    AUTO_RESTART_DELAY)
+      validate_int_min "$var" "$value" 0 "$mode"
+      return $?
+      ;;
+    AUTO_RESTART_MAX_ATTEMPTS)
+      validate_int_min "$var" "$value" 0 "$mode"
+      return $?
+      ;;
+    HEALTH_CHECK_INTERVAL)
+      validate_int_min "$var" "$value" 0 "$mode"
+      return $?
+      ;;
+    A2S_RETRIES)
+      validate_int_min "$var" "$value" 0 "$mode"
+      return $?
+      ;;
+    LOG_TAIL_LINES)
+      validate_int_min "$var" "$value" 0 "$mode"
+      return $?
+      ;;
+    LOG_POLL_INTERVAL)
+      validate_int_min "$var" "$value" 0 "$mode"
+      return $?
+      ;;
+    BACKUP_MAX_COUNT)
+      validate_int_min "$var" "$value" 0 "$mode"
+      return $?
+      ;;
+    A2S_TIMEOUT)
+      validate_number_min "$var" "$value" 0 "$mode"
+      return $?
+      ;;
+    A2S_RETRY_DELAY)
+      validate_number_min "$var" "$value" 0 "$mode"
+      return $?
+      ;;
+    UMASK)
+      if [[ -n "$value" ]] && ! [[ "$value" =~ ^[0-7]{3,4}$ ]]; then
+        manager_validation_fail "$mode" "$var must be an octal string like 027 (actual: $value)"
+        return 1
+      fi
+      ;;
+    LOG_LEVEL)
+      if [[ -n "$value" ]]; then
+        case "$(echo "$value" | tr '[:upper:]' '[:lower:]')" in
+          debug|info|warn|error) ;;
+          *)
+            manager_validation_fail "$mode" "$var must be one of: debug info warn error (actual: $value)"
+            return 1
+            ;;
+        esac
+      fi
+      ;;
+    AUTO_UPDATE|AUTO_UPDATE_ON_BOOT|AUTO_RESTART_ON_UPDATE|AUTO_RESTART|SAFE_MODE|HEALTH_CHECK_ON_START|UPDATE_CHECK_PLAYERS|RESTART_CHECK_PLAYERS|LOG_TO_STDOUT|ENABLE_CRON|PRINT_ADMIN_PASSWORD)
+      if [[ "$mode" == "hard" ]]; then
+        validate_bool "$var" "$value"
+      else
+        validate_bool_soft "$var" "$value"
+      fi
+      return $?
+      ;;
+  esac
+}
+
+manager_default_for_var() {
+  local var home install run_dir app_id compat
+  var="$1"
+
+  if [[ -n "${MANAGER_EXPLICIT_VARS[$var]-}" ]]; then
+    echo "${!var-}"
+    return 0
+  fi
+
+  case "$var" in
+    PUID|PGID)
+      echo ""
+      ;;
+    MANAGER_BIN)
+      echo "${MANAGER_BIN:-}"
+      ;;
+    NO_COLOR)
+      echo "${NO_COLOR:-}"
+      ;;
+    LOG_LEVEL)
+      echo "${LOG_LEVEL:-info}"
+      ;;
+    LOG_CONTEXT)
+      echo "${LOG_CONTEXT:-manager}"
+      ;;
+    UMASK)
+      echo "${UMASK:-027}"
+      ;;
+    HOME_DIR)
+      if [[ -n "${HOME_DIR:-}" ]]; then
+        echo "$HOME_DIR"
+      else
+        echo "${HOME:-/home/steam}"
+      fi
+      ;;
+    INSTALL_PATH)
+      home="${HOME_DIR:-${HOME:-/home/steam}}"
+      echo "$home/enshrouded"
+      ;;
+    CONFIG_FILE)
+      home="${HOME_DIR:-${HOME:-/home/steam}}"
+      install="${INSTALL_PATH:-$home/enshrouded}"
+      echo "$install/enshrouded_server.json"
+      ;;
+    VERSION_FILE_PATH)
+      home="${HOME_DIR:-${HOME:-/home/steam}}"
+      install="${INSTALL_PATH:-$home/enshrouded}"
+      echo "$install/.current_version"
+      ;;
+    SAVEFILE_NAME)
+      echo "${SAVEFILE_NAME:-3ad85aea}"
+      ;;
+    ENSHROUDED_BINARY)
+      home="${HOME_DIR:-${HOME:-/home/steam}}"
+      install="${INSTALL_PATH:-$home/enshrouded}"
+      echo "$install/enshrouded_server.exe"
+      ;;
+    STOP_TIMEOUT)
+      echo "${STOP_TIMEOUT:-60}"
+      ;;
+    RUN_DIR)
+      echo "${RUN_DIR:-/var/run/enshrouded}"
+      ;;
+    REQUEST_DIR)
+      run_dir="${RUN_DIR:-/var/run/enshrouded}"
+      echo "$run_dir/requests"
+      ;;
+    PID_MANAGER_FILE)
+      run_dir="${RUN_DIR:-/var/run/enshrouded}"
+      echo "$run_dir/enshrouded-manager.pid"
+      ;;
+    PID_SERVER_FILE)
+      run_dir="${RUN_DIR:-/var/run/enshrouded}"
+      echo "$run_dir/enshrouded-server.pid"
+      ;;
+    PID_UPDATE_FILE)
+      run_dir="${RUN_DIR:-/var/run/enshrouded}"
+      echo "$run_dir/enshrouded-updater.pid"
+      ;;
+    PID_BACKUP_FILE)
+      run_dir="${RUN_DIR:-/var/run/enshrouded}"
+      echo "$run_dir/enshrouded-backup.pid"
+      ;;
+    STEAM_APP_ID)
+      echo "${STEAM_APP_ID:-2278520}"
+      ;;
+    GAME_BRANCH)
+      echo "${GAME_BRANCH:-public}"
+      ;;
+    STEAMCMD_ARGS)
+      echo "${STEAMCMD_ARGS:-validate}"
+      ;;
+    STEAMCMD_PATH)
+      home="${HOME_DIR:-${HOME:-/home/steam}}"
+      echo "$home/steamcmd"
+      ;;
+    PROTON_CMD)
+      echo "${PROTON_CMD:-/usr/local/bin/proton}"
+      ;;
+    WINESERVER_PATH)
+      echo "${WINESERVER_PATH:-/usr/local/bin/files/bin/wineserver}"
+      ;;
+    STEAM_COMPAT_CLIENT_INSTALL_PATH)
+      home="${HOME_DIR:-${HOME:-/home/steam}}"
+      echo "$home/.steam/steam"
+      ;;
+    STEAM_COMPAT_DATA_PATH)
+      home="${HOME_DIR:-${HOME:-/home/steam}}"
+      install="${INSTALL_PATH:-$home/enshrouded}"
+      app_id="${STEAM_APP_ID:-2278520}"
+      echo "$install/steamapps/compatdata/$app_id"
+      ;;
+    WINEPREFIX)
+      home="${HOME_DIR:-${HOME:-/home/steam}}"
+      install="${INSTALL_PATH:-$home/enshrouded}"
+      app_id="${STEAM_APP_ID:-2278520}"
+      compat="${STEAM_COMPAT_DATA_PATH:-$install/steamapps/compatdata/$app_id}"
+      echo "$compat/pfx"
+      ;;
+    WINEDEBUG)
+      echo "${WINEDEBUG:--all}"
+      ;;
+    WINETRICKS)
+      echo "${WINETRICKS:-/usr/local/bin/winetricks}"
+      ;;
+    AUTO_UPDATE)
+      echo "${AUTO_UPDATE:-true}"
+      ;;
+    AUTO_UPDATE_INTERVAL)
+      echo "${AUTO_UPDATE_INTERVAL:-1800}"
+      ;;
+    AUTO_UPDATE_ON_BOOT)
+      echo "${AUTO_UPDATE_ON_BOOT:-true}"
+      ;;
+    AUTO_RESTART_ON_UPDATE)
+      echo "${AUTO_RESTART_ON_UPDATE:-true}"
+      ;;
+    AUTO_RESTART)
+      echo "${AUTO_RESTART:-true}"
+      ;;
+    AUTO_RESTART_DELAY)
+      echo "${AUTO_RESTART_DELAY:-10}"
+      ;;
+    AUTO_RESTART_MAX_ATTEMPTS)
+      echo "${AUTO_RESTART_MAX_ATTEMPTS:-0}"
+      ;;
+    SAFE_MODE)
+      echo "${SAFE_MODE:-true}"
+      ;;
+    HEALTH_CHECK_INTERVAL)
+      echo "${HEALTH_CHECK_INTERVAL:-300}"
+      ;;
+    HEALTH_CHECK_ON_START)
+      echo "${HEALTH_CHECK_ON_START:-true}"
+      ;;
+    UPDATE_CHECK_PLAYERS)
+      echo "${UPDATE_CHECK_PLAYERS:-false}"
+      ;;
+    RESTART_CHECK_PLAYERS)
+      echo "${RESTART_CHECK_PLAYERS:-false}"
+      ;;
+    A2S_TIMEOUT)
+      echo "${A2S_TIMEOUT:-2}"
+      ;;
+    A2S_RETRIES)
+      echo "${A2S_RETRIES:-2}"
+      ;;
+    A2S_RETRY_DELAY)
+      echo "${A2S_RETRY_DELAY:-1}"
+      ;;
+    LOG_TO_STDOUT)
+      echo "${LOG_TO_STDOUT:-true}"
+      ;;
+    LOG_TAIL_LINES)
+      echo "${LOG_TAIL_LINES:-200}"
+      ;;
+    LOG_POLL_INTERVAL)
+      echo "${LOG_POLL_INTERVAL:-2}"
+      ;;
+    LOG_FILE_PATTERN)
+      echo "${LOG_FILE_PATTERN:-*.log}"
+      ;;
+    LOG_STREAM_PID_FILE)
+      run_dir="${RUN_DIR:-/var/run/enshrouded}"
+      echo "$run_dir/enshrouded-logstream.pid"
+      ;;
+    LOG_STREAM_TAIL_PID_FILE)
+      run_dir="${RUN_DIR:-/var/run/enshrouded}"
+      echo "$run_dir/enshrouded-logtail.pid"
+      ;;
+    BACKUP_DIR)
+      echo "${BACKUP_DIR:-backups}"
+      ;;
+    BACKUP_MAX_COUNT)
+      echo "${BACKUP_MAX_COUNT:-0}"
+      ;;
+    BACKUP_PRE_HOOK)
+      echo "${BACKUP_PRE_HOOK:-}"
+      ;;
+    BACKUP_POST_HOOK)
+      echo "${BACKUP_POST_HOOK:-}"
+      ;;
+    ENABLE_CRON)
+      echo "${ENABLE_CRON:-true}"
+      ;;
+    UPDATE_CRON)
+      echo "${UPDATE_CRON:-}"
+      ;;
+    BACKUP_CRON)
+      echo "${BACKUP_CRON:-}"
+      ;;
+    RESTART_CRON)
+      echo "${RESTART_CRON:-}"
+      ;;
+    BOOTSTRAP_HOOK)
+      echo "${BOOTSTRAP_HOOK:-}"
+      ;;
+    UPDATE_PRE_HOOK)
+      echo "${UPDATE_PRE_HOOK:-}"
+      ;;
+    UPDATE_POST_HOOK)
+      echo "${UPDATE_POST_HOOK:-}"
+      ;;
+    RESTART_PRE_HOOK)
+      echo "${RESTART_PRE_HOOK:-}"
+      ;;
+    RESTART_POST_HOOK)
+      echo "${RESTART_POST_HOOK:-}"
+      ;;
+    PRINT_ADMIN_PASSWORD)
+      echo "${PRINT_ADMIN_PASSWORD:-true}"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+apply_manager_env_overrides() {
+  local file var raw value normalized
+  file="$1"
+  for var in "${MANAGER_VARS[@]}"; do
+    if ! env_was_set "$var"; then
+      continue
+    fi
+    raw="${!var-}"
+    if ! validate_manager_value "$var" "$raw" "soft"; then
+      MANAGER_ENV_IGNORE[$var]="true"
+      printf -v "$var" '%s' ""
+      continue
+    fi
+    value="$raw"
+    if [[ "$var" == "LOG_LEVEL" && -n "$raw" ]]; then
+      normalized="$(normalize_log_level "$raw")"
+      value="$normalized"
+      LOG_LEVEL="$normalized"
+    fi
+    MANAGER_EXPLICIT_VARS[$var]="true"
+    manager_config_set_value "$file" "$var" "$value"
+    printf -v "$var" '%s' "$value"
+  done
+}
+
+load_manager_config_values() {
+  local file var value normalized
+  file="$1"
+  for var in "${MANAGER_VARS[@]}"; do
+    if env_was_set "$var"; then
+      continue
+    fi
+    value="$(manager_json_get "$file" "$var")"
+    if [[ -z "$value" ]]; then
+      continue
+    fi
+    if ! validate_manager_value "$var" "$value" "soft"; then
+      MANAGER_JSON_INVALID[$var]="true"
+      continue
+    fi
+    if [[ "$var" == "LOG_LEVEL" ]]; then
+      normalized="$(normalize_log_level "$value")"
+      value="$normalized"
+      manager_config_set_value "$file" "$var" "$value"
+    fi
+    MANAGER_EXPLICIT_VARS[$var]="true"
+    printf -v "$var" '%s' "$value"
+  done
+}
+
+apply_manager_defaults() {
+  local file var value default normalized
+  file="$1"
+  for var in "${MANAGER_VARS[@]}"; do
+    if [[ -n "${MANAGER_JSON_INVALID[$var]-}" ]]; then
+      if [[ -n "${MANAGER_JSON_PATH[$var]-}" ]]; then
+        manager_config_set "$file" "${MANAGER_JSON_PATH[$var]-} = null"
+      fi
+      value=""
+    else
+      value="$(manager_json_get "$file" "$var")"
+      if [[ -n "$value" ]]; then
+        continue
+      fi
+    fi
+    default="$(manager_default_for_var "$var")"
+    if [[ -z "$default" ]]; then
+      manager_config_set "$file" "${MANAGER_JSON_PATH[$var]-} = null"
+      printf -v "$var" '%s' ""
+      continue
+    fi
+    if [[ "$var" == "LOG_LEVEL" ]]; then
+      normalized="$(normalize_log_level "$default")"
+      default="$normalized"
+    fi
+    manager_config_set_value "$file" "$var" "$default"
+    printf -v "$var" '%s' "$default"
+  done
+}
+
+validate_manager_json_values() {
+  local file var value
+  file="$1"
+  for var in "${MANAGER_VARS[@]}"; do
+    value="$(manager_json_get "$file" "$var")"
+    if [[ -z "$value" ]]; then
+      continue
+    fi
+    validate_manager_value "$var" "$value" "soft" || true
+  done
+}
+
+ensure_manager_config_file() {
+  local file
+  file="$1"
+  mkdir -p "$(dirname "$file")"
+  if [[ ! -f "$file" ]]; then
+    info "Creating initial server_manager.json"
+    echo "{}" >"$file"
+  fi
+}
+
+update_or_create_manager_config() {
+  local file new_file
+  require_cmd jq
+  MANAGER_EXPLICIT_VARS=()
+  MANAGER_ENV_IGNORE=()
+  MANAGER_JSON_INVALID=()
+
+  file="$(manager_config_path)"
+  ensure_manager_config_file "$file"
+  if ! jq -e '.' "$file" >/dev/null 2>&1; then
+    fatal "Invalid JSON in $file"
+  fi
+
+  apply_manager_env_overrides "$file"
+  load_manager_config_values "$file"
+
+  new_file="$(manager_config_path)"
+  if [[ "$new_file" != "$file" ]]; then
+    file="$new_file"
+    ensure_manager_config_file "$file"
+    if ! jq -e '.' "$file" >/dev/null 2>&1; then
+      fatal "Invalid JSON in $file"
+    fi
+    MANAGER_EXPLICIT_VARS=()
+    MANAGER_JSON_INVALID=()
+    apply_manager_env_overrides "$file"
+    load_manager_config_values "$file"
+  fi
+
+  apply_manager_defaults "$file"
+  load_manager_config_values "$file"
+  validate_manager_json_values "$file"
+  MANAGER_CONFIG_FILE="$file"
+}
+
 validate_tags() {
   local tag_list tag trimmed
   tag_list="$1"
@@ -788,7 +1558,7 @@ update_user_group_config() {
 }
 
 update_game_settings_config() {
-  local suffix var_name var_value jq_key_name full_jq_path jq_arg_option temp_json_file
+  local suffix var_name var_value jq_key_name full_jq_path
   local gs_keys
   local missing_keys
   local allowed_vars

@@ -40,13 +40,13 @@ init_crontab() {
   {
     echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     if [[ -n "${UPDATE_CRON:-}" ]]; then
-      echo "$UPDATE_CRON $MANAGER_BIN update --from-cron >>/proc/1/fd/1 2>>/proc/1/fd/2"
+      echo "$UPDATE_CRON $MANAGER_BIN update >>/proc/1/fd/1 2>>/proc/1/fd/2"
     fi
     if [[ -n "${BACKUP_CRON:-}" ]]; then
-      echo "$BACKUP_CRON $MANAGER_BIN backup --from-cron >>/proc/1/fd/1 2>>/proc/1/fd/2"
+      echo "$BACKUP_CRON $MANAGER_BIN backup >>/proc/1/fd/1 2>>/proc/1/fd/2"
     fi
     if [[ -n "${RESTART_CRON:-}" ]]; then
-      echo "$RESTART_CRON $MANAGER_BIN restart --from-cron >>/proc/1/fd/1 2>>/proc/1/fd/2"
+      echo "$RESTART_CRON $MANAGER_BIN restart >>/proc/1/fd/1 2>>/proc/1/fd/2"
     fi
   } >"$cron_file"
 

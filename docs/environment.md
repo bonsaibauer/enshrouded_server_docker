@@ -17,8 +17,6 @@ These are the `ENV` defaults baked into `Dockerfile`. You can override them at r
 | **LANGUAGE** | Locale languages | "en_US:en" | Locale list |
 | **LC_ALL** | Locale override | "en_US.UTF-8" | Locale string |
 | **HOME** | Home directory | "/home/steam" | Changing affects many derived paths |
-| **USER** | Default user name | "steam" | For informational purposes |
-| **LOGNAME** | Default login name | "steam" | For informational purposes |
 | **STEAM_APP_ID** | Steam app id for Enshrouded | "2278520" | Must match Enshrouded server app id |
 | **STEAM_COMPAT_CLIENT_INSTALL_PATH** | Steam client path | "/home/steam/.steam/steam" | Used by Proton/SteamCMD |
 | **STEAM_COMPAT_DATA_PATH** | Proton compat data | "/home/steam/enshrouded/steamapps/compatdata/2278520" | Used by Proton |
@@ -112,6 +110,8 @@ These map to `gameSettings` and `gameSettingsPreset` in the JSON. Values are onl
 ---
 
 ## Server Manager Runtime
+
+The manager also reads `server_manager.json` next to `enshrouded_server.json`. Values are applied in this order: ENV > `server_manager.json` > defaults. Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `server_manager.json`, but after loading they are still required and must be valid.
 
 | Variable | Description | Example / Default Value | Options / Notes |
 |---------|-------------|--------------------------|-----------------|

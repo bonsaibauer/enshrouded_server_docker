@@ -5,39 +5,26 @@
 MANAGER_VERSION="0.1.0"
 
 # Colors (ASCII only)
-if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+init_colors() {
+  if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   C_RESET=$'\033[0m'
   C_DIM=$'\033[2m'
-  C_BOLD=$'\033[1m'
   C_RED=$'\033[31m'
   C_GREEN=$'\033[32m'
   C_YELLOW=$'\033[33m'
-  C_BLUE=$'\033[34m'
-  C_CYAN=$'\033[36m'
 else
   C_RESET=""
   C_DIM=""
-  C_BOLD=""
   C_RED=""
   C_GREEN=""
   C_YELLOW=""
-  C_BLUE=""
-  C_CYAN=""
 fi
+}
+init_colors
 
 LOG_LEVEL="${LOG_LEVEL:-info}"
 LOG_CONTEXT="${LOG_CONTEXT:-manager}"
 LOG_CONTEXT_STACK=()
-
-# Normalize and validate log level
-LOG_LEVEL="$(echo "$LOG_LEVEL" | tr '[:upper:]' '[:lower:]')"
-case "$LOG_LEVEL" in
-  debug|info|warn|error) ;;
-  *)
-    LOG_LEVEL_INVALID="true"
-    LOG_LEVEL="info"
-    ;;
-esac
 
 level_num() {
   case "${1:-}" in

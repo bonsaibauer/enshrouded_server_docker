@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+MANAGER_ENV_SNAPSHOT="$(env | cut -d= -f1 | tr '\n' ' ')"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANAGER_BIN="${MANAGER_BIN:-$ROOT_DIR/manager.sh}"
 export MANAGER_BIN
@@ -102,6 +104,8 @@ ensure_root_and_map_user() {
 }
 
 setup_environment() {
+  update_or_create_manager_config
+  init_colors
   set_umask
   verify_variables
   ensure_base_dirs
@@ -218,6 +222,8 @@ manager_loop() {
 
 manager_run() {
   if [[ "${1:-}" != "--as-steam" ]]; then
+    update_or_create_manager_config
+    init_colors
     ensure_root_and_map_user
     start_cron_daemon
     exec runuser -u steam -p -- "$MANAGER_BIN" run --as-steam "$@"
@@ -237,10 +243,6 @@ manager_run() {
   trap handle_shutdown SIGINT SIGTERM
 
   setup_environment
-
-  if [[ "${LOG_LEVEL_INVALID:-}" == "true" ]]; then
-    warn "LOG_LEVEL invalid, falling back to info"
-  fi
 
   startup_summary
 
