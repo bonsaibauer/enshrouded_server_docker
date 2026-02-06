@@ -793,6 +793,7 @@ ensure_manager_config_file() {
   if [[ ! -f "$file" ]]; then
     info "Creating initial server_manager.json"
     echo "{}" >"$file"
+    ok "Server Manager config created"
   fi
 }
 
@@ -1371,7 +1372,7 @@ create_default_config() {
 EOF
 
   chmod 600 "$CONFIG_FILE" 2>/dev/null || true
-  info "enshrouded_server.json created"
+  ok "enshrouded_server.json created"
   if is_true "$PRINT_ADMIN_PASSWORD"; then
     info "Admin password: $admin_pw"
   fi

@@ -104,6 +104,7 @@ update_post_hook() {
 
 update_now() {
   log_context_push "update"
+  local updated="false"
   if [[ -f "$PID_UPDATE_FILE" ]]; then
     local prev_pid
     prev_pid="$(cat "$PID_UPDATE_FILE" 2>/dev/null || true)"
@@ -160,6 +161,7 @@ update_now() {
     fi
   fi
 
+  updated="true"
   set_current_version || true
 
   if is_true "$AUTO_RESTART_ON_UPDATE"; then
@@ -168,6 +170,9 @@ update_now() {
   fi
 
   update_post_hook
+  if [[ "$updated" == "true" ]]; then
+    ok "Update complete"
+  fi
   clear_pid "$PID_UPDATE_FILE"
   log_context_pop
 }

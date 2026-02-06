@@ -114,6 +114,6 @@ EOF
   backup_post_hook
 
   clear_pid "$PID_BACKUP_FILE"
-  info "Backup complete"
+  ok "Backup complete"
   log_context_pop
 }

@@ -49,6 +49,13 @@ jobs:
           mkdir -p ./image_context
           cp -a Dockerfile ./image_context/Dockerfile
           cp -a server_manager ./image_context/
+          version="${{ github.event.release.tag_name }}"
+          if [ -z "$version" ]; then
+            version="${GITHUB_REF_NAME}"
+          fi
+          version="${version#refs/tags/}"
+          version="${version#refs/heads/}"
+          printf "%s" "$version" > ./image_context/server_manager/VERSION
 
       - name: Build and load (no push yet)
         uses: docker/build-push-action@v6

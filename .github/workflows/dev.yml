@@ -3,7 +3,7 @@ name: Dev Build
 on:
   push:
     branches:
-      - 'dev_v*'
+      - 'dev_*'
     paths-ignore:
       - '.github/**'
       - 'README.md'
@@ -59,6 +59,7 @@ jobs:
           mkdir -p ./image_context
           cp -a Dockerfile ./image_context/Dockerfile
           cp -a server_manager ./image_context/
+          printf "%s" "${GITHUB_REF_NAME}" > ./image_context/server_manager/VERSION
 
       - name: Build and load dev image (scan first)
         uses: docker/build-push-action@v6

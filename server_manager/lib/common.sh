@@ -2,7 +2,14 @@
 
 # Common helpers for Enshrouded Server Manager.
 
+MANAGER_VERSION_FILE="${MANAGER_VERSION_FILE:-${MANAGER_ROOT:-/opt/enshrouded/manager}/VERSION}"
 MANAGER_VERSION="0.1.0"
+if [[ -f "$MANAGER_VERSION_FILE" ]]; then
+  MANAGER_VERSION="$(tr -d '\r\n' <"$MANAGER_VERSION_FILE")"
+  if [[ -z "$MANAGER_VERSION" ]]; then
+    MANAGER_VERSION="0.1.0"
+  fi
+fi
 
 # Colors (ASCII only)
 init_colors() {
@@ -11,12 +18,14 @@ init_colors() {
   C_DIM=$'\033[2m'
   C_RED=$'\033[31m'
   C_GREEN=$'\033[32m'
+  C_OK=$'\033[1;32m'
   C_YELLOW=$'\033[33m'
 else
   C_RESET=""
   C_DIM=""
   C_RED=""
   C_GREEN=""
+  C_OK=""
   C_YELLOW=""
 fi
 }
@@ -29,7 +38,7 @@ LOG_CONTEXT_STACK=()
 level_num() {
   case "${1:-}" in
     debug) echo 10 ;;
-    info) echo 20 ;;
+    info|ok) echo 20 ;;
     warn) echo 30 ;;
     error) echo 40 ;;
     *) echo 20 ;;
@@ -44,6 +53,7 @@ level_label() {
   case "${1:-}" in
     debug) echo "${C_DIM}DEBUG${C_RESET}" ;;
     info) echo "${C_GREEN}INFO${C_RESET}" ;;
+    ok) echo "${C_OK}OK${C_RESET}" ;;
     warn) echo "${C_YELLOW}WARN${C_RESET}" ;;
     error) echo "${C_RED}ERROR${C_RESET}" ;;
     *) echo "INFO" ;;
@@ -66,8 +76,39 @@ log() {
   fi
 }
 
+log_no_ts() {
+  local level message
+  level="${1:-info}"
+  shift || true
+  message="$*"
+  if [ "$(level_num "$level")" -ge "$(level_num "$LOG_LEVEL")" ]; then
+    local context prefix
+    context="${LOG_CONTEXT:-server_manager}"
+    prefix="[server_manager]"
+    if [[ -n "$context" && "$context" != "server_manager" ]]; then
+      prefix="$prefix [$context]"
+    fi
+    printf "[%s] %s %s\n" "$(level_label "$level")" "$prefix" "$message"
+  fi
+}
+
+log_no_ts_force() {
+  local level message
+  level="${1:-info}"
+  shift || true
+  message="$*"
+  local context prefix
+  context="${LOG_CONTEXT:-server_manager}"
+  prefix="[server_manager]"
+  if [[ -n "$context" && "$context" != "server_manager" ]]; then
+    prefix="$prefix [$context]"
+  fi
+  printf "[%s] %s %s\n" "$(level_label "$level")" "$prefix" "$message"
+}
+
 debug() { log debug "$@"; }
 info() { log info "$@"; }
+ok() { log ok "$@"; }
 warn() { log warn "$@"; }
 error() { log error "$@"; }
 

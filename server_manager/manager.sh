@@ -139,11 +139,14 @@ setup_environment() {
   init_crontab
   bootstrap_hook
   prepare_a2s_library
+  ok "Setup complete"
 }
 
 RSYSLOG_CONF="/etc/rsyslog.d/server_manager_stdout.conf"
 RSYSLOG_PID_FILE="$RUN_DIR/server-manager-rsyslogd.pid"
 RSYSLOG_STATE_DIR="/var/spool/rsyslog"
+SYSLOG_LOG_FILE="$RUN_DIR/server-manager-syslog.log"
+SYSLOG_LOG_STREAM_PID_FILE="$RUN_DIR/server-manager-syslog-logstream.pid"
 
 syslog_running() {
   if [[ -f "$RSYSLOG_PID_FILE" ]]; then
@@ -167,6 +170,7 @@ setup_syslog() {
   fi
   mkdir -p "$(dirname "$RSYSLOG_CONF")" 2>/dev/null || true
   mkdir -p "$RSYSLOG_STATE_DIR" 2>/dev/null || true
+  mkdir -p "$RUN_DIR" 2>/dev/null || true
   cat >"$RSYSLOG_CONF" <<'EOF'
 $FileOwner root
 $FileGroup root
@@ -175,12 +179,71 @@ $PrivDropToGroup root
 $WorkDirectory /var/spool/rsyslog
 module(load="imuxsock")
 $IMUXSockRateLimitInterval 0
-$template server_manager,"%timegenerated:::date-rfc3339% [SYSLOG] [server_manager] %syslogtag%%msg:::sp-if-no-1st-sp%%msg:::drop-last-lf%\n"
+$template server_manager,"%syslogseverity-text:::uppercase%|%timegenerated:::date-rfc3339%|%syslogtag%%msg:::sp-if-no-1st-sp%%msg:::drop-last-lf%\n"
 $ActionFileDefaultTemplate server_manager
 
 :msg, contains, "[session] Pending packets list is full" stop
-*.* /proc/self/fd/1
+*.* /var/run/enshrouded/server-manager-syslog.log
 EOF
+}
+
+syslog_log_streamer_start() {
+  if ! is_true "$LOG_TO_STDOUT"; then
+    return 0
+  fi
+  if [[ -f "$SYSLOG_LOG_STREAM_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$SYSLOG_LOG_STREAM_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      return 0
+    fi
+  fi
+  if [[ ! -f "$SYSLOG_LOG_FILE" ]]; then
+    return 0
+  fi
+
+  tail -n 200 -F "$SYSLOG_LOG_FILE" 2>/dev/null | while IFS= read -r line; do
+    if [[ -z "$line" ]]; then
+      continue
+    fi
+    local sev rest ts msg level
+    if [[ "$line" == *"|"* ]]; then
+      sev="${line%%|*}"
+      rest="${line#*|}"
+      if [[ "$rest" == *"|"* ]]; then
+        ts="${rest%%|*}"
+        msg="${rest#*|}"
+        msg="$ts $msg"
+      else
+        msg="$rest"
+      fi
+    else
+      sev="INFO"
+      msg="$line"
+    fi
+    case "$sev" in
+      EMERG|ALERT|CRIT|CRITICAL|ERR|ERROR) level="error" ;;
+      WARN|WARNING) level="warn" ;;
+      NOTICE|INFO) level="info" ;;
+      DEBUG) level="debug" ;;
+      *) level="info" ;;
+    esac
+    log_context_push "syslog"
+    log_no_ts_force "$level" "$msg"
+    log_context_pop
+  done &
+  echo "$!" >"$SYSLOG_LOG_STREAM_PID_FILE"
+}
+
+syslog_log_streamer_stop() {
+  if [[ -f "$SYSLOG_LOG_STREAM_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$SYSLOG_LOG_STREAM_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      kill "$pid" 2>/dev/null || true
+    fi
+    rm -f "$SYSLOG_LOG_STREAM_PID_FILE" 2>/dev/null || true
+  fi
 }
 
 start_syslog_daemon() {
@@ -188,16 +251,20 @@ start_syslog_daemon() {
     return 0
   fi
   if syslog_running; then
+    syslog_log_streamer_start
     return 0
   fi
   setup_syslog || return 1
-  mkdir -p "$RUN_DIR" 2>/dev/null || true
+  touch "$SYSLOG_LOG_FILE" 2>/dev/null || true
   info "Start syslog"
   rsyslogd -n -f "$RSYSLOG_CONF" &
   echo "$!" >"$RSYSLOG_PID_FILE"
+  syslog_log_streamer_start
+  ok "Syslog online"
 }
 
 stop_syslog_daemon() {
+  syslog_log_streamer_stop || true
   if [[ -f "$RSYSLOG_PID_FILE" ]]; then
     local pid
     pid="$(cat "$RSYSLOG_PID_FILE" 2>/dev/null || true)"
@@ -258,7 +325,7 @@ init_crontab() {
 
   crontab "$cron_file"
   rm -f "$cron_file"
-  info "Crontab updated"
+  ok "Crontab updated"
 }
 
 handle_requests() {
@@ -431,7 +498,7 @@ manager_run() {
     health_check || true
   fi
 
-  info "Start complete: Server Manager online"
+  ok "Start complete: Server Manager online"
 
   manager_loop
 }

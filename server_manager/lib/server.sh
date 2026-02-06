@@ -9,6 +9,8 @@ SUPERVISOR_CONF="${SUPERVISOR_CONF:-${MANAGER_ROOT:-/opt/enshrouded/manager}/sup
 SUPERVISOR_PID_FILE="$RUN_DIR/server-manager-supervisord.pid"
 SUPERVISOR_SOCKET="$RUN_DIR/server-manager-supervisor.sock"
 SUPERVISOR_LOG_DIR="$RUN_DIR"
+SUPERVISOR_LOG_FILE="$RUN_DIR/server-manager-supervisord.log"
+SUPERVISOR_LOG_STREAM_PID_FILE="$RUN_DIR/server-manager-supervisord-logstream.pid"
 
 supervisor_available() {
   command -v supervisord >/dev/null 2>&1 && command -v supervisorctl >/dev/null 2>&1
@@ -51,10 +53,13 @@ supervisor_start() {
     fatal "Start failed: backend config missing: $SUPERVISOR_CONF"
   fi
   info "Start backend"
+  touch "$SUPERVISOR_LOG_FILE" 2>/dev/null || true
   supervisord -c "$SUPERVISOR_CONF" >/dev/null 2>&1 || fatal "Start failed: backend"
   local attempt=0
   while [[ "$attempt" -lt 20 ]]; do
     if supervisor_running; then
+      supervisor_log_streamer_start
+      ok "Start complete: backend online"
       return 0
     fi
     sleep 0.1
@@ -68,6 +73,7 @@ supervisor_shutdown() {
     return 0
   fi
   supervisor_ctl shutdown >/dev/null 2>&1 || true
+  supervisor_log_streamer_stop
 }
 
 supervisor_program_running() {
@@ -101,6 +107,68 @@ supervisor_program_stop() {
     return 0
   fi
   supervisor_ctl stop "$name" >/dev/null 2>&1 || true
+}
+
+line_has_timestamp() {
+  local line
+  line="$1"
+  case "$line" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*Z* ) return 0 ;;
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\ * ) return 0 ;;
+    [0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]\ * ) return 0 ;;
+    [0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]\ * ) return 0 ;;
+    [0-9][0-9]:[0-9][0-9]:[0-9][0-9]* ) return 0 ;;
+    * ) return 1 ;;
+  esac
+}
+
+supervisor_log_streamer_start() {
+  if ! is_true "$LOG_TO_STDOUT"; then
+    return 0
+  fi
+  if [[ -f "$SUPERVISOR_LOG_STREAM_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$SUPERVISOR_LOG_STREAM_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      return 0
+    fi
+  fi
+  if [[ ! -f "$SUPERVISOR_LOG_FILE" ]]; then
+    return 0
+  fi
+
+  tail -n 200 -F "$SUPERVISOR_LOG_FILE" 2>/dev/null | while IFS= read -r line; do
+    if [[ -z "$line" ]]; then
+      continue
+    fi
+    log_context_push "supervisor"
+    local msg
+    msg="supervisord: $line"
+    case "$line" in
+      *" ERROR "*)
+        log_no_ts_force error "$msg"
+        ;;
+      *" WARN "*|*" WARNING "*)
+        log_no_ts_force warn "$msg"
+        ;;
+      *)
+        log_no_ts_force info "$msg"
+        ;;
+    esac
+    log_context_pop
+  done &
+  echo "$!" >"$SUPERVISOR_LOG_STREAM_PID_FILE"
+}
+
+supervisor_log_streamer_stop() {
+  if [[ -f "$SUPERVISOR_LOG_STREAM_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$SUPERVISOR_LOG_STREAM_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      kill "$pid" 2>/dev/null || true
+    fi
+    rm -f "$SUPERVISOR_LOG_STREAM_PID_FILE" 2>/dev/null || true
+  fi
 }
 
 read_server_pid() {
@@ -354,6 +422,8 @@ run_server_foreground() {
 
   trap 'server_shutdown "$pid"' SIGINT SIGTERM
 
+  ok "Start complete: server online"
+
   local rc=0
   if ! wait "$pid"; then
     rc=$?
@@ -361,7 +431,7 @@ run_server_foreground() {
 
   cleanup_wine
   clear_pid "$PID_SERVER_FILE"
-  info "Stop complete"
+  ok "Stop complete"
   log_context_pop
   return $rc
 }
@@ -379,6 +449,7 @@ start_server() {
     name="$(supervisor_program_name server)"
     if [[ -n "$name" ]]; then
       supervisor_program_start "$name"
+      ok "Start complete: server online"
       log_context_pop
       return 0
     fi
@@ -400,6 +471,7 @@ start_server() {
   local pid=$!
   echo "$pid" >"$PID_SERVER_FILE"
   info "Server PID: $pid"
+  ok "Start complete: server online"
   log_context_pop
 }
 
@@ -426,6 +498,7 @@ stop_server() {
         sleep 1
       done
       if ! is_server_running; then
+        ok "Stop complete"
         log_context_pop
         return 0
       fi
@@ -462,7 +535,7 @@ stop_server() {
 
   cleanup_wine
   clear_pid "$PID_SERVER_FILE"
-  info "Stop complete"
+  ok "Stop complete"
   log_context_pop
 }
 
@@ -541,7 +614,14 @@ log_streamer_loop() {
         kill "$tail_pid" 2>/dev/null || true
       fi
       info "Start log stream: $latest"
-      tail -n "$LOG_TAIL_LINES" -F "$latest" &
+      tail -n "$LOG_TAIL_LINES" -F "$latest" 2>/dev/null | while IFS= read -r line; do
+        if [[ -z "$line" ]]; then
+          continue
+        fi
+        log_context_push "server-log"
+        log_no_ts_force info "$line"
+        log_context_pop
+      done &
       tail_pid=$!
       echo "$tail_pid" >"$LOG_STREAM_TAIL_PID_FILE"
       current_file="$latest"
