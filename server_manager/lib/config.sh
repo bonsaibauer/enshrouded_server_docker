@@ -1460,7 +1460,8 @@ update_user_group_config() {
   for var_name in $(compgen -A variable | grep -E "^ENSHROUDED_ROLE_[0-9]+_" || true); do
     group_index="$(echo "$var_name" | cut -d'_' -f3)"
     group_param="$(echo "$var_name" | cut -d'_' -f4-)"
-    group_value="$(eval echo "\$$var_name")"
+    # Use indirect expansion to avoid eval (safer for secrets and special chars).
+    group_value="${!var_name-}"
 
     case "$group_param" in
       NAME)

@@ -104,7 +104,8 @@ RUN mkdir -p "/home/steam/.steam" \
 # Server Manager
 # --------------------------
 ADD ./server_manager /opt/enshrouded/manager
-RUN chmod +x /opt/enshrouded/manager/manager.sh /opt/enshrouded/manager/lib/*.sh \
+RUN find /opt/enshrouded/manager -type f -name "*.sh" -exec sed -i 's/\r$//' {} + \
+&& chmod +x /opt/enshrouded/manager/manager.sh /opt/enshrouded/manager/lib/*.sh \
 && ln -sf /opt/enshrouded/manager/manager.sh /usr/local/bin/manager.sh
 
 # --------------------------
