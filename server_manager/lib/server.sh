@@ -31,7 +31,9 @@ supervisor_program_name() {
 }
 
 supervisor_ctl_ok() {
-  supervisorctl -c "$SUPERVISOR_CONF" status >/dev/null 2>&1
+  local pid
+  pid="$(supervisorctl -c "$SUPERVISOR_CONF" pid 2>/dev/null || true)"
+  [[ "$pid" =~ ^[0-9]+$ ]]
 }
 
 supervisor_running() {
