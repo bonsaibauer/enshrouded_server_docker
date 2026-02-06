@@ -1614,16 +1614,8 @@ bootstrap_hook() {
 
 prepare_a2s_library() {
   if ! command -v python3 >/dev/null 2>&1; then
-    warn "python3 not available, skipping A2S library install"
+    warn "python3 not available, player count checks may be unavailable"
     return
   fi
-  if python3 -c "import a2s" >/dev/null 2>&1; then
-    return
-  fi
-  if ! command -v pip3 >/dev/null 2>&1; then
-    warn "pip3 not available, cannot install python-a2s"
-    return
-  fi
-  info "Installing python-a2s for player checks"
-  pip3 install python-a2s==1.3.0 --break-system-packages >/dev/null 2>&1 || warn "Failed to install python-a2s"
+  debug "A2S player query uses Python stdlib, no pip packages required"
 }

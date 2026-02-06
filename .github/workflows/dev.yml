@@ -69,6 +69,8 @@ jobs:
           platforms: linux/amd64
           push: false
           load: true
+          provenance: mode=max
+          sbom: true
           tags: |
             ${{ env.DOCKER_USER }}/enshrouded_server_docker:dev_latest
             ${{ env.DOCKER_USER }}/enshrouded_server_docker:${{ steps.vars.outputs.branch_slug }}

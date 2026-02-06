@@ -36,18 +36,16 @@ FROM ${BASE_IMAGE}
 # Config (ENV defaults)
 # --------------------------
 ENV DEBIAN_FRONTEND="noninteractive" \
-    LANG="en_US.UTF-8" \
-    LANGUAGE="en_US:en" \
-    LC_ALL="en_US.UTF-8" \
     STEAM_APP_ID="2278520"
 
 # --------------------------
 # Base Tools + Locale
 # --------------------------
-RUN set -x \
-&& apt update \
-&& apt upgrade -y \
-&& apt install -y \
+RUN set -eux \
+&& export LANG="C.UTF-8" LANGUAGE="C.UTF-8" LC_ALL="C.UTF-8" \
+&& apt-get update \
+&& apt-get install -y --no-install-recommends \
+    ca-certificates \
     curl \
     cron \
     rsyslog \
@@ -55,35 +53,47 @@ RUN set -x \
     jq \
     procps \
     python3 \
-    python3-pip \
-    vim \
-    wget \
-    software-properties-common \
     locales \
     zip \
     tini \
-&& locale-gen "${LANG}" \
-&& update-locale LANG="${LANG}"
+&& sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+&& locale-gen en_US.UTF-8 \
+&& update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
+&& apt-get autoremove --purge -y \
+&& apt-get clean \
+&& rm -rf /var/lib/apt/lists/*
+
+ENV LANG="en_US.UTF-8" \
+    LANGUAGE="en_US:en" \
+    LC_ALL="en_US.UTF-8"
 
 # --------------------------
 # SteamCMD + Dependencies
 # --------------------------
-RUN add-apt-repository -y multiverse \
+RUN set -eux \
+&& if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+     if ! grep -Eq '^Components:.*\\buniverse\\b' /etc/apt/sources.list.d/ubuntu.sources; then sed -Ei '/^Components:/ s/$/ universe/' /etc/apt/sources.list.d/ubuntu.sources; fi; \
+     if ! grep -Eq '^Components:.*\\bmultiverse\\b' /etc/apt/sources.list.d/ubuntu.sources; then sed -Ei '/^Components:/ s/$/ multiverse/' /etc/apt/sources.list.d/ubuntu.sources; fi; \
+   fi \
 && dpkg --add-architecture i386 \
-&& apt update \
-&& echo steam steam/question select "I AGREE" | debconf-set-selections && echo steam steam/license note '' | debconf-set-selections \
-&& apt install -y \
+&& apt-get update \
+&& echo steam steam/question select "I AGREE" | debconf-set-selections \
+&& echo steam steam/license note '' | debconf-set-selections \
+&& apt-get install -y --no-install-recommends \
     lib32z1 \
     lib32gcc-s1 \
     lib32stdc++6 \
     libfreetype6 \
     libfreetype6:i386 \
     steamcmd \
-&& groupadd steam \
-&& useradd -m steam -g steam \
+&& groupadd -f steam \
+&& id -u steam >/dev/null 2>&1 || useradd -m steam -g steam \
 && passwd -d steam \
 && chown -R steam:steam /usr/games \
-&& ln -s /usr/games/steamcmd /home/steam/steamcmd
+&& ln -sf /usr/games/steamcmd /home/steam/steamcmd \
+&& apt-get autoremove --purge -y \
+&& apt-get clean \
+&& rm -rf /var/lib/apt/lists/*
 
 # --------------------------
 # GE-Proton (runtime)
@@ -106,7 +116,10 @@ RUN mkdir -p "/home/steam/.steam" \
 ADD ./server_manager /opt/enshrouded/manager
 RUN find /opt/enshrouded/manager -type f -name "*.sh" -exec sed -i 's/\r$//' {} + \
 && chmod +x /opt/enshrouded/manager/manager.sh /opt/enshrouded/manager/lib/*.sh \
-&& ln -sf /opt/enshrouded/manager/manager.sh /usr/local/bin/manager.sh
+&& ln -sf /opt/enshrouded/manager/manager.sh /usr/local/bin/manager.sh \
+&& bash -n /opt/enshrouded/manager/manager.sh \
+&& find /opt/enshrouded/manager/lib -type f -name "*.sh" -print0 | xargs -0 -n1 bash -n \
+&& MANAGER_BOOTSTRAP_DEBUG=false /opt/enshrouded/manager/manager.sh help >/dev/null
 
 # --------------------------
 # Prime SteamCMD

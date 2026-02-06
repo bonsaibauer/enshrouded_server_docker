@@ -280,29 +280,68 @@ query_player_count() {
   local result
   result="$(QUERY_PORT="$QUERY_PORT" A2S_TIMEOUT="$A2S_TIMEOUT" A2S_RETRIES="$A2S_RETRIES" A2S_RETRY_DELAY="$A2S_RETRY_DELAY" python3 - <<'PY' 2>/dev/null || true
 import os
+import socket
+import sys
 import time
+
+def read_cstring(data, offset):
+    end = data.find(b"\x00", offset)
+    if end < 0:
+        raise ValueError("invalid string")
+    return end + 1
+
+def parse_a2s_info_players(payload):
+    if not payload or payload[0] != 0x49:
+        raise ValueError("unexpected packet type")
+    offset = 1
+    # protocol byte
+    offset += 1
+    # name, map, folder, game
+    offset = read_cstring(payload, offset)
+    offset = read_cstring(payload, offset)
+    offset = read_cstring(payload, offset)
+    offset = read_cstring(payload, offset)
+    # app id (2 bytes)
+    offset += 2
+    if offset >= len(payload):
+        raise ValueError("short packet")
+    return int(payload[offset])
+
+def request_info(sock, addr, challenge=None):
+    query = b"\xFF\xFF\xFF\xFFTSource Engine Query\x00"
+    if challenge is not None:
+        query += challenge
+    sock.sendto(query, addr)
+    data, _ = sock.recvfrom(2048)
+    if len(data) < 5 or not data.startswith(b"\xFF\xFF\xFF\xFF"):
+        raise ValueError("invalid response")
+    return data[4:]
+
 try:
-    import a2s
     port = int(os.environ.get("QUERY_PORT", "15637"))
     timeout = float(os.environ.get("A2S_TIMEOUT", "2"))
-    retries = int(os.environ.get("A2S_RETRIES", "2"))
+    retries = max(1, int(os.environ.get("A2S_RETRIES", "2")))
     delay = float(os.environ.get("A2S_RETRY_DELAY", "1"))
+    addr = ("127.0.0.1", port)
 
-    for attempt in range(1, retries + 1):
-        try:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(timeout)
+        for attempt in range(retries):
             try:
-                players = a2s.players(("127.0.0.1", port), timeout=timeout)
-            except TypeError:
-                # Older versions might not support timeout parameter
-                players = a2s.players(("127.0.0.1", port))
-            print(len(players))
-            raise SystemExit(0)
-        except Exception:
-            if attempt < retries:
-                time.sleep(delay)
-    print("unknown")
+                payload = request_info(sock, addr)
+                if payload and payload[0] == 0x41 and len(payload) >= 5:
+                    challenge = payload[1:5]
+                    payload = request_info(sock, addr, challenge=challenge)
+                players = parse_a2s_info_players(payload)
+                print(players)
+                sys.exit(0)
+            except Exception:
+                if attempt + 1 < retries:
+                    time.sleep(delay)
 except Exception:
-    print("unknown")
+    pass
+
+print("unknown")
 PY
 )"
   if [[ -z "$result" ]]; then

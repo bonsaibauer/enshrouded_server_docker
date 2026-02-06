@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
+BOOTSTRAP_LOG_FILE="${MANAGER_BOOTSTRAP_LOG_FILE:-/home/steam/enshrouded/manager-bootstrap.log}"
+
 bootstrap_timestamp() {
   date -u "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || printf "%s" "1970-01-01T00:00:00Z"
 }
 
 bootstrap_log() {
-  printf "%s [BOOT] [server_manager] %s\n" "$(bootstrap_timestamp)" "$*" >&2 || true
+  local msg
+  msg="$(bootstrap_timestamp) [BOOT] [server_manager] $*"
+  printf "%s\n" "$msg" >&2 || true
+  if [[ -n "${BOOTSTRAP_LOG_FILE:-}" ]]; then
+    mkdir -p "$(dirname "$BOOTSTRAP_LOG_FILE")" 2>/dev/null || true
+    printf "%s\n" "$msg" >>"$BOOTSTRAP_LOG_FILE" 2>/dev/null || true
+  fi
 }
 
 bootstrap_diagnostics() {
@@ -55,7 +63,13 @@ if declare -F trap >/dev/null 2>&1; then
   bootstrap_log "unset imported trap() function"
   unset -f trap
 fi
-set -Eeuo pipefail
+
+# Drop any inherited trap handlers from parent environment/shell init.
+for _sig in ERR RETURN DEBUG EXIT CHLD SIGINT SIGTERM; do
+  builtin trap - "$_sig" 2>/dev/null || true
+done
+
+set -euo pipefail
 
 MANAGER_ENV_SNAPSHOT="$(env | cut -d= -f1 | tr '\n' ' ')"
 
@@ -65,26 +79,23 @@ MANAGER_ROOT="$ROOT_DIR"
 export MANAGER_BIN
 export MANAGER_ROOT
 
-. "$ROOT_DIR/lib/common.sh"
-. "$ROOT_DIR/lib/config.sh"
-. "$ROOT_DIR/lib/server.sh"
-. "$ROOT_DIR/lib/update.sh"
-. "$ROOT_DIR/lib/backup.sh"
-
-on_error() {
-  local line cmd
-  line="${1:-unknown}"
-  cmd="${BASH_COMMAND:-unknown}"
-  printf "%s [ERROR] [server_manager] Unexpected error at line %s: %s\n" "$(timestamp 2>/dev/null || printf "%s" "1970-01-01T00:00:00Z")" "$line" "$cmd" >&2 || true
+safe_source() {
+  local file rc
+  file="$1"
+  bootstrap_log "source begin: $file"
+  set +e
+  . "$file"
+  rc=$?
+  set -e
+  bootstrap_log "source end: $file rc=$rc"
+  return "$rc"
 }
-builtin trap 'on_error $LINENO' ERR
 
-reap_children() {
-  while true; do
-    wait -n 2>/dev/null || break
-  done
-}
-builtin trap 'reap_children' CHLD
+safe_source "$ROOT_DIR/lib/common.sh"
+safe_source "$ROOT_DIR/lib/config.sh"
+safe_source "$ROOT_DIR/lib/server.sh"
+safe_source "$ROOT_DIR/lib/update.sh"
+safe_source "$ROOT_DIR/lib/backup.sh"
 
 print_help() {
   ui_banner
