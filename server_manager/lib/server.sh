@@ -39,6 +39,14 @@ supervisor_running() {
     if supervisor_ctl_ok; then
       return 0
     fi
+    # Avoid deleting a live socket while supervisord is still starting.
+    if [[ -f "$SUPERVISOR_PID_FILE" ]]; then
+      local pid
+      pid="$(cat "$SUPERVISOR_PID_FILE" 2>/dev/null || true)"
+      if pid_alive "$pid"; then
+        return 1
+      fi
+    fi
     warn "Supervisor socket present but unresponsive, cleaning up"
     rm -f "$SUPERVISOR_SOCKET" "$SUPERVISOR_PID_FILE" 2>/dev/null || true
     return 1

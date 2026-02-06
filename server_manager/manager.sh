@@ -68,20 +68,33 @@ bootstrap_diagnostics() {
 build_sanitized_env() {
   local -n out_ref="$1"
   local entry name
+  local dropped
+  local -a dropped_names
   out_ref=()
+  dropped=0
+  dropped_names=()
 
   while IFS= read -r -d '' entry; do
     name="${entry%%=*}"
     if ! [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      dropped=$((dropped + 1))
+      dropped_names+=("$name")
       continue
     fi
     case "$name" in
       BASH_ENV|ENV|PROMPT_COMMAND|SHELLOPTS|BASHOPTS|BASH_FUNC_*)
+        dropped=$((dropped + 1))
+        dropped_names+=("$name")
         continue
         ;;
     esac
     out_ref+=("$entry")
   done < <(env -0)
+  if [[ "$dropped" -gt 0 && "${#dropped_names[@]}" -gt 0 ]]; then
+    local list
+    list="$(IFS=','; echo "${dropped_names[*]}")"
+    bootstrap_log "env dropped: $list"
+  fi
 }
 
 # Defensive: avoid inherited shell hooks or function overrides.
