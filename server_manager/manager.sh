@@ -1,4 +1,60 @@
 #!/usr/bin/env bash
+bootstrap_timestamp() {
+  date -u "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || printf "%s" "1970-01-01T00:00:00Z"
+}
+
+bootstrap_log() {
+  printf "%s [BOOT] [server_manager] %s\n" "$(bootstrap_timestamp)" "$*" >&2 || true
+}
+
+bootstrap_diagnostics() {
+  if [[ "${MANAGER_BOOTSTRAP_DEBUG:-true}" != "true" ]]; then
+    return 0
+  fi
+
+  local trap_type suspect line
+  bootstrap_log "startup uid=$(id -u 2>/dev/null || echo '?') gid=$(id -g 2>/dev/null || echo '?') user=$(id -un 2>/dev/null || echo '?') bash=${BASH_VERSION:-unknown}"
+  if trap_type="$(type -a trap 2>/dev/null || true)"; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && bootstrap_log "trap resolve: $line"
+    done <<<"$trap_type"
+  fi
+  suspect="$(env | grep -E '^(BASH_ENV|ENV|PROMPT_COMMAND|BASH_FUNC_.*%%)=' || true)"
+  if [[ -z "$suspect" ]]; then
+    bootstrap_log "suspect env: none"
+  else
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && bootstrap_log "suspect env: ${line%%=*}=<set>"
+    done <<<"$suspect"
+  fi
+}
+
+build_sanitized_env() {
+  local -n out_ref="$1"
+  local entry name
+  out_ref=()
+
+  while IFS= read -r -d '' entry; do
+    name="${entry%%=*}"
+    if ! [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      continue
+    fi
+    case "$name" in
+      BASH_ENV|ENV|PROMPT_COMMAND|SHELLOPTS|BASHOPTS|BASH_FUNC_*)
+        continue
+        ;;
+    esac
+    out_ref+=("$entry")
+  done < <(env -0)
+}
+
+# Defensive: avoid inherited shell hooks or function overrides.
+bootstrap_diagnostics
+unset BASH_ENV ENV PROMPT_COMMAND
+if declare -F trap >/dev/null 2>&1; then
+  bootstrap_log "unset imported trap() function"
+  unset -f trap
+fi
 set -Eeuo pipefail
 
 MANAGER_ENV_SNAPSHOT="$(env | cut -d= -f1 | tr '\n' ' ')"
@@ -21,14 +77,14 @@ on_error() {
   cmd="${BASH_COMMAND:-unknown}"
   printf "%s [ERROR] [server_manager] Unexpected error at line %s: %s\n" "$(timestamp 2>/dev/null || printf "%s" "1970-01-01T00:00:00Z")" "$line" "$cmd" >&2 || true
 }
-trap 'on_error $LINENO' ERR
+builtin trap 'on_error $LINENO' ERR
 
 reap_children() {
   while true; do
     wait -n 2>/dev/null || break
   done
 }
-trap 'reap_children' CHLD
+builtin trap 'reap_children' CHLD
 
 print_help() {
   ui_banner
@@ -654,13 +710,17 @@ manager_run() {
     ensure_root_and_map_user
     preflight_permissions
     local runtime_home
+    local -a forwarded_env
     runtime_home="${HOME:-/home/steam}"
     export HOME="$runtime_home"
     export INSTALL_PATH CONFIG_FILE STEAM_COMPAT_CLIENT_INSTALL_PATH STEAM_COMPAT_DATA_PATH WINEPREFIX
+    build_sanitized_env forwarded_env
+    bootstrap_log "runuser env entries=${#forwarded_env[@]}"
     supervisor_start || fatal "Supervisor required"
     start_cron_daemon
     start_syslog_daemon || fatal "Syslog start failed"
-    exec runuser -u steam -p -- env \
+    exec runuser -u steam -- env -i \
+      "${forwarded_env[@]}" \
       HOME="$runtime_home" \
       INSTALL_PATH="$INSTALL_PATH" \
       CONFIG_FILE="$CONFIG_FILE" \
@@ -680,8 +740,8 @@ manager_run() {
 
   ensure_run_dirs
   write_pid "$PID_MANAGER_FILE"
-  trap manager_cleanup EXIT
-  trap handle_shutdown SIGINT SIGTERM
+  builtin trap manager_cleanup EXIT
+  builtin trap handle_shutdown SIGINT SIGTERM
 
   setup_environment
 

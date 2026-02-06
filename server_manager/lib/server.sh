@@ -438,7 +438,7 @@ run_server_foreground() {
   local pid=$!
   echo "$pid" >"$PID_SERVER_FILE"
 
-  trap 'server_shutdown "$pid"' SIGINT SIGTERM
+  builtin trap 'server_shutdown "$pid"' SIGINT SIGTERM
 
   ok "Start complete: server online"
 
