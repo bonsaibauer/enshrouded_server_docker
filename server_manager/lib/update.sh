@@ -19,7 +19,7 @@ verify_cpu_mhz() {
 
 check_proton_files_available() {
   if [[ ! -d "$STEAM_COMPAT_DATA_PATH" ]]; then
-    warn "Proton files missing, update required"
+    warn "Update required: proton files missing"
     return 0
   fi
   return 1
@@ -45,10 +45,10 @@ check_for_updates() {
 
   if [[ "$LATEST_VERSION" == "null" || "$LATEST_VERSION" == "-1" ]]; then
     if [[ "$current_version" == "0" ]]; then
-      warn "Latest version unknown, no version installed, forcing update"
+      warn "Update forced: latest version unknown, no version installed"
       return 0
     fi
-    warn "Latest version unknown, skipping update"
+    warn "Update skipped: latest version unknown"
     return 1
   fi
 
@@ -57,13 +57,13 @@ check_for_updates() {
     return 0
   fi
 
-  info "Already on latest version ($current_version)"
+  info "Update: already on latest version ($current_version)"
   return 1
 }
 
 set_current_version() {
   if [[ "$LATEST_VERSION" == "null" || "$LATEST_VERSION" == "-1" ]]; then
-    warn "Cannot set current version, latest unknown"
+    warn "Update: cannot set current version, latest unknown"
     return 1
   fi
   echo "$LATEST_VERSION" >"$VERSION_FILE_PATH"
@@ -80,7 +80,7 @@ download_enshrouded() {
   export STEAM_DIR="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
   export WINETRICKS="${WINETRICKS:-/usr/local/bin/winetricks}"
 
-  info "Downloading Enshrouded server via SteamCMD"
+  info "Update: downloading server via SteamCMD"
   set +e
   "$STEAMCMD_PATH" +@sSteamCmdForcePlatformType windows +force_install_dir "$INSTALL_PATH" +login anonymous +app_update "$STEAM_APP_ID" "$GAME_BRANCH $STEAMCMD_ARGS" +quit
   local rc=$?
@@ -90,14 +90,14 @@ download_enshrouded() {
 
 update_pre_hook() {
   if [[ -n "${UPDATE_PRE_HOOK:-}" ]]; then
-    info "Running update pre hook: $UPDATE_PRE_HOOK"
+    info "Update pre hook: $UPDATE_PRE_HOOK"
     eval "$UPDATE_PRE_HOOK"
   fi
 }
 
 update_post_hook() {
   if [[ -n "${UPDATE_POST_HOOK:-}" ]]; then
-    info "Running update post hook: $UPDATE_POST_HOOK"
+    info "Update post hook: $UPDATE_POST_HOOK"
     eval "$UPDATE_POST_HOOK"
   fi
 }
@@ -112,7 +112,7 @@ update_now() {
       log_context_pop
       return 0
     fi
-    warn "Stale update pid file found, clearing"
+    warn "Update: stale pid file found, clearing"
     rm -f "$PID_UPDATE_FILE"
   fi
 
@@ -125,7 +125,7 @@ update_now() {
 
   if ! check_for_updates; then
     if [[ "$was_running" == "false" ]] && is_true "$AUTO_RESTART_ON_UPDATE"; then
-      info "Server not running, starting"
+      info "Start server (update)"
       start_server
     fi
     clear_pid "$PID_UPDATE_FILE"
@@ -134,7 +134,7 @@ update_now() {
   fi
 
   if ! check_server_empty update; then
-    warn "Server not empty, update skipped"
+    warn "Update skipped: server not empty"
     clear_pid "$PID_UPDATE_FILE"
     log_context_pop
     return 0
@@ -147,10 +147,10 @@ update_now() {
 
   verify_cpu_mhz
   if ! download_enshrouded; then
-    warn "Download failed, retrying after cleanup"
+    warn "Update: download failed, retrying after cleanup"
     rm -rf "$INSTALL_PATH/steamapps"
     if ! download_enshrouded; then
-      warn "Download failed, aborting update"
+      warn "Update aborted: download failed"
       if [[ "$was_running" == "true" ]]; then
         start_server
       fi

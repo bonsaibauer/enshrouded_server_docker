@@ -26,14 +26,14 @@ print_help() {
 Usage: $MANAGER_BIN <command>
 
 Commands:
-  run             Start manager (PID1 mode, handles signals)
-  setup           Create config, directories, and install a2s
+  run             Start Server Manager (PID1 mode, handles signals)
+  setup           Setup Server Manager (config, directories, a2s)
   start           Start server
-  stop            Stop server (or manager if running)
+  stop            Stop server (or Server Manager if running)
   restart         Restart server (safe check optional)
-  update          Check and apply updates
-  backup          Create backup now
-  status          Show current status
+  update          Update server (check + apply)
+  backup          Backup now
+  status          Show status (Server Manager + Server)
   logs            Tail latest log file
   help            Show this help
 
@@ -82,7 +82,7 @@ startup_summary() {
 
 ensure_root_and_map_user() {
   if [[ "$(id -u)" -ne 0 ]]; then
-    fatal "Manager must run as root to apply PUID/PGID mapping"
+    fatal "Server Manager must run as root to apply PUID/PGID mapping"
   fi
 
   if [[ -z "${PUID:-}" || -z "${PGID:-}" || ! "$PUID" =~ ^[0-9]+$ || ! "$PGID" =~ ^[0-9]+$ || "$PUID" -eq 0 || "$PGID" -eq 0 ]]; then
@@ -141,6 +141,73 @@ setup_environment() {
   prepare_a2s_library
 }
 
+RSYSLOG_CONF="/etc/rsyslog.d/server_manager_stdout.conf"
+RSYSLOG_PID_FILE="$RUN_DIR/server-manager-rsyslogd.pid"
+RSYSLOG_STATE_DIR="/var/spool/rsyslog"
+
+syslog_running() {
+  if [[ -f "$RSYSLOG_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$RSYSLOG_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      return 0
+    fi
+    rm -f "$RSYSLOG_PID_FILE" 2>/dev/null || true
+  fi
+  if pgrep -x rsyslogd >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+setup_syslog() {
+  if ! command -v rsyslogd >/dev/null 2>&1; then
+    warn "Syslog unavailable, skipping"
+    return 1
+  fi
+  mkdir -p "$(dirname "$RSYSLOG_CONF")" 2>/dev/null || true
+  mkdir -p "$RSYSLOG_STATE_DIR" 2>/dev/null || true
+  cat >"$RSYSLOG_CONF" <<'EOF'
+$FileOwner root
+$FileGroup root
+$PrivDropToUser root
+$PrivDropToGroup root
+$WorkDirectory /var/spool/rsyslog
+module(load="imuxsock")
+$IMUXSockRateLimitInterval 0
+$template server_manager,"%timegenerated:::date-rfc3339% [SYSLOG] [server_manager] %syslogtag%%msg:::sp-if-no-1st-sp%%msg:::drop-last-lf%\n"
+$ActionFileDefaultTemplate server_manager
+
+:msg, contains, "[session] Pending packets list is full" stop
+*.* /proc/self/fd/1
+EOF
+}
+
+start_syslog_daemon() {
+  if ! is_true "$LOG_TO_STDOUT"; then
+    return 0
+  fi
+  if syslog_running; then
+    return 0
+  fi
+  setup_syslog || return 1
+  mkdir -p "$RUN_DIR" 2>/dev/null || true
+  info "Start syslog"
+  rsyslogd -n -f "$RSYSLOG_CONF" &
+  echo "$!" >"$RSYSLOG_PID_FILE"
+}
+
+stop_syslog_daemon() {
+  if [[ -f "$RSYSLOG_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$RSYSLOG_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      kill "$pid" 2>/dev/null || true
+    fi
+    rm -f "$RSYSLOG_PID_FILE" 2>/dev/null || true
+  fi
+}
+
 start_cron_daemon() {
   if ! is_true "$ENABLE_CRON"; then
     return 0
@@ -150,13 +217,13 @@ start_cron_daemon() {
       if pgrep -x cron >/dev/null 2>&1; then
         return 0
       fi
-      info "Starting cron daemon"
+      info "Start cron daemon"
       cron
     elif command -v crond >/dev/null 2>&1; then
       if pgrep -x crond >/dev/null 2>&1; then
         return 0
       fi
-      info "Starting crond daemon"
+      info "Start crond daemon"
       crond
     else
       warn "Cron not available, skipping scheduled jobs"
@@ -197,32 +264,33 @@ init_crontab() {
 handle_requests() {
   if [[ -f "$RUN_DIR/update" ]]; then
     rm -f "$RUN_DIR/update"
-    info "Processing update request"
+    info "Update request received"
     update_now || true
   fi
 
   if [[ -f "$RUN_DIR/backup" ]]; then
     rm -f "$RUN_DIR/backup"
-    info "Processing backup request"
+    info "Backup request received"
     backup_now || true
   fi
 
   if [[ -f "$RUN_DIR/restart" ]]; then
     rm -f "$RUN_DIR/restart"
-    info "Processing restart request"
+    info "Start restart request"
     restart_server || true
   fi
 }
 
 manager_cleanup() {
   stop_log_streamer
+  stop_syslog_daemon || true
   supervisor_shutdown
   clear_pid "$PID_MANAGER_FILE"
   rm -f "$RUN_DIR/update" "$RUN_DIR/backup" "$RUN_DIR/restart" 2>/dev/null || true
 }
 
 handle_shutdown() {
-  warn "Shutdown signal received"
+  warn "Stop signal received"
   stop_server
   exit 0
 }
@@ -240,7 +308,7 @@ status_summary() {
   players="$(query_player_count)"
 
   ui_hr
-  ui_kv "Manager" "$(manager_running && echo "running" || echo "stopped")"
+  ui_kv "Server Manager" "$(manager_running && echo "running" || echo "stopped")"
   ui_kv "Server" "$server_state"
   ui_kv "Server PID" "${pid:-n/a}"
   ui_kv "Uptime" "$(server_uptime)"
@@ -262,7 +330,7 @@ tail_logs() {
     warn "No log files found in $log_dir"
     return 1
   fi
-  info "Tailing $log_dir/$latest"
+  info "Start log tail: $log_dir/$latest"
   tail -n "${LOG_TAIL_LINES:-200}" -F "$log_dir/$latest"
 }
 
@@ -279,7 +347,7 @@ manager_loop() {
 
     now="$(date +%s)"
     if is_true "$AUTO_UPDATE" && [[ "$now" -ge "$next_update_check" ]]; then
-      info "Auto update check"
+      info "Update check (auto)"
       update_now || true
       next_update_check=$(( now + AUTO_UPDATE_INTERVAL ))
     fi
@@ -290,14 +358,14 @@ manager_loop() {
     fi
 
     if ! is_server_running; then
-      warn "Server process exited"
+      warn "Stop detected: server process exited"
       if is_true "$AUTO_RESTART"; then
         restart_attempts=$((restart_attempts + 1))
         if [[ "$AUTO_RESTART_MAX_ATTEMPTS" -gt 0 && "$restart_attempts" -gt "$AUTO_RESTART_MAX_ATTEMPTS" ]]; then
-          warn "Auto restart limit reached, stopping manager loop"
+          warn "Stop Server Manager loop: auto restart limit reached"
           return 1
         fi
-        warn "Auto restart enabled, restarting in ${AUTO_RESTART_DELAY}s (attempt ${restart_attempts})"
+        warn "Start restart in ${AUTO_RESTART_DELAY}s (attempt ${restart_attempts})"
         sleep "$AUTO_RESTART_DELAY"
         start_server || true
         start_log_streamer || true
@@ -316,6 +384,7 @@ manager_run() {
   if [[ "${1:-}" != "--as-steam" ]]; then
     update_or_create_manager_config
     init_colors
+    start_syslog_daemon || true
     ensure_root_and_map_user
     preflight_permissions
     start_cron_daemon
@@ -334,7 +403,7 @@ manager_run() {
   shift || true
 
   ui_banner
-  ui_kv "Manager Version" "$MANAGER_VERSION"
+  ui_kv "Server Manager Version" "$MANAGER_VERSION"
   ui_kv "Install Path" "$INSTALL_PATH"
   ui_kv "Config" "$CONFIG_FILE"
   ui_hr
@@ -362,6 +431,8 @@ manager_run() {
     health_check || true
   fi
 
+  info "Start complete: Server Manager online"
+
   manager_loop
 }
 
@@ -380,14 +451,14 @@ case "$cmd" in
     ;;
   start)
     if manager_running; then
-      warn "Manager is running, start command ignored"
+      warn "Start skipped: Server Manager is running"
     else
       start_server
     fi
     ;;
   stop)
     if manager_running; then
-      info "Stopping manager"
+      info "Stop Server Manager"
       kill -TERM "$(cat "$PID_MANAGER_FILE")" 2>/dev/null || true
     else
       stop_server

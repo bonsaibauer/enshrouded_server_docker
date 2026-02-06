@@ -48,10 +48,10 @@ supervisor_start() {
     return 0
   fi
   if [[ ! -f "$SUPERVISOR_CONF" ]]; then
-    fatal "Manager backend config missing: $SUPERVISOR_CONF"
+    fatal "Start failed: backend config missing: $SUPERVISOR_CONF"
   fi
-  info "Starting manager backend"
-  supervisord -c "$SUPERVISOR_CONF" >/dev/null 2>&1 || fatal "Failed to start manager backend"
+  info "Start backend"
+  supervisord -c "$SUPERVISOR_CONF" >/dev/null 2>&1 || fatal "Start failed: backend"
   local attempt=0
   while [[ "$attempt" -lt 20 ]]; do
     if supervisor_running; then
@@ -60,7 +60,7 @@ supervisor_start() {
     sleep 0.1
     attempt=$((attempt + 1))
   done
-  fatal "Manager backend did not start"
+  fatal "Start failed: backend did not start"
 }
 
 supervisor_shutdown() {
@@ -88,7 +88,7 @@ supervisor_program_start() {
     return 0
   fi
   if ! supervisor_ctl start "$name" >/dev/null 2>&1; then
-    warn "Failed to start $name"
+    warn "Start failed: $name"
     return 1
   fi
   return 0
@@ -230,7 +230,7 @@ health_check() {
   local port players
   port="$(get_query_port)"
   if ! is_server_running; then
-    warn "Health check: server not running"
+    warn "Health: server not running"
     log_context_pop
     return 1
   fi
@@ -238,12 +238,12 @@ health_check() {
   QUERY_PORT="$port"
   players="$(query_player_count)"
   if [[ "$players" == "unknown" ]]; then
-    warn "Health check: server running, no A2S response on port $port"
+    warn "Health: server running, no A2S response on port $port"
     log_context_pop
     return 1
   fi
 
-  info "Health check: server running, players=$players, port=$port"
+  info "Health: server running, players=$players, port=$port"
   log_context_pop
   return 0
 }
@@ -266,7 +266,11 @@ check_server_empty() {
   debug "player_count=$count"
   if [[ "$count" == "unknown" ]]; then
     if is_true "$SAFE_MODE"; then
-      warn "Player count unknown, skipping $mode in safe mode"
+      if [[ "$mode" == "restart" ]]; then
+        warn "Stop skipped: player count unknown (safe mode)"
+      else
+        warn "Update skipped: player count unknown (safe mode)"
+      fi
       return 1
     fi
     return 0
@@ -282,7 +286,7 @@ wait_for_server_download() {
   if [[ -f "$ENSHROUDED_BINARY" ]]; then
     return 0
   fi
-  warn "Server binary missing. Downloading..."
+  warn "Update: server binary missing, downloading"
   if command -v download_enshrouded >/dev/null 2>&1; then
     download_enshrouded
   fi
@@ -291,7 +295,7 @@ wait_for_server_download() {
   while [[ ! -f "$ENSHROUDED_BINARY" ]]; do
     retry=$((retry + 1))
     if [[ "$retry" -gt 30 ]]; then
-      fatal "Server binary still missing after waiting"
+      fatal "Start failed: server binary still missing after waiting"
     fi
     sleep 3
   done
@@ -303,7 +307,7 @@ server_shutdown() {
   kill_signal="INT"
   deadline=$(( $(date +%s) + STOP_TIMEOUT ))
 
-  info "Stopping enshrouded server"
+  info "Stop server"
   while true; do
     local pids
     pids="$(find_server_pids)"
@@ -318,7 +322,7 @@ server_shutdown() {
     fi
 
     if [[ "$(date +%s)" -gt "$deadline" ]]; then
-      warn "Timeout waiting for shutdown, escalating from SIG$kill_signal"
+      warn "Stop timeout: escalating from SIG$kill_signal"
       deadline=$(( $(date +%s) + STOP_TIMEOUT ))
       case "$kill_signal" in
         INT) kill_signal="TERM" ;;
@@ -343,7 +347,7 @@ run_server_foreground() {
   export WINEPREFIX="$WINEPREFIX"
   export WINETRICKS="${WINETRICKS:-/usr/local/bin/winetricks}"
 
-  info "Starting enshrouded server"
+  info "Start server"
   "$PROTON_CMD" runinprefix "$ENSHROUDED_BINARY" &
   local pid=$!
   echo "$pid" >"$PID_SERVER_FILE"
@@ -357,7 +361,7 @@ run_server_foreground() {
 
   cleanup_wine
   clear_pid "$PID_SERVER_FILE"
-  info "Server stopped"
+  info "Stop complete"
   log_context_pop
   return $rc
 }
@@ -365,7 +369,7 @@ run_server_foreground() {
 start_server() {
   log_context_push "server"
   if is_server_running; then
-    warn "Server already running"
+    warn "Start skipped: server already running"
     log_context_pop
     return 0
   fi
@@ -391,7 +395,7 @@ start_server() {
   export WINEPREFIX="$WINEPREFIX"
   export WINETRICKS="${WINETRICKS:-/usr/local/bin/winetricks}"
 
-  info "Starting enshrouded server"
+  info "Start server"
   "$PROTON_CMD" runinprefix "$ENSHROUDED_BINARY" &
   local pid=$!
   echo "$pid" >"$PID_SERVER_FILE"
@@ -402,7 +406,7 @@ start_server() {
 stop_server() {
   log_context_push "server"
   if ! is_server_running; then
-    warn "Server is not running"
+    warn "Stop skipped: server not running"
     log_context_pop
     return 0
   fi
@@ -411,12 +415,12 @@ stop_server() {
     local name deadline
     name="$(supervisor_program_name server)"
     if [[ -n "$name" ]]; then
-      info "Stopping enshrouded server"
+      info "Stop server"
       supervisor_program_stop "$name"
       deadline=$(( $(date +%s) + STOP_TIMEOUT ))
       while supervisor_program_running "$name"; do
         if [[ "$(date +%s)" -gt "$deadline" ]]; then
-          warn "Timeout waiting for shutdown"
+          warn "Stop timeout: waiting for shutdown"
           break
         fi
         sleep 1
@@ -425,7 +429,7 @@ stop_server() {
         log_context_pop
         return 0
       fi
-      warn "Backend stop incomplete, falling back to direct shutdown"
+      warn "Stop incomplete: backend, falling back to direct shutdown"
     fi
   fi
 
@@ -434,7 +438,7 @@ stop_server() {
   kill_signal="INT"
   deadline=$(( $(date +%s) + STOP_TIMEOUT ))
 
-  info "Stopping enshrouded server"
+  info "Stop server"
   while is_server_running; do
     local pids
     pids="$(find_server_pids)"
@@ -445,7 +449,7 @@ stop_server() {
     fi
 
     if [[ "$(date +%s)" -gt "$deadline" ]]; then
-      warn "Timeout waiting for shutdown, escalating from SIG$kill_signal"
+      warn "Stop timeout: escalating from SIG$kill_signal"
       deadline=$(( $(date +%s) + STOP_TIMEOUT ))
       case "$kill_signal" in
         INT) kill_signal="TERM" ;;
@@ -458,14 +462,14 @@ stop_server() {
 
   cleanup_wine
   clear_pid "$PID_SERVER_FILE"
-  info "Server stopped"
+  info "Stop complete"
   log_context_pop
 }
 
 restart_server() {
   log_context_push "restart"
   if ! check_server_empty restart; then
-    warn "Server not empty, restart skipped"
+    warn "Stop skipped: server not empty, restart skipped"
     log_context_pop
     return 0
   fi
@@ -485,14 +489,14 @@ cleanup_wine() {
 
 restart_pre_hook() {
   if [[ -n "${RESTART_PRE_HOOK:-}" ]]; then
-    info "Running restart pre hook: $RESTART_PRE_HOOK"
+    info "Start restart pre hook: $RESTART_PRE_HOOK"
     eval "$RESTART_PRE_HOOK"
   fi
 }
 
 restart_post_hook() {
   if [[ -n "${RESTART_POST_HOOK:-}" ]]; then
-    info "Running restart post hook: $RESTART_POST_HOOK"
+    info "Start restart post hook: $RESTART_POST_HOOK"
     eval "$RESTART_POST_HOOK"
   fi
 }
@@ -536,7 +540,7 @@ log_streamer_loop() {
       if pid_alive "$tail_pid"; then
         kill "$tail_pid" 2>/dev/null || true
       fi
-      info "Streaming logs: $latest"
+      info "Start log stream: $latest"
       tail -n "$LOG_TAIL_LINES" -F "$latest" &
       tail_pid=$!
       echo "$tail_pid" >"$LOG_STREAM_TAIL_PID_FILE"

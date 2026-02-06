@@ -4,14 +4,14 @@
 
 backup_pre_hook() {
   if [[ -n "${BACKUP_PRE_HOOK:-}" ]]; then
-    info "Running backup pre hook: $BACKUP_PRE_HOOK"
+    info "Backup pre hook: $BACKUP_PRE_HOOK"
     eval "$BACKUP_PRE_HOOK"
   fi
 }
 
 backup_post_hook() {
   if [[ -n "${BACKUP_POST_HOOK:-}" ]]; then
-    info "Running backup post hook: $BACKUP_POST_HOOK"
+    info "Backup post hook: $BACKUP_POST_HOOK"
     eval "$BACKUP_POST_HOOK"
   fi
 }
@@ -36,7 +36,7 @@ get_backup_dir() {
 
 backup_cleanup() {
   if [[ -z "$BACKUP_MAX_COUNT" || "$BACKUP_MAX_COUNT" -eq 0 ]]; then
-    warn "Skipping cleanup, BACKUP_MAX_COUNT is 0"
+    warn "Backup cleanup skipped: BACKUP_MAX_COUNT is 0"
     return
   fi
   local backup_dir
@@ -68,7 +68,7 @@ backup_now() {
   backup_dir="$(get_backup_dir)"
 
   if [[ ! -f "$save_dir/$SAVEFILE_NAME-index" ]]; then
-    warn "Save index not found, skipping backup"
+    warn "Backup skipped: save index not found"
     clear_pid "$PID_BACKUP_FILE"
     log_context_pop
     return 0
@@ -82,7 +82,7 @@ backup_now() {
   fi
 
   if [[ ! -f "$save_dir/$latest_savefile_name" ]]; then
-    warn "Latest save file missing, skipping backup"
+    warn "Backup skipped: latest save file missing"
     clear_pid "$PID_BACKUP_FILE"
     log_context_pop
     return 0
@@ -99,7 +99,7 @@ backup_now() {
 EOF
 
   backup_file_name="$(date +%Y-%m-%d_%H-%M-%S)-$SAVEFILE_NAME.zip"
-  info "Backing up to $backup_dir/$backup_file_name"
+  info "Backup: $backup_dir/$backup_file_name"
   set +e
   zip -j "$backup_dir/$backup_file_name" "$save_dir/$latest_savefile_name" "/tmp/$SAVEFILE_NAME-index" >/dev/null
   local zip_rc=$?

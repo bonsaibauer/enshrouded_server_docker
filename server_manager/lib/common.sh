@@ -23,7 +23,7 @@ fi
 init_colors
 
 LOG_LEVEL="${LOG_LEVEL:-info}"
-LOG_CONTEXT="${LOG_CONTEXT:-manager}"
+LOG_CONTEXT="${LOG_CONTEXT:-server_manager}"
 LOG_CONTEXT_STACK=()
 
 level_num() {
@@ -57,9 +57,9 @@ log() {
   message="$*"
   if [ "$(level_num "$level")" -ge "$(level_num "$LOG_LEVEL")" ]; then
     local context prefix
-    context="${LOG_CONTEXT:-manager}"
-    prefix="[manager]"
-    if [[ -n "$context" && "$context" != "manager" ]]; then
+    context="${LOG_CONTEXT:-server_manager}"
+    prefix="[server_manager]"
+    if [[ -n "$context" && "$context" != "server_manager" ]]; then
       prefix="$prefix [$context]"
     fi
     printf "%s [%s] %s %s\n" "$(timestamp)" "$(level_label "$level")" "$prefix" "$message"
@@ -95,6 +95,7 @@ ui_banner() {
 >>=============================================================<<
 EOF
   printf "%s\n" "                 Server Manager"
+  printf "%s\n" "        Enshrouded Control Layer"
   ui_hr
 }
 
@@ -127,7 +128,7 @@ is_true() {
 log_context_push() {
   local ctx
   ctx="$1"
-  LOG_CONTEXT_STACK+=("${LOG_CONTEXT:-manager}")
+  LOG_CONTEXT_STACK+=("${LOG_CONTEXT:-server_manager}")
   LOG_CONTEXT="$ctx"
 }
 
@@ -138,7 +139,7 @@ log_context_pop() {
     LOG_CONTEXT="${LOG_CONTEXT_STACK[$idx]}"
     unset "LOG_CONTEXT_STACK[$idx]"
   else
-    LOG_CONTEXT="manager"
+    LOG_CONTEXT="server_manager"
   fi
 }
 

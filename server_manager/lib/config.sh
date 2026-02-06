@@ -548,7 +548,7 @@ manager_default_for_var() {
       echo "${LOG_LEVEL:-info}"
       ;;
     LOG_CONTEXT)
-      echo "${LOG_CONTEXT:-manager}"
+      echo "${LOG_CONTEXT:-server_manager}"
       ;;
     UMASK)
       echo "${UMASK:-027}"
@@ -1621,7 +1621,7 @@ update_game_settings_config() {
 
 bootstrap_hook() {
   if [[ -n "${BOOTSTRAP_HOOK:-}" ]]; then
-    info "Running bootstrap hook: $BOOTSTRAP_HOOK"
+    info "Start bootstrap hook: $BOOTSTRAP_HOOK"
     eval "$BOOTSTRAP_HOOK"
   fi
 }

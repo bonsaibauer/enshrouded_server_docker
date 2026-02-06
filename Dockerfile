@@ -54,6 +54,7 @@ RUN set -x \
 && apt install -y \
     curl \
     cron \
+    rsyslog \
     supervisor \
     jq \
     procps \
