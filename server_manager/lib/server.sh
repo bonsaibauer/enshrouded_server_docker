@@ -5,6 +5,104 @@
 ENSHROUDED_BINARY="${ENSHROUDED_BINARY:-$INSTALL_PATH/enshrouded_server.exe}"
 STOP_TIMEOUT="${STOP_TIMEOUT:-60}"
 
+SUPERVISOR_CONF="${SUPERVISOR_CONF:-${MANAGER_ROOT:-/opt/enshrouded/manager}/supervisord.conf}"
+SUPERVISOR_PID_FILE="$RUN_DIR/server-manager-supervisord.pid"
+SUPERVISOR_SOCKET="$RUN_DIR/server-manager-supervisor.sock"
+SUPERVISOR_LOG_DIR="$RUN_DIR"
+
+supervisor_available() {
+  command -v supervisord >/dev/null 2>&1 && command -v supervisorctl >/dev/null 2>&1
+}
+
+supervisor_program_name() {
+  case "$1" in
+    server) echo "server-manager" ;;
+    *) echo "" ;;
+  esac
+}
+
+supervisor_running() {
+  if [[ -S "$SUPERVISOR_SOCKET" ]]; then
+    return 0
+  fi
+  if [[ -f "$SUPERVISOR_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$SUPERVISOR_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+supervisor_ctl() {
+  supervisorctl -c "$SUPERVISOR_CONF" "$@"
+}
+
+supervisor_start() {
+  if ! supervisor_available; then
+    return 1
+  fi
+  mkdir -p "$RUN_DIR" "$SUPERVISOR_LOG_DIR" 2>/dev/null || true
+  if supervisor_running; then
+    return 0
+  fi
+  if [[ ! -f "$SUPERVISOR_CONF" ]]; then
+    fatal "Manager backend config missing: $SUPERVISOR_CONF"
+  fi
+  info "Starting manager backend"
+  supervisord -c "$SUPERVISOR_CONF" >/dev/null 2>&1 || fatal "Failed to start manager backend"
+  local attempt=0
+  while [[ "$attempt" -lt 20 ]]; do
+    if supervisor_running; then
+      return 0
+    fi
+    sleep 0.1
+    attempt=$((attempt + 1))
+  done
+  fatal "Manager backend did not start"
+}
+
+supervisor_shutdown() {
+  if ! supervisor_running; then
+    return 0
+  fi
+  supervisor_ctl shutdown >/dev/null 2>&1 || true
+}
+
+supervisor_program_running() {
+  local name status
+  name="$1"
+  status="$(supervisor_ctl status "$name" 2>/dev/null || true)"
+  case "$status" in
+    *"RUNNING"*|*"STARTING"*|*"STOPPING"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+supervisor_program_start() {
+  local name
+  name="$1"
+  supervisor_start || return 1
+  if supervisor_program_running "$name"; then
+    return 0
+  fi
+  if ! supervisor_ctl start "$name" >/dev/null 2>&1; then
+    warn "Failed to start $name"
+    return 1
+  fi
+  return 0
+}
+
+supervisor_program_stop() {
+  local name
+  name="$1"
+  if ! supervisor_running; then
+    return 0
+  fi
+  supervisor_ctl stop "$name" >/dev/null 2>&1 || true
+}
+
 read_server_pid() {
   if [[ -f "$PID_SERVER_FILE" ]]; then
     cat "$PID_SERVER_FILE" 2>/dev/null || true
@@ -35,6 +133,14 @@ pid_matches_server() {
 }
 
 is_server_running() {
+  if supervisor_available && supervisor_running; then
+    local name
+    name="$(supervisor_program_name server)"
+    if [[ -n "$name" ]] && supervisor_program_running "$name"; then
+      return 0
+    fi
+  fi
+
   local pid
   pid="$(read_server_pid)"
   if pid_alive "$pid" && pid_matches_server "$pid"; then
@@ -191,12 +297,87 @@ wait_for_server_download() {
   done
 }
 
+server_shutdown() {
+  local pid kill_signal deadline
+  pid="$1"
+  kill_signal="INT"
+  deadline=$(( $(date +%s) + STOP_TIMEOUT ))
+
+  info "Stopping enshrouded server"
+  while true; do
+    local pids
+    pids="$(find_server_pids)"
+    if [[ -n "$pids" ]]; then
+      kill -"$kill_signal" $pids 2>/dev/null || true
+    elif [[ -n "$pid" ]]; then
+      kill -"$kill_signal" "$pid" 2>/dev/null || true
+    fi
+
+    if [[ -z "$(find_server_pids)" ]] && ! pid_alive "$pid"; then
+      break
+    fi
+
+    if [[ "$(date +%s)" -gt "$deadline" ]]; then
+      warn "Timeout waiting for shutdown, escalating from SIG$kill_signal"
+      deadline=$(( $(date +%s) + STOP_TIMEOUT ))
+      case "$kill_signal" in
+        INT) kill_signal="TERM" ;;
+        TERM) kill_signal="KILL" ;;
+        *) break ;;
+      esac
+    fi
+    sleep 3
+  done
+}
+
+run_server_foreground() {
+  log_context_push "server"
+  wait_for_server_download
+  cd "$INSTALL_PATH" || fatal "Could not cd $INSTALL_PATH"
+
+  chmod +x "$ENSHROUDED_BINARY" || true
+
+  export WINEDEBUG="${WINEDEBUG:--all}"
+  export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
+  export STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH"
+  export WINEPREFIX="$WINEPREFIX"
+  export WINETRICKS="${WINETRICKS:-/usr/local/bin/winetricks}"
+
+  info "Starting enshrouded server"
+  "$PROTON_CMD" runinprefix "$ENSHROUDED_BINARY" &
+  local pid=$!
+  echo "$pid" >"$PID_SERVER_FILE"
+
+  trap 'server_shutdown "$pid"' SIGINT SIGTERM
+
+  local rc=0
+  if ! wait "$pid"; then
+    rc=$?
+  fi
+
+  cleanup_wine
+  clear_pid "$PID_SERVER_FILE"
+  info "Server stopped"
+  log_context_pop
+  return $rc
+}
+
 start_server() {
   log_context_push "server"
   if is_server_running; then
     warn "Server already running"
     log_context_pop
     return 0
+  fi
+
+  if supervisor_available; then
+    local name
+    name="$(supervisor_program_name server)"
+    if [[ -n "$name" ]]; then
+      supervisor_program_start "$name"
+      log_context_pop
+      return 0
+    fi
   fi
 
   wait_for_server_download
@@ -224,6 +405,28 @@ stop_server() {
     warn "Server is not running"
     log_context_pop
     return 0
+  fi
+
+  if supervisor_available && supervisor_running; then
+    local name deadline
+    name="$(supervisor_program_name server)"
+    if [[ -n "$name" ]]; then
+      info "Stopping enshrouded server"
+      supervisor_program_stop "$name"
+      deadline=$(( $(date +%s) + STOP_TIMEOUT ))
+      while supervisor_program_running "$name"; do
+        if [[ "$(date +%s)" -gt "$deadline" ]]; then
+          warn "Timeout waiting for shutdown"
+          break
+        fi
+        sleep 1
+      done
+      if ! is_server_running; then
+        log_context_pop
+        return 0
+      fi
+      warn "Backend stop incomplete, falling back to direct shutdown"
+    fi
   fi
 
   local pid kill_signal deadline
@@ -292,4 +495,90 @@ restart_post_hook() {
     info "Running restart post hook: $RESTART_POST_HOOK"
     eval "$RESTART_POST_HOOK"
   fi
+}
+
+LOG_STREAM_PID_FILE="$RUN_DIR/enshrouded-logstream.pid"
+LOG_STREAM_TAIL_PID_FILE="$RUN_DIR/enshrouded-logtail.pid"
+
+get_log_dir() {
+  if [[ -n "${ENSHROUDED_LOG_DIR:-}" ]]; then
+    abs_path "$ENSHROUDED_LOG_DIR"
+    return
+  fi
+  if command -v jq >/dev/null 2>&1 && [[ -f "$CONFIG_FILE" ]]; then
+    local ld
+    ld="$(jq -r '.logDirectory // "./logs"' "$CONFIG_FILE" 2>/dev/null || echo "./logs")"
+    abs_path "$ld"
+    return
+  fi
+  abs_path "./logs"
+}
+
+latest_log_file() {
+  local log_dir
+  log_dir="$(get_log_dir)"
+  if [[ ! -d "$log_dir" ]]; then
+    echo ""
+    return
+  fi
+  find "$log_dir" -maxdepth 1 -type f -name "$LOG_FILE_PATTERN" -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -n1 | cut -d' ' -f2-
+}
+
+log_streamer_loop() {
+  local current_file tail_pid latest
+  current_file=""
+  tail_pid=""
+
+  while true; do
+    latest="$(latest_log_file)"
+    if [[ -n "$latest" && "$latest" != "$current_file" ]]; then
+      if pid_alive "$tail_pid"; then
+        kill "$tail_pid" 2>/dev/null || true
+      fi
+      info "Streaming logs: $latest"
+      tail -n "$LOG_TAIL_LINES" -F "$latest" &
+      tail_pid=$!
+      echo "$tail_pid" >"$LOG_STREAM_TAIL_PID_FILE"
+      current_file="$latest"
+    fi
+    sleep "$LOG_POLL_INTERVAL"
+  done
+}
+
+start_log_streamer() {
+  if ! is_true "$LOG_TO_STDOUT"; then
+    return 0
+  fi
+  if [[ -f "$LOG_STREAM_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$LOG_STREAM_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      return 0
+    fi
+  fi
+
+  log_context_push "logs"
+  log_streamer_loop &
+  local pid=$!
+  log_context_pop
+  echo "$pid" >"$LOG_STREAM_PID_FILE"
+}
+
+stop_log_streamer() {
+  if [[ -f "$LOG_STREAM_PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$LOG_STREAM_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  fi
+  if [[ -f "$LOG_STREAM_TAIL_PID_FILE" ]]; then
+    local tpid
+    tpid="$(cat "$LOG_STREAM_TAIL_PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$tpid"; then
+      kill "$tpid" 2>/dev/null || true
+    fi
+  fi
+  rm -f "$LOG_STREAM_PID_FILE" "$LOG_STREAM_TAIL_PID_FILE" 2>/dev/null || true
 }

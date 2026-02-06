@@ -54,6 +54,7 @@ RUN set -x \
 && apt install -y \
     curl \
     cron \
+    supervisor \
     jq \
     procps \
     python3 \
