@@ -99,6 +99,7 @@ docker run \
   -p 15637:15637/udp \
   -e PUID="$(id -u enshrouded)" \
   -e PGID="$(id -g enshrouded)" \
+  -e MANAGER_PROFILE="default" \
   -v /home/enshrouded/server_1:/home/steam/enshrouded \
   bonsaibauer/enshrouded_server_docker:latest
 ```
@@ -112,6 +113,7 @@ docker run \
   -p <host_port>:15637/udp \
   -e PUID="$(id -u enshrouded)" \
   -e PGID="$(id -g enshrouded)" \
+  -e MANAGER_PROFILE="<profile>" \
   -v <host_path>:/home/steam/enshrouded \
   bonsaibauer/enshrouded_server_docker:<tag>
 ```
@@ -124,6 +126,7 @@ Common adjustments:
 | `--restart=unless-stopped` | Keeps the container running across reboots and crashes (e.g. `no`, `on-failure`, `always`, `unless-stopped`). |
 | `-p <host_port>:15637/udp` | `-p 25000:15637/udp` (external UDP 25000) |
 | `-e PUID/PGID` | In this tutorial: `-e PUID=$(id -u enshrouded) -e PGID=$(id -g enshrouded)`; you can also set them individually, e.g. `-e PUID=1001 -e PGID=1001`. |
+| `-e MANAGER_PROFILE` | `-e MANAGER_PROFILE=default` (profiles are applied only when `server_manager.json` is created for the first time). |
 | `-v <host_path>:/home/steam/enshrouded` | `-v /srv/enshrouded:/home/steam/enshrouded` |
 | `bonsaibauer/enshrouded_server_docker:<tag>` | `bonsaibauer/enshrouded_server_docker:latest` (see [Docker Hub tags](https://hub.docker.com/r/bonsaibauer/enshrouded_server_docker/tags)) |
 
@@ -159,6 +162,9 @@ docker restart enshroudedserver      # Restart the server
 
 Code & Full Guide:  
 🔗 [bonsaibauer/enshrouded_server_docker](https://github.com/bonsaibauer/enshrouded_server_docker)
+
+Profiles (default/manual):  
+📄 [docs/profile.md](https://github.com/bonsaibauer/enshrouded_server_docker/blob/main/docs/profile.md)
 
 ---
 

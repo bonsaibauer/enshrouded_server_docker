@@ -74,6 +74,10 @@ ENSHROUDED_VOICE_CHAT_MODE="${ENSHROUDED_VOICE_CHAT_MODE:-}"
 ENSHROUDED_ENABLE_VOICE_CHAT="${ENSHROUDED_ENABLE_VOICE_CHAT:-}"
 ENSHROUDED_ENABLE_TEXT_CHAT="${ENSHROUDED_ENABLE_TEXT_CHAT:-}"
 ENSHROUDED_GS_PRESET="${ENSHROUDED_GS_PRESET:-}"
+MANAGER_PROFILE="${MANAGER_PROFILE:-}"
+
+MANAGER_PROFILE_DEFAULT="default"
+MANAGER_PROFILE_DIR="${MANAGER_ROOT:-/opt/enshrouded/manager}/profiles"
 
 is_bool() {
   case "$1" in
@@ -179,6 +183,122 @@ manager_config_path() {
   local dir
   dir="$(dirname "$CONFIG_FILE")"
   printf "%s/server_manager.json" "$dir"
+}
+
+manager_profile_path() {
+  local name
+  name="${1:-$MANAGER_PROFILE_DEFAULT}"
+  printf "%s/%s.json" "$MANAGER_PROFILE_DIR" "$name"
+}
+
+manager_profile_resolve() {
+  local name
+  name="${MANAGER_PROFILE:-}"
+  if [[ -z "$name" ]]; then
+    echo "$MANAGER_PROFILE_DEFAULT"
+    return 0
+  fi
+  if [[ -f "$(manager_profile_path "$name")" ]]; then
+    echo "$name"
+    return 0
+  fi
+  warn "Profile not found: $name (fallback: $MANAGER_PROFILE_DEFAULT)"
+  echo "$MANAGER_PROFILE_DEFAULT"
+}
+
+manager_profile_key_exists() {
+  local file path key
+  file="$1"
+  path="$2"
+  key="${path#.}"
+  if [[ -z "$key" ]] || [[ ! -f "$file" ]]; then
+    return 1
+  fi
+  jq -e --arg key "$key" 'has($key)' "$file" >/dev/null 2>&1
+}
+
+manager_profile_raw_value() {
+  local file path
+  file="$1"
+  path="$2"
+  jq -r "$path" "$file" 2>/dev/null || echo "null"
+}
+
+manager_profile_value_for_var() {
+  local profile var path profile_file default_file raw
+  profile="$1"
+  var="$2"
+  path="${MANAGER_JSON_PATH[$var]-}"
+  if [[ -z "$path" ]]; then
+    echo ""
+    return 0
+  fi
+  profile_file="$(manager_profile_path "$profile")"
+  if manager_profile_key_exists "$profile_file" "$path"; then
+    raw="$(manager_profile_raw_value "$profile_file" "$path")"
+    echo "$raw"
+    return 0
+  fi
+  default_file="$(manager_profile_path "$MANAGER_PROFILE_DEFAULT")"
+  if [[ "$profile" != "$MANAGER_PROFILE_DEFAULT" ]] && manager_profile_key_exists "$default_file" "$path"; then
+    raw="$(manager_profile_raw_value "$default_file" "$path")"
+    echo "$raw"
+    return 0
+  fi
+  echo ""
+}
+
+apply_manager_profile_defaults() {
+  local file profile var raw value normalized path
+  file="$1"
+  profile="$2"
+
+  for var in "${MANAGER_VARS[@]}"; do
+    value=""
+    raw="$(manager_profile_value_for_var "$profile" "$var")"
+    if [[ -z "$raw" ]]; then
+      continue
+    fi
+
+    path="${MANAGER_JSON_PATH[$var]-}"
+    if [[ -z "$path" ]]; then
+      continue
+    fi
+
+    if [[ "$raw" == "null" ]]; then
+      manager_config_set "$file" "$path = null"
+      printf -v "$var" '%s' ""
+      continue
+    fi
+
+    if ! validate_manager_value "$var" "$raw" "soft"; then
+      if [[ "$profile" != "$MANAGER_PROFILE_DEFAULT" ]]; then
+        raw="$(manager_profile_value_for_var "$MANAGER_PROFILE_DEFAULT" "$var")"
+        if [[ -n "$raw" && "$raw" != "null" ]] && validate_manager_value "$var" "$raw" "soft"; then
+          value="$raw"
+        else
+          warn "Profile $profile: $var invalid, skipping"
+          continue
+        fi
+      else
+        warn "Profile $profile: $var invalid, skipping"
+        continue
+      fi
+    fi
+
+    value="${value:-$raw}"
+    if [[ "$var" == "LOG_LEVEL" ]]; then
+      normalized="$(normalize_log_level "$raw")"
+      value="$normalized"
+      LOG_LEVEL="$normalized"
+    fi
+
+    manager_config_set_value "$file" "$var" "$value"
+    printf -v "$var" '%s' "$value"
+  done
+
+  manager_config_set "$file" --arg p "$profile" '.profile = $p'
+  manager_config_set "$file" '.profileApplied = true'
 }
 
 declare -a MANAGER_VARS=(
@@ -523,7 +643,7 @@ validate_manager_value() {
 }
 
 manager_default_for_var() {
-  local var home install run_dir app_id compat
+  local var default raw
   var="$1"
 
   if [[ -n "${MANAGER_EXPLICIT_VARS[$var]-}" ]]; then
@@ -531,152 +651,17 @@ manager_default_for_var() {
     return 0
   fi
 
-  case "$var" in
-    PUID|PGID)
-      echo ""
-      ;;
-    NO_COLOR)
-      echo "${NO_COLOR:-}"
-      ;;
-    LOG_LEVEL)
-      echo "${LOG_LEVEL:-info}"
-      ;;
-    LOG_CONTEXT)
-      echo "${LOG_CONTEXT:-server_manager}"
-      ;;
-    UMASK)
-      echo "${UMASK:-027}"
-      ;;
-    AUTO_FIX_PERMS)
-      echo "${AUTO_FIX_PERMS:-true}"
-      ;;
-    AUTO_FIX_DIR_MODE)
-      echo "${AUTO_FIX_DIR_MODE:-775}"
-      ;;
-    AUTO_FIX_FILE_MODE)
-      echo "${AUTO_FIX_FILE_MODE:-664}"
-      ;;
-    SAVEFILE_NAME)
-      echo "${SAVEFILE_NAME:-3ad85aea}"
-      ;;
-    STOP_TIMEOUT)
-      echo "${STOP_TIMEOUT:-60}"
-      ;;
-    STEAM_APP_ID)
-      echo "${STEAM_APP_ID:-2278520}"
-      ;;
-    GAME_BRANCH)
-      echo "${GAME_BRANCH:-public}"
-      ;;
-    STEAMCMD_ARGS)
-      echo "${STEAMCMD_ARGS:-validate}"
-      ;;
-    WINEDEBUG)
-      echo "${WINEDEBUG:--all}"
-      ;;
-    AUTO_UPDATE)
-      echo "${AUTO_UPDATE:-true}"
-      ;;
-    AUTO_UPDATE_INTERVAL)
-      echo "${AUTO_UPDATE_INTERVAL:-1800}"
-      ;;
-    AUTO_UPDATE_ON_BOOT)
-      echo "${AUTO_UPDATE_ON_BOOT:-true}"
-      ;;
-    AUTO_RESTART_ON_UPDATE)
-      echo "${AUTO_RESTART_ON_UPDATE:-true}"
-      ;;
-    AUTO_RESTART)
-      echo "${AUTO_RESTART:-true}"
-      ;;
-    AUTO_RESTART_DELAY)
-      echo "${AUTO_RESTART_DELAY:-10}"
-      ;;
-    AUTO_RESTART_MAX_ATTEMPTS)
-      echo "${AUTO_RESTART_MAX_ATTEMPTS:-0}"
-      ;;
-    SAFE_MODE)
-      echo "${SAFE_MODE:-true}"
-      ;;
-    HEALTH_CHECK_INTERVAL)
-      echo "${HEALTH_CHECK_INTERVAL:-300}"
-      ;;
-    HEALTH_CHECK_ON_START)
-      echo "${HEALTH_CHECK_ON_START:-true}"
-      ;;
-    UPDATE_CHECK_PLAYERS)
-      echo "${UPDATE_CHECK_PLAYERS:-false}"
-      ;;
-    RESTART_CHECK_PLAYERS)
-      echo "${RESTART_CHECK_PLAYERS:-false}"
-      ;;
-    A2S_TIMEOUT)
-      echo "${A2S_TIMEOUT:-2}"
-      ;;
-    A2S_RETRIES)
-      echo "${A2S_RETRIES:-2}"
-      ;;
-    A2S_RETRY_DELAY)
-      echo "${A2S_RETRY_DELAY:-1}"
-      ;;
-    LOG_TO_STDOUT)
-      echo "${LOG_TO_STDOUT:-true}"
-      ;;
-    LOG_TAIL_LINES)
-      echo "${LOG_TAIL_LINES:-200}"
-      ;;
-    LOG_POLL_INTERVAL)
-      echo "${LOG_POLL_INTERVAL:-2}"
-      ;;
-    LOG_FILE_PATTERN)
-      echo "${LOG_FILE_PATTERN:-*.log}"
-      ;;
-    BACKUP_DIR)
-      echo "${BACKUP_DIR:-backups}"
-      ;;
-    BACKUP_MAX_COUNT)
-      echo "${BACKUP_MAX_COUNT:-0}"
-      ;;
-    BACKUP_PRE_HOOK)
-      echo "${BACKUP_PRE_HOOK:-}"
-      ;;
-    BACKUP_POST_HOOK)
-      echo "${BACKUP_POST_HOOK:-}"
-      ;;
-    ENABLE_CRON)
-      echo "${ENABLE_CRON:-true}"
-      ;;
-    UPDATE_CRON)
-      echo "${UPDATE_CRON:-}"
-      ;;
-    BACKUP_CRON)
-      echo "${BACKUP_CRON:-}"
-      ;;
-    RESTART_CRON)
-      echo "${RESTART_CRON:-}"
-      ;;
-    BOOTSTRAP_HOOK)
-      echo "${BOOTSTRAP_HOOK:-}"
-      ;;
-    UPDATE_PRE_HOOK)
-      echo "${UPDATE_PRE_HOOK:-}"
-      ;;
-    UPDATE_POST_HOOK)
-      echo "${UPDATE_POST_HOOK:-}"
-      ;;
-    RESTART_PRE_HOOK)
-      echo "${RESTART_PRE_HOOK:-}"
-      ;;
-    RESTART_POST_HOOK)
-      echo "${RESTART_POST_HOOK:-}"
-      ;;
-    PRINT_ADMIN_PASSWORD)
-      echo "${PRINT_ADMIN_PASSWORD:-true}"
-      ;;
-    *)
-      echo ""
-      ;;
-  esac
+  raw="$(manager_profile_value_for_var "$MANAGER_PROFILE_DEFAULT" "$var")"
+  if [[ "$raw" == "null" || -z "$raw" ]]; then
+    echo ""
+    return 0
+  fi
+  if [[ "$var" == "LOG_LEVEL" ]]; then
+    default="$(normalize_log_level "$raw")"
+    echo "$default"
+    return 0
+  fi
+  echo "$raw"
 }
 
 apply_manager_env_overrides() {
@@ -796,17 +781,27 @@ cleanup_manager_config_paths() {
 
 update_or_create_manager_config() {
   local file new_file
+  local is_new_file new_profile
   require_cmd jq
   MANAGER_EXPLICIT_VARS=()
   MANAGER_ENV_IGNORE=()
   MANAGER_JSON_INVALID=()
 
   file="$(manager_config_path)"
+  is_new_file="false"
+  if [[ ! -f "$file" ]]; then
+    is_new_file="true"
+  fi
   ensure_manager_config_file "$file"
   if ! jq -e '.' "$file" >/dev/null 2>&1; then
     fatal "Invalid JSON in $file"
   fi
   cleanup_manager_config_paths "$file"
+
+  if [[ "$is_new_file" == "true" ]]; then
+    new_profile="$(manager_profile_resolve)"
+    apply_manager_profile_defaults "$file" "$new_profile"
+  fi
 
   apply_manager_env_overrides "$file"
   load_manager_config_values "$file"
@@ -814,6 +809,10 @@ update_or_create_manager_config() {
   new_file="$(manager_config_path)"
   if [[ "$new_file" != "$file" ]]; then
     file="$new_file"
+    is_new_file="false"
+    if [[ ! -f "$file" ]]; then
+      is_new_file="true"
+    fi
     ensure_manager_config_file "$file"
     if ! jq -e '.' "$file" >/dev/null 2>&1; then
       fatal "Invalid JSON in $file"
@@ -821,6 +820,10 @@ update_or_create_manager_config() {
     cleanup_manager_config_paths "$file"
     MANAGER_EXPLICIT_VARS=()
     MANAGER_JSON_INVALID=()
+    if [[ "$is_new_file" == "true" ]]; then
+      new_profile="$(manager_profile_resolve)"
+      apply_manager_profile_defaults "$file" "$new_profile"
+    fi
     apply_manager_env_overrides "$file"
     load_manager_config_values "$file"
   fi

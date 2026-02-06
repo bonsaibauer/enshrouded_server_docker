@@ -106,10 +106,11 @@ These map to `gameSettings` and `gameSettingsPreset` in the JSON. Values are onl
 
 ## Server Manager Runtime
 
-The manager also reads (and creates if missing) `server_manager.json` next to `enshrouded_server.json`. Values are applied in this order: ENV > `server_manager.json` > defaults. Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `server_manager.json`; if they are missing, the manager tries to detect them from `INSTALL_PATH`, the config directory, or `HOME`.
+The manager also reads (and creates if missing) `server_manager.json` next to `enshrouded_server.json`. Values are applied in this order: ENV > `server_manager.json` > defaults. Defaults come from the `default` profile applied at first creation (see `docs/profile.md`). Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `server_manager.json`; if they are missing, the manager tries to detect them from `INSTALL_PATH`, the config directory, or `HOME`.
 
 | Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
+|---------|-------------|--------------------------|-----------------| 
+| **MANAGER_PROFILE** | Profile used on first creation of `server_manager.json` | "default" | Only applied when the file is created for the first time; ignored afterwards (see `docs/profile.md`) |
 | **PUID** | User ID for `steam` user mapping | (required) | Must be numeric and not 0 |
 | **PGID** | Group ID for `steam` user mapping | (required) | Must be numeric and not 0 |
 | **NO_COLOR** | Disable ANSI colors | unset | Set to any value to disable |
@@ -173,7 +174,7 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | Variable | Description | Example / Default Value | Options / Notes |
 |---------|-------------|--------------------------|-----------------|
 | **BACKUP_DIR** | Backup directory | "backups" | Relative to `INSTALL_PATH` if not absolute |
-| **BACKUP_MAX_COUNT** | Max backups to keep | 0 | 0 = keep all |
+| **BACKUP_MAX_COUNT** | Max backups to keep | 7 | 0 = keep all |
 | **BACKUP_PRE_HOOK** | Command before backup | unset | Executed with `eval` |
 | **BACKUP_POST_HOOK** | Command after backup | unset | Executed with `eval` |
 
@@ -184,9 +185,9 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | Variable | Description | Example / Default Value | Options / Notes |
 |---------|-------------|--------------------------|-----------------|
 | **ENABLE_CRON** | Enable cron support | true | true / false |
-| **UPDATE_CRON** | Cron schedule for update | "0 */6 * * *" | Standard cron format |
-| **BACKUP_CRON** | Cron schedule for backup | "0 */12 * * *" | Standard cron format |
-| **RESTART_CRON** | Cron schedule for restart | "0 5 * * *" | Standard cron format |
+| **UPDATE_CRON** | Cron schedule for update | "0 4 * * *" | Standard cron format |
+| **BACKUP_CRON** | Cron schedule for backup | "0 0 * * *" | Standard cron format |
+| **RESTART_CRON** | Cron schedule for restart | "0 3 * * *" | Standard cron format |
 
 ---
 
