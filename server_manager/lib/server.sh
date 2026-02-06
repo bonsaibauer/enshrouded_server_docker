@@ -74,7 +74,7 @@ supervisor_start() {
   fi
   info "Start backend"
   touch "$SUPERVISOR_LOG_FILE" 2>/dev/null || true
-  supervisord -c "$SUPERVISOR_CONF" >/dev/null 2>&1 || fatal "Start failed: backend"
+  supervisord -c "$SUPERVISOR_CONF" >/dev/null 2>&1 &
   local attempt=0
   while [[ "$attempt" -lt 20 ]]; do
     if supervisor_running; then
