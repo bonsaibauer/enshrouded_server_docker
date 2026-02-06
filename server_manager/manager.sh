@@ -152,7 +152,6 @@ setup_environment() {
 RSYSLOG_CONF="/etc/rsyslog.d/server_manager_stdout.conf"
 RSYSLOG_STATE_DIR="/var/spool/rsyslog"
 SYSLOG_LOG_FILE="$RUN_DIR/server-manager-syslog.log"
-SYSLOG_LOG_STREAM_PID_FILE="$RUN_DIR/server-manager-syslog-logstream.pid"
 
 syslog_running() {
   if supervisor_available && supervisor_running; then
@@ -193,17 +192,32 @@ syslog_log_streamer_start() {
   if ! is_true "$LOG_TO_STDOUT"; then
     return 0
   fi
-  if [[ -f "$SYSLOG_LOG_STREAM_PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$SYSLOG_LOG_STREAM_PID_FILE" 2>/dev/null || true)"
-    if pid_alive "$pid"; then
-      return 0
-    fi
-  fi
-  if [[ ! -f "$SYSLOG_LOG_FILE" ]]; then
+  if ! supervisor_available || ! supervisor_running; then
     return 0
   fi
+  local name
+  name="$(supervisor_program_name sysloglog)"
+  if [[ -n "$name" ]] && ! supervisor_program_running "$name"; then
+    supervisor_ctl start "$name" >/dev/null 2>&1 || warn "Start failed: $name"
+  fi
+}
 
+syslog_log_streamer_stop() {
+  if ! supervisor_available || ! supervisor_running; then
+    return 0
+  fi
+  local name
+  name="$(supervisor_program_name sysloglog)"
+  if [[ -n "$name" ]]; then
+    supervisor_ctl stop "$name" >/dev/null 2>&1 || true
+  fi
+}
+
+run_syslog_log_streamer_foreground() {
+  if ! is_true "$LOG_TO_STDOUT"; then
+    return 0
+  fi
+  touch "$SYSLOG_LOG_FILE" 2>/dev/null || true
   tail -n 200 -F "$SYSLOG_LOG_FILE" 2>/dev/null | while IFS= read -r line; do
     if [[ -z "$line" ]]; then
       continue
@@ -233,19 +247,7 @@ syslog_log_streamer_start() {
     log_context_push "syslog"
     log_no_ts_force "$level" "$msg"
     log_context_pop
-  done &
-  echo "$!" >"$SYSLOG_LOG_STREAM_PID_FILE"
-}
-
-syslog_log_streamer_stop() {
-  if [[ -f "$SYSLOG_LOG_STREAM_PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$SYSLOG_LOG_STREAM_PID_FILE" 2>/dev/null || true)"
-    if pid_alive "$pid"; then
-      kill "$pid" 2>/dev/null || true
-    fi
-    rm -f "$SYSLOG_LOG_STREAM_PID_FILE" 2>/dev/null || true
-  fi
+  done
 }
 
 start_syslog_daemon() {
@@ -286,26 +288,39 @@ run_syslog_foreground() {
   exec rsyslogd -n -f "$RSYSLOG_CONF"
 }
 
+run_cron_foreground() {
+  if ! is_true "$ENABLE_CRON"; then
+    return 0
+  fi
+  if [[ -z "${UPDATE_CRON:-}" && -z "${BACKUP_CRON:-}" && -z "${RESTART_CRON:-}" ]]; then
+    return 0
+  fi
+  if command -v cron >/dev/null 2>&1; then
+    exec cron -f
+  elif command -v crond >/dev/null 2>&1; then
+    exec crond -f
+  fi
+  fatal "Cron not available"
+}
+
 start_cron_daemon() {
   if ! is_true "$ENABLE_CRON"; then
     return 0
   fi
-  if [[ -n "${UPDATE_CRON:-}" || -n "${BACKUP_CRON:-}" || -n "${RESTART_CRON:-}" ]]; then
-    if command -v cron >/dev/null 2>&1; then
-      if pgrep -x cron >/dev/null 2>&1; then
-        return 0
-      fi
-      info "Start cron daemon"
-      cron
-    elif command -v crond >/dev/null 2>&1; then
-      if pgrep -x crond >/dev/null 2>&1; then
-        return 0
-      fi
-      info "Start crond daemon"
-      crond
-    else
-      warn "Cron not available, skipping scheduled jobs"
-    fi
+  if [[ -z "${UPDATE_CRON:-}" && -z "${BACKUP_CRON:-}" && -z "${RESTART_CRON:-}" ]]; then
+    return 0
+  fi
+  if ! command -v cron >/dev/null 2>&1 && ! command -v crond >/dev/null 2>&1; then
+    warn "Cron not available, skipping scheduled jobs"
+    return 0
+  fi
+  if ! supervisor_available || ! supervisor_running; then
+    return 0
+  fi
+  local name
+  name="$(supervisor_program_name cron)"
+  if [[ -n "$name" ]] && ! supervisor_program_running "$name"; then
+    supervisor_ctl start "$name" >/dev/null 2>&1 || warn "Start failed: $name"
   fi
 }
 
@@ -507,6 +522,7 @@ handle_shutdown() {
 status_summary() {
   local server_state pid version players
   local supervisor_state update_state backup_state restart_state syslog_state
+  local cron_state logstream_state supervisor_log_state syslog_log_state
   if is_server_running; then
     server_state="running"
   else
@@ -525,12 +541,20 @@ status_summary() {
     backup_state="$(supervisor_program_state "$(supervisor_program_name backup)")"
     restart_state="$(supervisor_program_state "$(supervisor_program_name restart)")"
     syslog_state="$(supervisor_program_state "$(supervisor_program_name syslog)")"
+    cron_state="$(supervisor_program_state "$(supervisor_program_name cron)")"
+    logstream_state="$(supervisor_program_state "$(supervisor_program_name logstream)")"
+    supervisor_log_state="$(supervisor_program_state "$(supervisor_program_name supervisorlog)")"
+    syslog_log_state="$(supervisor_program_state "$(supervisor_program_name sysloglog)")"
   else
     supervisor_state="stopped"
     update_state="n/a"
     backup_state="n/a"
     restart_state="n/a"
     syslog_state="n/a"
+    cron_state="n/a"
+    logstream_state="n/a"
+    supervisor_log_state="n/a"
+    syslog_log_state="n/a"
   fi
 
   ui_hr
@@ -541,6 +565,10 @@ status_summary() {
   ui_kv "Backup Job" "${backup_state:-n/a}"
   ui_kv "Restart Job" "${restart_state:-n/a}"
   ui_kv "Syslog Job" "${syslog_state:-n/a}"
+  ui_kv "Cron Job" "${cron_state:-n/a}"
+  ui_kv "Log Stream" "${logstream_state:-n/a}"
+  ui_kv "Supervisor Log" "${supervisor_log_state:-n/a}"
+  ui_kv "Syslog Log" "${syslog_log_state:-n/a}"
   ui_kv "Server PID" "${pid:-n/a}"
   ui_kv "Uptime" "$(server_uptime)"
   ui_kv "Players" "$players"
@@ -557,7 +585,7 @@ tail_logs() {
     return 1
   fi
   info "Start log tail: $latest"
-  tail -n "${LOG_TAIL_LINES:-200}" -F "$latest"
+  tail -n "${LOG_TAIL_LINES:-200}" -F "$latest" 2>/dev/null | log_pipe info "server-log"
 }
 
 manager_loop() {
@@ -624,12 +652,12 @@ manager_run() {
     init_colors
     ensure_root_and_map_user
     preflight_permissions
-    start_cron_daemon
     local runtime_home
     runtime_home="${HOME:-/home/steam}"
     export HOME="$runtime_home"
     export INSTALL_PATH CONFIG_FILE STEAM_COMPAT_CLIENT_INSTALL_PATH STEAM_COMPAT_DATA_PATH WINEPREFIX
     supervisor_start || fatal "Supervisor required"
+    start_cron_daemon
     start_syslog_daemon || fatal "Syslog start failed"
     exec runuser -u steam -p -- env \
       HOME="$runtime_home" \
@@ -698,6 +726,18 @@ case "$cmd" in
     ;;
   _syslog)
     run_syslog_foreground
+    ;;
+  _sysloglog)
+    run_syslog_log_streamer_foreground
+    ;;
+  _logstream)
+    run_log_streamer_foreground
+    ;;
+  _supervisorlog)
+    run_supervisor_log_streamer_foreground
+    ;;
+  _cron)
+    run_cron_foreground
     ;;
   run)
     manager_run "$@"

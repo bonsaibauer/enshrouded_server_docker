@@ -10,7 +10,6 @@ SUPERVISOR_PID_FILE="$RUN_DIR/server-manager-supervisord.pid"
 SUPERVISOR_SOCKET="$RUN_DIR/server-manager-supervisor.sock"
 SUPERVISOR_LOG_DIR="$RUN_DIR"
 SUPERVISOR_LOG_FILE="$RUN_DIR/server-manager-supervisord.log"
-SUPERVISOR_LOG_STREAM_PID_FILE="$RUN_DIR/server-manager-supervisord-logstream.pid"
 
 supervisor_available() {
   command -v supervisord >/dev/null 2>&1 && command -v supervisorctl >/dev/null 2>&1
@@ -23,6 +22,10 @@ supervisor_program_name() {
     backup) echo "server-manager-backup" ;;
     restart) echo "server-manager-restart" ;;
     syslog) echo "server-manager-syslog" ;;
+    cron) echo "server-manager-cron" ;;
+    logstream) echo "server-manager-logstream" ;;
+    supervisorlog) echo "server-manager-supervisor-logstream" ;;
+    sysloglog) echo "server-manager-syslog-logstream" ;;
     *) echo "" ;;
   esac
 }
@@ -161,17 +164,32 @@ supervisor_log_streamer_start() {
   if ! is_true "$LOG_TO_STDOUT"; then
     return 0
   fi
-  if [[ -f "$SUPERVISOR_LOG_STREAM_PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$SUPERVISOR_LOG_STREAM_PID_FILE" 2>/dev/null || true)"
-    if pid_alive "$pid"; then
-      return 0
-    fi
-  fi
-  if [[ ! -f "$SUPERVISOR_LOG_FILE" ]]; then
+  if ! supervisor_available || ! supervisor_running; then
     return 0
   fi
+  local name
+  name="$(supervisor_program_name supervisorlog)"
+  if [[ -n "$name" ]] && ! supervisor_program_running "$name"; then
+    supervisor_ctl start "$name" >/dev/null 2>&1 || warn "Start failed: $name"
+  fi
+}
 
+supervisor_log_streamer_stop() {
+  if ! supervisor_available || ! supervisor_running; then
+    return 0
+  fi
+  local name
+  name="$(supervisor_program_name supervisorlog)"
+  if [[ -n "$name" ]]; then
+    supervisor_ctl stop "$name" >/dev/null 2>&1 || true
+  fi
+}
+
+run_supervisor_log_streamer_foreground() {
+  if ! is_true "$LOG_TO_STDOUT"; then
+    return 0
+  fi
+  touch "$SUPERVISOR_LOG_FILE" 2>/dev/null || true
   tail -n 200 -F "$SUPERVISOR_LOG_FILE" 2>/dev/null | while IFS= read -r line; do
     if [[ -z "$line" ]]; then
       continue
@@ -191,19 +209,7 @@ supervisor_log_streamer_start() {
         ;;
     esac
     log_context_pop
-  done &
-  echo "$!" >"$SUPERVISOR_LOG_STREAM_PID_FILE"
-}
-
-supervisor_log_streamer_stop() {
-  if [[ -f "$SUPERVISOR_LOG_STREAM_PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$SUPERVISOR_LOG_STREAM_PID_FILE" 2>/dev/null || true)"
-    if pid_alive "$pid"; then
-      kill "$pid" 2>/dev/null || true
-    fi
-    rm -f "$SUPERVISOR_LOG_STREAM_PID_FILE" 2>/dev/null || true
-  fi
+  done
 }
 
 read_server_pid() {
@@ -422,7 +428,6 @@ run_server_foreground() {
   export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
   export STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH"
   export WINEPREFIX="$WINEPREFIX"
-  export WINETRICKS="/usr/local/bin/winetricks"
 
   info "Start server"
   "$PROTON_CMD" runinprefix "$ENSHROUDED_BINARY" &
@@ -546,19 +551,16 @@ cleanup_wine() {
 restart_pre_hook() {
   if [[ -n "${RESTART_PRE_HOOK:-}" ]]; then
     info "Start restart pre hook: $RESTART_PRE_HOOK"
-    eval "$RESTART_PRE_HOOK"
+    run_hook_logged "$RESTART_PRE_HOOK" info "$LOG_CONTEXT"
   fi
 }
 
 restart_post_hook() {
   if [[ -n "${RESTART_POST_HOOK:-}" ]]; then
     info "Start restart post hook: $RESTART_POST_HOOK"
-    eval "$RESTART_POST_HOOK"
+    run_hook_logged "$RESTART_POST_HOOK" info "$LOG_CONTEXT"
   fi
 }
-
-LOG_STREAM_PID_FILE="$RUN_DIR/enshrouded-logstream.pid"
-LOG_STREAM_TAIL_PID_FILE="$RUN_DIR/enshrouded-logtail.pid"
 
 get_log_dir() {
   if [[ -n "${ENSHROUDED_LOG_DIR:-}" ]]; then
@@ -606,46 +608,42 @@ log_streamer_loop() {
         log_context_pop
       done &
       tail_pid=$!
-      echo "$tail_pid" >"$LOG_STREAM_TAIL_PID_FILE"
       current_file="$latest"
     fi
     sleep "$LOG_POLL_INTERVAL"
   done
 }
 
+run_log_streamer_foreground() {
+  if ! is_true "$LOG_TO_STDOUT"; then
+    return 0
+  fi
+  log_context_push "logs"
+  log_streamer_loop
+  log_context_pop
+}
+
 start_log_streamer() {
   if ! is_true "$LOG_TO_STDOUT"; then
     return 0
   fi
-  if [[ -f "$LOG_STREAM_PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$LOG_STREAM_PID_FILE" 2>/dev/null || true)"
-    if pid_alive "$pid"; then
-      return 0
-    fi
+  if ! supervisor_available || ! supervisor_running; then
+    return 0
   fi
-
-  log_context_push "logs"
-  log_streamer_loop &
-  local pid=$!
-  log_context_pop
-  echo "$pid" >"$LOG_STREAM_PID_FILE"
+  local name
+  name="$(supervisor_program_name logstream)"
+  if [[ -n "$name" ]] && ! supervisor_program_running "$name"; then
+    supervisor_ctl start "$name" >/dev/null 2>&1 || warn "Start failed: $name"
+  fi
 }
 
 stop_log_streamer() {
-  if [[ -f "$LOG_STREAM_PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$LOG_STREAM_PID_FILE" 2>/dev/null || true)"
-    if pid_alive "$pid"; then
-      kill "$pid" 2>/dev/null || true
-    fi
+  if ! supervisor_available || ! supervisor_running; then
+    return 0
   fi
-  if [[ -f "$LOG_STREAM_TAIL_PID_FILE" ]]; then
-    local tpid
-    tpid="$(cat "$LOG_STREAM_TAIL_PID_FILE" 2>/dev/null || true)"
-    if pid_alive "$tpid"; then
-      kill "$tpid" 2>/dev/null || true
-    fi
+  local name
+  name="$(supervisor_program_name logstream)"
+  if [[ -n "$name" ]]; then
+    supervisor_ctl stop "$name" >/dev/null 2>&1 || true
   fi
-  rm -f "$LOG_STREAM_PID_FILE" "$LOG_STREAM_TAIL_PID_FILE" 2>/dev/null || true
 }

@@ -45,6 +45,7 @@ Road to Release — Enshrouded is slated for an Autumn 2026 launch; the roadmap 
 
 - All server/gameplay fields are documented in [`docs/enshrouded_server.md`](docs/enshrouded_server.md).
 - A complete sample with every setting populated ships in [`ressources/enshrouded_server.json`](ressources/enshrouded_server.json).
+- Server Manager and Docker commands live in [`docs/server_manager_commands.md`](docs/server_manager_commands.md).
 
 ---
 

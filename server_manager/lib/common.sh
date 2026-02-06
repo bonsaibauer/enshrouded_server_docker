@@ -3,11 +3,11 @@
 # Common helpers for Enshrouded Server Manager.
 
 MANAGER_VERSION_FILE="${MANAGER_ROOT:-/opt/enshrouded/manager}/VERSION"
-MANAGER_VERSION="0.1.0"
+MANAGER_VERSION="2.1.0"
 if [[ -f "$MANAGER_VERSION_FILE" ]]; then
   MANAGER_VERSION="$(tr -d '\r\n' <"$MANAGER_VERSION_FILE")"
   if [[ -z "$MANAGER_VERSION" ]]; then
-    MANAGER_VERSION="0.1.0"
+    MANAGER_VERSION="2.1.0"
   fi
 fi
 
@@ -88,6 +88,56 @@ log_no_ts_force() {
     prefix="$prefix [$context]"
   fi
   printf "[%s] %s %s\n" "$(level_label "$level")" "$prefix" "$message"
+}
+
+log_pipe() {
+  local level context line prev
+  level="${1:-info}"
+  context="${2:-}"
+  prev="${LOG_CONTEXT:-server_manager}"
+  if [[ -n "$context" ]]; then
+    LOG_CONTEXT="$context"
+  fi
+  while IFS= read -r line; do
+    if [[ -z "$line" ]]; then
+      continue
+    fi
+    log_no_ts_force "$level" "$line"
+  done
+  LOG_CONTEXT="$prev"
+}
+
+run_logged() {
+  local level context
+  level="${1:-info}"
+  context="${2:-}"
+  shift 2 || true
+  "$@" 2>&1 | log_pipe "$level" "$context"
+  return ${PIPESTATUS[0]}
+}
+
+run_hook_logged() {
+  local hook level context fifo log_pid rc
+  hook="${1:-}"
+  level="${2:-info}"
+  context="${3:-}"
+  if [[ -z "$hook" ]]; then
+    return 0
+  fi
+  if ! command -v mktemp >/dev/null 2>&1 || ! command -v mkfifo >/dev/null 2>&1; then
+    eval "$hook"
+    return $?
+  fi
+  fifo="$(mktemp)"
+  rm -f "$fifo"
+  mkfifo "$fifo"
+  log_pipe "$level" "$context" <"$fifo" &
+  log_pid=$!
+  eval "$hook" >"$fifo" 2>&1
+  rc=$?
+  wait "$log_pid" || true
+  rm -f "$fifo"
+  return $rc
 }
 
 debug() { log debug "$@"; }
@@ -195,7 +245,8 @@ STEAMCMD_ARGS="${STEAMCMD_ARGS:-validate}"
 STEAMCMD_PATH="/home/steam/steamcmd"
 PROTON_CMD="/usr/local/bin/proton"
 WINESERVER_PATH="/usr/local/bin/files/bin/wineserver"
-WINETRICKS="/usr/local/bin/winetricks"
+WINETRICKS="${WINETRICKS:-/usr/local/bin/winetricks}"
+export WINETRICKS
 
 STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/steam/.steam/steam"
 STEAM_COMPAT_DATA_PATH="/home/steam/enshrouded/steamapps/compatdata/2278520"

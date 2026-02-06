@@ -5,14 +5,14 @@
 backup_pre_hook() {
   if [[ -n "${BACKUP_PRE_HOOK:-}" ]]; then
     info "Backup pre hook: $BACKUP_PRE_HOOK"
-    eval "$BACKUP_PRE_HOOK"
+    run_hook_logged "$BACKUP_PRE_HOOK" info "$LOG_CONTEXT"
   fi
 }
 
 backup_post_hook() {
   if [[ -n "${BACKUP_POST_HOOK:-}" ]]; then
     info "Backup post hook: $BACKUP_POST_HOOK"
-    eval "$BACKUP_POST_HOOK"
+    run_hook_logged "$BACKUP_POST_HOOK" info "$LOG_CONTEXT"
   fi
 }
 

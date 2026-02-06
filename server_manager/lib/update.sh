@@ -78,11 +78,10 @@ download_enshrouded() {
   export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
   export STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH"
   export STEAM_DIR="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
-  export WINETRICKS="/usr/local/bin/winetricks"
 
   info "Update: downloading server via SteamCMD"
   set +e
-  "$STEAMCMD_PATH" +@sSteamCmdForcePlatformType windows +force_install_dir "$INSTALL_PATH" +login anonymous +app_update "$STEAM_APP_ID" "$GAME_BRANCH $STEAMCMD_ARGS" +quit
+  run_logged info "$LOG_CONTEXT" "$STEAMCMD_PATH" +@sSteamCmdForcePlatformType windows +force_install_dir "$INSTALL_PATH" +login anonymous +app_update "$STEAM_APP_ID" "$GAME_BRANCH $STEAMCMD_ARGS" +quit
   local rc=$?
   set -e
   return $rc
@@ -91,14 +90,14 @@ download_enshrouded() {
 update_pre_hook() {
   if [[ -n "${UPDATE_PRE_HOOK:-}" ]]; then
     info "Update pre hook: $UPDATE_PRE_HOOK"
-    eval "$UPDATE_PRE_HOOK"
+    run_hook_logged "$UPDATE_PRE_HOOK" info "$LOG_CONTEXT"
   fi
 }
 
 update_post_hook() {
   if [[ -n "${UPDATE_POST_HOOK:-}" ]]; then
     info "Update post hook: $UPDATE_POST_HOOK"
-    eval "$UPDATE_POST_HOOK"
+    run_hook_logged "$UPDATE_POST_HOOK" info "$LOG_CONTEXT"
   fi
 }
 

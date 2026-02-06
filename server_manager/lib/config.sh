@@ -828,7 +828,6 @@ update_or_create_manager_config() {
   apply_manager_defaults "$file"
   load_manager_config_values "$file"
   validate_manager_json_values "$file"
-  MANAGER_CONFIG_FILE="$file"
 }
 
 validate_tags() {
@@ -1622,7 +1621,7 @@ update_game_settings_config() {
 bootstrap_hook() {
   if [[ -n "${BOOTSTRAP_HOOK:-}" ]]; then
     info "Start bootstrap hook: $BOOTSTRAP_HOOK"
-    eval "$BOOTSTRAP_HOOK"
+    run_hook_logged "$BOOTSTRAP_HOOK" info "$LOG_CONTEXT"
   fi
 }
 
