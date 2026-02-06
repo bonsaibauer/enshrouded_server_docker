@@ -61,20 +61,9 @@ level_label() {
 }
 
 log_emit() {
-  local line err_trap errexit_was_set
+  local line
   line="$1"
-  err_trap="$(trap -p ERR)"
-  trap - ERR
-  errexit_was_set=0
-  [[ $- == *e* ]] && errexit_was_set=1
-  set +e
-  printf "%s\n" "$line"
-  ((errexit_was_set)) && set -e
-  if [[ -n "$err_trap" ]]; then
-    eval "$err_trap"
-  else
-    trap - ERR
-  fi
+  printf "%s\n" "$line" || true
   return 0
 }
 

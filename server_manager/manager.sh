@@ -16,7 +16,10 @@ export MANAGER_ROOT
 . "$ROOT_DIR/lib/backup.sh"
 
 on_error() {
-  error "Unexpected error at line $1"
+  local line cmd
+  line="${1:-unknown}"
+  cmd="${BASH_COMMAND:-unknown}"
+  printf "%s [ERROR] [server_manager] Unexpected error at line %s: %s\n" "$(timestamp 2>/dev/null || printf "%s" "1970-01-01T00:00:00Z")" "$line" "$cmd" >&2 || true
 }
 trap 'on_error $LINENO' ERR
 
