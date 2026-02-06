@@ -4,7 +4,7 @@ set -Eeuo pipefail
 MANAGER_ENV_SNAPSHOT="$(env | cut -d= -f1 | tr '\n' ' ')"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MANAGER_BIN="${MANAGER_BIN:-$ROOT_DIR/manager.sh}"
+MANAGER_BIN="$ROOT_DIR/manager.sh"
 MANAGER_ROOT="$ROOT_DIR"
 export MANAGER_BIN
 export MANAGER_ROOT
@@ -19,6 +19,13 @@ on_error() {
   error "Unexpected error at line $1"
 }
 trap 'on_error $LINENO' ERR
+
+reap_children() {
+  while true; do
+    wait -n 2>/dev/null || break
+  done
+}
+trap 'reap_children' CHLD
 
 print_help() {
   ui_banner
@@ -143,22 +150,17 @@ setup_environment() {
 }
 
 RSYSLOG_CONF="/etc/rsyslog.d/server_manager_stdout.conf"
-RSYSLOG_PID_FILE="$RUN_DIR/server-manager-rsyslogd.pid"
 RSYSLOG_STATE_DIR="/var/spool/rsyslog"
 SYSLOG_LOG_FILE="$RUN_DIR/server-manager-syslog.log"
 SYSLOG_LOG_STREAM_PID_FILE="$RUN_DIR/server-manager-syslog-logstream.pid"
 
 syslog_running() {
-  if [[ -f "$RSYSLOG_PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$RSYSLOG_PID_FILE" 2>/dev/null || true)"
-    if pid_alive "$pid"; then
+  if supervisor_available && supervisor_running; then
+    local name
+    name="$(supervisor_program_name syslog)"
+    if [[ -n "$name" ]] && supervisor_program_running "$name"; then
       return 0
     fi
-    rm -f "$RSYSLOG_PID_FILE" 2>/dev/null || true
-  fi
-  if pgrep -x rsyslogd >/dev/null 2>&1; then
-    return 0
   fi
   return 1
 }
@@ -256,23 +258,32 @@ start_syslog_daemon() {
   fi
   setup_syslog || return 1
   touch "$SYSLOG_LOG_FILE" 2>/dev/null || true
-  info "Start syslog"
-  rsyslogd -n -f "$RSYSLOG_CONF" &
-  echo "$!" >"$RSYSLOG_PID_FILE"
-  syslog_log_streamer_start
-  ok "Syslog online"
+  local name
+  name="$(supervisor_program_name syslog)"
+  if [[ -n "$name" ]] && supervisor_start_job "$name"; then
+    syslog_log_streamer_start
+    ok "Syslog online"
+    return 0
+  fi
+  warn "Syslog start failed: supervisor unavailable"
+  return 1
 }
 
 stop_syslog_daemon() {
   syslog_log_streamer_stop || true
-  if [[ -f "$RSYSLOG_PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$RSYSLOG_PID_FILE" 2>/dev/null || true)"
-    if pid_alive "$pid"; then
-      kill "$pid" 2>/dev/null || true
+  if supervisor_available && supervisor_running; then
+    local name
+    name="$(supervisor_program_name syslog)"
+    if [[ -n "$name" ]]; then
+      supervisor_program_stop "$name"
     fi
-    rm -f "$RSYSLOG_PID_FILE" 2>/dev/null || true
   fi
+}
+
+run_syslog_foreground() {
+  setup_syslog || exit 1
+  touch "$SYSLOG_LOG_FILE" 2>/dev/null || true
+  exec rsyslogd -n -f "$RSYSLOG_CONF"
 }
 
 start_cron_daemon() {
@@ -313,13 +324,13 @@ init_crontab() {
   {
     echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     if [[ -n "${UPDATE_CRON:-}" ]]; then
-      echo "$UPDATE_CRON $MANAGER_BIN update >>/proc/1/fd/1 2>>/proc/1/fd/2"
+      echo "$UPDATE_CRON supervisorctl -c $SUPERVISOR_CONF start server-manager-update >>/proc/1/fd/1 2>>/proc/1/fd/2"
     fi
     if [[ -n "${BACKUP_CRON:-}" ]]; then
-      echo "$BACKUP_CRON $MANAGER_BIN backup >>/proc/1/fd/1 2>>/proc/1/fd/2"
+      echo "$BACKUP_CRON supervisorctl -c $SUPERVISOR_CONF start server-manager-backup >>/proc/1/fd/1 2>>/proc/1/fd/2"
     fi
     if [[ -n "${RESTART_CRON:-}" ]]; then
-      echo "$RESTART_CRON $MANAGER_BIN restart >>/proc/1/fd/1 2>>/proc/1/fd/2"
+      echo "$RESTART_CRON supervisorctl -c $SUPERVISOR_CONF start server-manager-restart >>/proc/1/fd/1 2>>/proc/1/fd/2"
     fi
   } >"$cron_file"
 
@@ -328,23 +339,154 @@ init_crontab() {
   ok "Crontab updated"
 }
 
+prepare_action_context() {
+  update_or_create_manager_config
+  init_colors
+  set_umask
+  ensure_run_dirs
+}
+
+action_pid_alive() {
+  local pidfile pid
+  pidfile="$1"
+  if [[ -f "$pidfile" ]]; then
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      return 0
+    fi
+    rm -f "$pidfile" 2>/dev/null || true
+  fi
+  return 1
+}
+
+action_program_running() {
+  local action name
+  action="$1"
+  if ! supervisor_available || ! supervisor_running; then
+    return 1
+  fi
+  name="$(supervisor_program_name "$action")"
+  if [[ -z "$name" ]]; then
+    return 1
+  fi
+  supervisor_program_running "$name"
+}
+
+supervisor_start_job() {
+  local name
+  name="$1"
+  if ! supervisor_available; then
+    return 1
+  fi
+  if ! supervisor_running; then
+    supervisor_start || return 1
+  fi
+  if supervisor_program_running "$name"; then
+    return 0
+  fi
+  if ! supervisor_ctl start "$name" >/dev/null 2>&1; then
+    warn "Start failed: $name"
+    return 1
+  fi
+  local attempt state
+  attempt=0
+  while [[ "$attempt" -lt 20 ]]; do
+    state="$(supervisor_program_state "$name")"
+    if [[ "$state" == "RUNNING" ]]; then
+      return 0
+    fi
+    case "$state" in
+      STARTING|UNKNOWN)
+        ;;
+      EXITED|FATAL|BACKOFF|STOPPED)
+        warn "Start failed: $name state=$state"
+        return 1
+        ;;
+    esac
+    sleep 0.1
+    attempt=$((attempt + 1))
+  done
+  warn "Start failed: $name did not reach RUNNING"
+  return 1
+}
+
+action_in_progress() {
+  action_pid_alive "$PID_UPDATE_FILE" \
+    || action_pid_alive "$PID_RESTART_FILE" \
+    || action_program_running update \
+    || action_program_running restart
+}
+
+start_update_async() {
+  if action_pid_alive "$PID_RESTART_FILE" || action_program_running restart; then
+    warn "Restart in progress, update skipped"
+    return 0
+  fi
+  if action_pid_alive "$PID_UPDATE_FILE" || action_program_running update; then
+    warn "Update already in progress"
+    return 0
+  fi
+  local name
+  name="$(supervisor_program_name update)"
+  if [[ -n "$name" ]] && supervisor_start_job "$name"; then
+    info "Update started (supervisor)"
+    return 0
+  fi
+  warn "Update start failed: supervisor unavailable"
+  return 1
+}
+
+start_backup_async() {
+  if action_pid_alive "$PID_BACKUP_FILE" || action_program_running backup; then
+    warn "Backup already in progress"
+    return 0
+  fi
+  local name
+  name="$(supervisor_program_name backup)"
+  if [[ -n "$name" ]] && supervisor_start_job "$name"; then
+    info "Backup started (supervisor)"
+    return 0
+  fi
+  warn "Backup start failed: supervisor unavailable"
+  return 1
+}
+
+start_restart_async() {
+  if action_pid_alive "$PID_UPDATE_FILE" || action_program_running update; then
+    warn "Update in progress, restart skipped"
+    return 0
+  fi
+  if action_pid_alive "$PID_RESTART_FILE" || action_program_running restart; then
+    warn "Restart already in progress"
+    return 0
+  fi
+  local name
+  name="$(supervisor_program_name restart)"
+  if [[ -n "$name" ]] && supervisor_start_job "$name"; then
+    info "Restart started (supervisor)"
+    return 0
+  fi
+  warn "Restart start failed: supervisor unavailable"
+  return 1
+}
+
 handle_requests() {
   if [[ -f "$RUN_DIR/update" ]]; then
     rm -f "$RUN_DIR/update"
     info "Update request received"
-    update_now || true
+    start_update_async || true
   fi
 
   if [[ -f "$RUN_DIR/backup" ]]; then
     rm -f "$RUN_DIR/backup"
     info "Backup request received"
-    backup_now || true
+    start_backup_async || true
   fi
 
   if [[ -f "$RUN_DIR/restart" ]]; then
     rm -f "$RUN_DIR/restart"
     info "Start restart request"
-    restart_server || true
+    start_restart_async || true
   fi
 }
 
@@ -364,6 +506,7 @@ handle_shutdown() {
 
 status_summary() {
   local server_state pid version players
+  local supervisor_state update_state backup_state restart_state syslog_state
   if is_server_running; then
     server_state="running"
   else
@@ -374,9 +517,30 @@ status_summary() {
   QUERY_PORT="$(get_query_port)"
   players="$(query_player_count)"
 
+  if ! supervisor_available; then
+    supervisor_state="missing"
+  elif supervisor_running; then
+    supervisor_state="running"
+    update_state="$(supervisor_program_state "$(supervisor_program_name update)")"
+    backup_state="$(supervisor_program_state "$(supervisor_program_name backup)")"
+    restart_state="$(supervisor_program_state "$(supervisor_program_name restart)")"
+    syslog_state="$(supervisor_program_state "$(supervisor_program_name syslog)")"
+  else
+    supervisor_state="stopped"
+    update_state="n/a"
+    backup_state="n/a"
+    restart_state="n/a"
+    syslog_state="n/a"
+  fi
+
   ui_hr
   ui_kv "Server Manager" "$(manager_running && echo "running" || echo "stopped")"
+  ui_kv "Supervisor" "$supervisor_state"
   ui_kv "Server" "$server_state"
+  ui_kv "Update Job" "${update_state:-n/a}"
+  ui_kv "Backup Job" "${backup_state:-n/a}"
+  ui_kv "Restart Job" "${restart_state:-n/a}"
+  ui_kv "Syslog Job" "${syslog_state:-n/a}"
   ui_kv "Server PID" "${pid:-n/a}"
   ui_kv "Uptime" "$(server_uptime)"
   ui_kv "Players" "$players"
@@ -386,28 +550,25 @@ status_summary() {
 }
 
 tail_logs() {
-  local log_dir latest
-  log_dir="$(abs_path "${ENSHROUDED_LOG_DIR:-./logs}")"
-  if [[ ! -d "$log_dir" ]]; then
-    warn "Log directory missing: $log_dir"
-    return 1
-  fi
-  latest="$(ls -t "$log_dir" 2>/dev/null | head -n1 || true)"
+  local latest
+  latest="$(latest_log_file)"
   if [[ -z "$latest" ]]; then
-    warn "No log files found in $log_dir"
+    warn "No log files found (pattern: $LOG_FILE_PATTERN)"
     return 1
   fi
-  info "Start log tail: $log_dir/$latest"
-  tail -n "${LOG_TAIL_LINES:-200}" -F "$log_dir/$latest"
+  info "Start log tail: $latest"
+  tail -n "${LOG_TAIL_LINES:-200}" -F "$latest"
 }
 
 manager_loop() {
   local next_update_check now
   local restart_attempts
   local next_health_check
+  local restart_suppressed
   next_update_check=$(( $(date +%s) + AUTO_UPDATE_INTERVAL ))
   next_health_check=$(( $(date +%s) + HEALTH_CHECK_INTERVAL ))
   restart_attempts=0
+  restart_suppressed="false"
 
   while true; do
     handle_requests
@@ -415,16 +576,25 @@ manager_loop() {
     now="$(date +%s)"
     if is_true "$AUTO_UPDATE" && [[ "$now" -ge "$next_update_check" ]]; then
       info "Update check (auto)"
-      update_now || true
+      start_update_async || true
       next_update_check=$(( now + AUTO_UPDATE_INTERVAL ))
     fi
 
-    if [[ "$HEALTH_CHECK_INTERVAL" -gt 0 ]] && [[ "$now" -ge "$next_health_check" ]]; then
+    if [[ "$HEALTH_CHECK_INTERVAL" -gt 0 ]] && [[ "$now" -ge "$next_health_check" ]] && ! action_in_progress; then
       health_check || true
       next_health_check=$(( now + HEALTH_CHECK_INTERVAL ))
     fi
 
     if ! is_server_running; then
+      if action_in_progress; then
+        if [[ "$restart_suppressed" != "true" ]]; then
+          warn "Auto restart skipped: update/restart in progress"
+          restart_suppressed="true"
+        fi
+        sleep 2
+        continue
+      fi
+      restart_suppressed="false"
       warn "Stop detected: server process exited"
       if is_true "$AUTO_RESTART"; then
         restart_attempts=$((restart_attempts + 1))
@@ -441,6 +611,7 @@ manager_loop() {
       return 0
     else
       restart_attempts=0
+      restart_suppressed="false"
     fi
 
     sleep 2
@@ -451,12 +622,15 @@ manager_run() {
   if [[ "${1:-}" != "--as-steam" ]]; then
     update_or_create_manager_config
     init_colors
-    start_syslog_daemon || true
     ensure_root_and_map_user
     preflight_permissions
     start_cron_daemon
     local runtime_home
     runtime_home="${HOME:-/home/steam}"
+    export HOME="$runtime_home"
+    export INSTALL_PATH CONFIG_FILE STEAM_COMPAT_CLIENT_INSTALL_PATH STEAM_COMPAT_DATA_PATH WINEPREFIX
+    supervisor_start || fatal "Supervisor required"
+    start_syslog_daemon || fatal "Syslog start failed"
     exec runuser -u steam -p -- env \
       HOME="$runtime_home" \
       INSTALL_PATH="$INSTALL_PATH" \
@@ -485,7 +659,7 @@ manager_run() {
   startup_summary
 
   if is_true "$AUTO_UPDATE_ON_BOOT"; then
-    update_now || true
+    start_update_async || true
   fi
 
   if ! is_server_running; then
@@ -509,6 +683,21 @@ shift || true
 case "$cmd" in
   _server)
     run_server_foreground
+    ;;
+  _update)
+    prepare_action_context
+    update_now
+    ;;
+  _backup)
+    prepare_action_context
+    backup_now
+    ;;
+  _restart)
+    prepare_action_context
+    restart_now
+    ;;
+  _syslog)
+    run_syslog_foreground
     ;;
   run)
     manager_run "$@"
@@ -535,21 +724,21 @@ case "$cmd" in
     if manager_running; then
       request_action restart
     else
-      restart_server
+      start_restart_async || exit 1
     fi
     ;;
   update)
     if manager_running; then
       request_action update
     else
-      update_now
+      start_update_async || exit 1
     fi
     ;;
   backup)
     if manager_running; then
       request_action backup
     else
-      backup_now
+      start_backup_async || exit 1
     fi
     ;;
   status)

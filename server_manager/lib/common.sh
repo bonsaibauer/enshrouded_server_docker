@@ -2,7 +2,7 @@
 
 # Common helpers for Enshrouded Server Manager.
 
-MANAGER_VERSION_FILE="${MANAGER_VERSION_FILE:-${MANAGER_ROOT:-/opt/enshrouded/manager}/VERSION}"
+MANAGER_VERSION_FILE="${MANAGER_ROOT:-/opt/enshrouded/manager}/VERSION"
 MANAGER_VERSION="0.1.0"
 if [[ -f "$MANAGER_VERSION_FILE" ]]; then
   MANAGER_VERSION="$(tr -d '\r\n' <"$MANAGER_VERSION_FILE")"
@@ -73,22 +73,6 @@ log() {
       prefix="$prefix [$context]"
     fi
     printf "%s [%s] %s %s\n" "$(timestamp)" "$(level_label "$level")" "$prefix" "$message"
-  fi
-}
-
-log_no_ts() {
-  local level message
-  level="${1:-info}"
-  shift || true
-  message="$*"
-  if [ "$(level_num "$level")" -ge "$(level_num "$LOG_LEVEL")" ]; then
-    local context prefix
-    context="${LOG_CONTEXT:-server_manager}"
-    prefix="[server_manager]"
-    if [[ -n "$context" && "$context" != "server_manager" ]]; then
-      prefix="$prefix [$context]"
-    fi
-    printf "[%s] %s %s\n" "$(level_label "$level")" "$prefix" "$message"
   fi
 }
 
@@ -209,8 +193,9 @@ STEAM_APP_ID="${STEAM_APP_ID:-2278520}"
 GAME_BRANCH="${GAME_BRANCH:-public}"
 STEAMCMD_ARGS="${STEAMCMD_ARGS:-validate}"
 STEAMCMD_PATH="/home/steam/steamcmd"
-PROTON_CMD="${PROTON_CMD:-/usr/local/bin/proton}"
-WINESERVER_PATH="${WINESERVER_PATH:-/usr/local/bin/files/bin/wineserver}"
+PROTON_CMD="/usr/local/bin/proton"
+WINESERVER_PATH="/usr/local/bin/files/bin/wineserver"
+WINETRICKS="/usr/local/bin/winetricks"
 
 STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/steam/.steam/steam"
 STEAM_COMPAT_DATA_PATH="/home/steam/enshrouded/steamapps/compatdata/2278520"
@@ -221,6 +206,7 @@ PID_MANAGER_FILE="/var/run/enshrouded/enshrouded-manager.pid"
 PID_SERVER_FILE="/var/run/enshrouded/enshrouded-server.pid"
 PID_UPDATE_FILE="/var/run/enshrouded/enshrouded-updater.pid"
 PID_BACKUP_FILE="/var/run/enshrouded/enshrouded-backup.pid"
+PID_RESTART_FILE="/var/run/enshrouded/enshrouded-restart.pid"
 
 AUTO_UPDATE="${AUTO_UPDATE:-true}"
 AUTO_UPDATE_INTERVAL="${AUTO_UPDATE_INTERVAL:-1800}"

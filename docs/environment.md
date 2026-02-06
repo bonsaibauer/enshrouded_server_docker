@@ -16,7 +16,6 @@ These are the `ENV` defaults baked into `Dockerfile`. You can override them at r
 | **LANG** | Locale | "en_US.UTF-8" | Locale string |
 | **LANGUAGE** | Locale languages | "en_US:en" | Locale list |
 | **LC_ALL** | Locale override | "en_US.UTF-8" | Locale string |
-| **HOME** | Home directory | "/home/steam" | Changing affects many derived paths |
 | **STEAM_APP_ID** | Steam app id for Enshrouded | "2278520" | Must match Enshrouded server app id |
 ---
 
@@ -115,7 +114,7 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **PGID** | Group ID for `steam` user mapping | (required) | Must be numeric and not 0 |
 | **NO_COLOR** | Disable ANSI colors | unset | Set to any value to disable |
 | **LOG_LEVEL** | Log verbosity | "info" | debug / info / warn / error |
-| **LOG_CONTEXT** | Log context label | "manager" | Internal |
+| **LOG_CONTEXT** | Log context label | "server_manager" | Internal |
 | **UMASK** | Default umask | "027" | Octal string |
 | **AUTO_FIX_PERMS** | Auto-fix ownership/permissions on key dirs | true | true / false |
 | **AUTO_FIX_DIR_MODE** | chmod mode for directories when auto-fix runs | "775" | Octal string |
@@ -132,10 +131,7 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **STEAM_APP_ID** | Steam app id | "2278520" | Must match Enshrouded server |
 | **GAME_BRANCH** | Steam branch | "public" | e.g., `public`, `experimental` |
 | **STEAMCMD_ARGS** | SteamCMD args | "validate" | Passed to `app_update` |
-| **PROTON_CMD** | Proton launcher | "/usr/local/bin/proton" | |
-| **WINESERVER_PATH** | wineserver path | "/usr/local/bin/files/bin/wineserver" | |
 | **WINEDEBUG** | Wine debug flags | "-all" | Optional; set to adjust output |
-| **WINETRICKS** | winetricks path | "/usr/local/bin/winetricks" | |
 
 ---
 
@@ -169,8 +165,6 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **LOG_TAIL_LINES** | Tail lines per log file | 200 | Integer |
 | **LOG_POLL_INTERVAL** | Log file poll interval (seconds) | 2 | Integer seconds |
 | **LOG_FILE_PATTERN** | Log file glob | "*.log" | Used by `find -name` |
-| **LOG_STREAM_PID_FILE** | Log streamer PID file | "/var/run/enshrouded/enshrouded-logstream.pid" | |
-| **LOG_STREAM_TAIL_PID_FILE** | Log tail PID file | "/var/run/enshrouded/enshrouded-logtail.pid" | |
 
 ---
 
@@ -206,3 +200,6 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **RESTART_PRE_HOOK** | Command before restart | unset | Executed with `eval` |
 | **RESTART_POST_HOOK** | Command after restart | unset | Executed with `eval` |
 | **PRINT_ADMIN_PASSWORD** | Print generated admin password on first config creation | true | true / false |
+
+---
+

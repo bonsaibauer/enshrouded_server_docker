@@ -2,10 +2,10 @@
 
 # Server lifecycle helpers.
 
-ENSHROUDED_BINARY="${ENSHROUDED_BINARY:-$INSTALL_PATH/enshrouded_server.exe}"
+ENSHROUDED_BINARY="$INSTALL_PATH/enshrouded_server.exe"
 STOP_TIMEOUT="${STOP_TIMEOUT:-60}"
 
-SUPERVISOR_CONF="${SUPERVISOR_CONF:-${MANAGER_ROOT:-/opt/enshrouded/manager}/supervisord.conf}"
+SUPERVISOR_CONF="${MANAGER_ROOT:-/opt/enshrouded/manager}/supervisord.conf"
 SUPERVISOR_PID_FILE="$RUN_DIR/server-manager-supervisord.pid"
 SUPERVISOR_SOCKET="$RUN_DIR/server-manager-supervisor.sock"
 SUPERVISOR_LOG_DIR="$RUN_DIR"
@@ -19,20 +19,37 @@ supervisor_available() {
 supervisor_program_name() {
   case "$1" in
     server) echo "server-manager" ;;
+    update) echo "server-manager-update" ;;
+    backup) echo "server-manager-backup" ;;
+    restart) echo "server-manager-restart" ;;
+    syslog) echo "server-manager-syslog" ;;
     *) echo "" ;;
   esac
 }
 
+supervisor_ctl_ok() {
+  supervisorctl -c "$SUPERVISOR_CONF" status >/dev/null 2>&1
+}
+
 supervisor_running() {
   if [[ -S "$SUPERVISOR_SOCKET" ]]; then
-    return 0
+    if supervisor_ctl_ok; then
+      return 0
+    fi
+    warn "Supervisor socket present but unresponsive, cleaning up"
+    rm -f "$SUPERVISOR_SOCKET" "$SUPERVISOR_PID_FILE" 2>/dev/null || true
+    return 1
   fi
   if [[ -f "$SUPERVISOR_PID_FILE" ]]; then
     local pid
     pid="$(cat "$SUPERVISOR_PID_FILE" 2>/dev/null || true)"
     if pid_alive "$pid"; then
-      return 0
+      if supervisor_ctl_ok; then
+        return 0
+      fi
+      return 1
     fi
+    rm -f "$SUPERVISOR_PID_FILE" 2>/dev/null || true
   fi
   return 1
 }
@@ -86,6 +103,28 @@ supervisor_program_running() {
   esac
 }
 
+supervisor_program_status() {
+  local name
+  name="$1"
+  supervisor_ctl status "$name" 2>/dev/null || true
+}
+
+supervisor_program_state() {
+  local name status state
+  name="$1"
+  status="$(supervisor_program_status "$name")"
+  if [[ -z "$status" ]]; then
+    echo "UNKNOWN"
+    return
+  fi
+  state="$(echo "$status" | awk '{print $2}')"
+  if [[ -z "$state" ]]; then
+    echo "UNKNOWN"
+    return
+  fi
+  echo "$state"
+}
+
 supervisor_program_start() {
   local name
   name="$1"
@@ -97,7 +136,16 @@ supervisor_program_start() {
     warn "Start failed: $name"
     return 1
   fi
-  return 0
+  local attempt=0
+  while [[ "$attempt" -lt 20 ]]; do
+    if supervisor_program_running "$name"; then
+      return 0
+    fi
+    sleep 0.1
+    attempt=$((attempt + 1))
+  done
+  warn "Start failed: $name did not reach RUNNING"
+  return 1
 }
 
 supervisor_program_stop() {
@@ -107,19 +155,6 @@ supervisor_program_stop() {
     return 0
   fi
   supervisor_ctl stop "$name" >/dev/null 2>&1 || true
-}
-
-line_has_timestamp() {
-  local line
-  line="$1"
-  case "$line" in
-    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*Z* ) return 0 ;;
-    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\ * ) return 0 ;;
-    [0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]\ * ) return 0 ;;
-    [0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]\ * ) return 0 ;;
-    [0-9][0-9]:[0-9][0-9]:[0-9][0-9]* ) return 0 ;;
-    * ) return 1 ;;
-  esac
 }
 
 supervisor_log_streamer_start() {
@@ -185,39 +220,13 @@ find_server_pids() {
   fi
 }
 
-pid_matches_server() {
-  local pid cmd
-  pid="$1"
-  if [[ -z "$pid" || ! -r "/proc/$pid/cmdline" ]]; then
+is_server_running() {
+  if ! supervisor_available || ! supervisor_running; then
     return 1
   fi
-  cmd="$(tr '\0' ' ' </proc/"$pid"/cmdline 2>/dev/null || true)"
-  case "$cmd" in
-    *"enshrouded_server.exe"*)
-      return 0
-      ;;
-  esac
-  return 1
-}
-
-is_server_running() {
-  if supervisor_available && supervisor_running; then
-    local name
-    name="$(supervisor_program_name server)"
-    if [[ -n "$name" ]] && supervisor_program_running "$name"; then
-      return 0
-    fi
-  fi
-
-  local pid
-  pid="$(read_server_pid)"
-  if pid_alive "$pid" && pid_matches_server "$pid"; then
-    return 0
-  fi
-  if [[ -n "$pid" ]]; then
-    clear_pid "$PID_SERVER_FILE"
-  fi
-  if [[ -n "$(find_server_pids)" ]]; then
+  local name
+  name="$(supervisor_program_name server)"
+  if [[ -n "$name" ]] && supervisor_program_running "$name"; then
     return 0
   fi
   return 1
@@ -413,7 +422,7 @@ run_server_foreground() {
   export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
   export STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH"
   export WINEPREFIX="$WINEPREFIX"
-  export WINETRICKS="${WINETRICKS:-/usr/local/bin/winetricks}"
+  export WINETRICKS="/usr/local/bin/winetricks"
 
   info "Start server"
   "$PROTON_CMD" runinprefix "$ENSHROUDED_BINARY" &
@@ -444,35 +453,20 @@ start_server() {
     return 0
   fi
 
-  if supervisor_available; then
-    local name
-    name="$(supervisor_program_name server)"
-    if [[ -n "$name" ]]; then
-      supervisor_program_start "$name"
-      ok "Start complete: server online"
-      log_context_pop
-      return 0
-    fi
+  if ! supervisor_available || ! supervisor_running; then
+    fatal "Supervisor required to start server"
   fi
-
-  wait_for_server_download
-  cd "$INSTALL_PATH" || fatal "Could not cd $INSTALL_PATH"
-
-  chmod +x "$ENSHROUDED_BINARY" || true
-
-  export WINEDEBUG="${WINEDEBUG:--all}"
-  export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
-  export STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH"
-  export WINEPREFIX="$WINEPREFIX"
-  export WINETRICKS="${WINETRICKS:-/usr/local/bin/winetricks}"
-
-  info "Start server"
-  "$PROTON_CMD" runinprefix "$ENSHROUDED_BINARY" &
-  local pid=$!
-  echo "$pid" >"$PID_SERVER_FILE"
-  info "Server PID: $pid"
-  ok "Start complete: server online"
-  log_context_pop
+  local name
+  name="$(supervisor_program_name server)"
+  if [[ -z "$name" ]]; then
+    fatal "Supervisor program name missing for server"
+  fi
+  if supervisor_program_start "$name"; then
+    ok "Start complete: server online"
+    log_context_pop
+    return 0
+  fi
+  fatal "Supervisor failed to start server"
 }
 
 stop_server() {
@@ -483,60 +477,30 @@ stop_server() {
     return 0
   fi
 
-  if supervisor_available && supervisor_running; then
-    local name deadline
-    name="$(supervisor_program_name server)"
-    if [[ -n "$name" ]]; then
-      info "Stop server"
-      supervisor_program_stop "$name"
-      deadline=$(( $(date +%s) + STOP_TIMEOUT ))
-      while supervisor_program_running "$name"; do
-        if [[ "$(date +%s)" -gt "$deadline" ]]; then
-          warn "Stop timeout: waiting for shutdown"
-          break
-        fi
-        sleep 1
-      done
-      if ! is_server_running; then
-        ok "Stop complete"
-        log_context_pop
-        return 0
-      fi
-      warn "Stop incomplete: backend, falling back to direct shutdown"
-    fi
+  if ! supervisor_available || ! supervisor_running; then
+    fatal "Supervisor required to stop server"
   fi
-
-  local pid kill_signal deadline
-  pid="$(read_server_pid)"
-  kill_signal="INT"
-  deadline=$(( $(date +%s) + STOP_TIMEOUT ))
-
+  local name deadline
+  name="$(supervisor_program_name server)"
+  if [[ -z "$name" ]]; then
+    fatal "Supervisor program name missing for server"
+  fi
   info "Stop server"
-  while is_server_running; do
-    local pids
-    pids="$(find_server_pids)"
-    if [[ -n "$pids" ]]; then
-      kill -"$kill_signal" $pids 2>/dev/null || true
-    elif [[ -n "$pid" ]]; then
-      kill -"$kill_signal" "$pid" 2>/dev/null || true
-    fi
-
+  supervisor_program_stop "$name"
+  deadline=$(( $(date +%s) + STOP_TIMEOUT ))
+  while supervisor_program_running "$name"; do
     if [[ "$(date +%s)" -gt "$deadline" ]]; then
-      warn "Stop timeout: escalating from SIG$kill_signal"
-      deadline=$(( $(date +%s) + STOP_TIMEOUT ))
-      case "$kill_signal" in
-        INT) kill_signal="TERM" ;;
-        TERM) kill_signal="KILL" ;;
-        *) break ;;
-      esac
+      warn "Stop timeout: server still running"
+      break
     fi
-    sleep 3
+    sleep 1
   done
-
-  cleanup_wine
-  clear_pid "$PID_SERVER_FILE"
-  ok "Stop complete"
-  log_context_pop
+  if ! is_server_running; then
+    ok "Stop complete"
+    log_context_pop
+    return 0
+  fi
+  fatal "Stop failed: supervisor did not stop server"
 }
 
 restart_server() {
@@ -552,6 +516,25 @@ restart_server() {
   start_log_streamer || true
   restart_post_hook
   log_context_pop
+}
+
+restart_now() {
+  if [[ -f "$PID_RESTART_FILE" ]]; then
+    local prev_pid
+    prev_pid="$(cat "$PID_RESTART_FILE" 2>/dev/null || true)"
+    if pid_alive "$prev_pid"; then
+      warn "Restart already in progress (pid: $prev_pid)"
+      return 0
+    fi
+    warn "Stale restart pid file found, clearing"
+    rm -f "$PID_RESTART_FILE"
+  fi
+
+  echo "$$" >"$PID_RESTART_FILE"
+  local rc=0
+  restart_server || rc=$?
+  clear_pid "$PID_RESTART_FILE"
+  return $rc
 }
 
 cleanup_wine() {

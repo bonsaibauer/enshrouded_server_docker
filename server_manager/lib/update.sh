@@ -78,7 +78,7 @@ download_enshrouded() {
   export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
   export STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH"
   export STEAM_DIR="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
-  export WINETRICKS="${WINETRICKS:-/usr/local/bin/winetricks}"
+  export WINETRICKS="/usr/local/bin/winetricks"
 
   info "Update: downloading server via SteamCMD"
   set +e

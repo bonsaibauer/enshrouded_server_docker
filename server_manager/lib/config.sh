@@ -196,10 +196,7 @@ declare -a MANAGER_VARS=(
   STEAM_APP_ID
   GAME_BRANCH
   STEAMCMD_ARGS
-  PROTON_CMD
-  WINESERVER_PATH
   WINEDEBUG
-  WINETRICKS
   AUTO_UPDATE
   AUTO_UPDATE_INTERVAL
   AUTO_UPDATE_ON_BOOT
@@ -250,10 +247,7 @@ declare -A MANAGER_JSON_PATH=(
   [STEAM_APP_ID]=".steamAppId"
   [GAME_BRANCH]=".gameBranch"
   [STEAMCMD_ARGS]=".steamcmdArgs"
-  [PROTON_CMD]=".protonCmd"
-  [WINESERVER_PATH]=".wineserverPath"
   [WINEDEBUG]=".winedebug"
-  [WINETRICKS]=".winetricks"
   [AUTO_UPDATE]=".autoUpdate"
   [AUTO_UPDATE_INTERVAL]=".autoUpdateInterval"
   [AUTO_UPDATE_ON_BOOT]=".autoUpdateOnBoot"
@@ -577,17 +571,8 @@ manager_default_for_var() {
     STEAMCMD_ARGS)
       echo "${STEAMCMD_ARGS:-validate}"
       ;;
-    PROTON_CMD)
-      echo "${PROTON_CMD:-/usr/local/bin/proton}"
-      ;;
-    WINESERVER_PATH)
-      echo "${WINESERVER_PATH:-/usr/local/bin/files/bin/wineserver}"
-      ;;
     WINEDEBUG)
       echo "${WINEDEBUG:--all}"
-      ;;
-    WINETRICKS)
-      echo "${WINETRICKS:-/usr/local/bin/winetricks}"
       ;;
     AUTO_UPDATE)
       echo "${AUTO_UPDATE:-true}"
@@ -797,6 +782,18 @@ ensure_manager_config_file() {
   fi
 }
 
+cleanup_manager_config_paths() {
+  local file temp_file
+  file="$1"
+  temp_file="$(mktemp)"
+  if jq 'del(.protonCmd, .wineserverPath, .winetricks)' "$file" >"$temp_file"; then
+    mv "$temp_file" "$file"
+  else
+    rm -f "$temp_file"
+    fatal "Failed to update $file (jq error)"
+  fi
+}
+
 update_or_create_manager_config() {
   local file new_file
   require_cmd jq
@@ -809,6 +806,7 @@ update_or_create_manager_config() {
   if ! jq -e '.' "$file" >/dev/null 2>&1; then
     fatal "Invalid JSON in $file"
   fi
+  cleanup_manager_config_paths "$file"
 
   apply_manager_env_overrides "$file"
   load_manager_config_values "$file"
@@ -820,6 +818,7 @@ update_or_create_manager_config() {
     if ! jq -e '.' "$file" >/dev/null 2>&1; then
       fatal "Invalid JSON in $file"
     fi
+    cleanup_manager_config_paths "$file"
     MANAGER_EXPLICIT_VARS=()
     MANAGER_JSON_INVALID=()
     apply_manager_env_overrides "$file"

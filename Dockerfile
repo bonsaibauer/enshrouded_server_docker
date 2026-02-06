@@ -39,11 +39,7 @@ ENV DEBIAN_FRONTEND="noninteractive" \
     LANG="en_US.UTF-8" \
     LANGUAGE="en_US:en" \
     LC_ALL="en_US.UTF-8" \
-    HOME="/home/steam" \
-    STEAM_APP_ID="2278520" \
-    STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/steam/.steam/steam" \
-    STEAM_COMPAT_DATA_PATH="/home/steam/enshrouded/steamapps/compatdata/2278520" \
-    WINEPREFIX="/home/steam/enshrouded/steamapps/compatdata/2278520/pfx"
+    STEAM_APP_ID="2278520"
 
 # --------------------------
 # Base Tools + Locale
@@ -87,7 +83,7 @@ RUN add-apt-repository -y multiverse \
 && useradd -m steam -g steam \
 && passwd -d steam \
 && chown -R steam:steam /usr/games \
-&& ln -s /usr/games/steamcmd ${HOME}/steamcmd
+&& ln -s /usr/games/steamcmd /home/steam/steamcmd
 
 # --------------------------
 # GE-Proton (runtime)
@@ -98,11 +94,11 @@ COPY --from=proton-builder /etc/machine-id /etc/machine-id
 # --------------------------
 # Directories
 # --------------------------
-RUN mkdir -p "${HOME}/.steam" \
-&& mkdir -p "${HOME}/enshrouded" \
-&& mkdir -p "${HOME}/enshrouded/savegame" \
-&& mkdir -p "${HOME}/enshrouded/logs" \
-&& chown -R steam:steam "${HOME}"
+RUN mkdir -p "/home/steam/.steam" \
+&& mkdir -p "/home/steam/enshrouded" \
+&& mkdir -p "/home/steam/enshrouded/savegame" \
+&& mkdir -p "/home/steam/enshrouded/logs" \
+&& chown -R steam:steam "/home/steam"
 
 # --------------------------
 # Server Manager
@@ -114,8 +110,8 @@ RUN chmod +x /opt/enshrouded/manager/manager.sh /opt/enshrouded/manager/lib/*.sh
 # Prime SteamCMD
 # --------------------------
 USER steam
-RUN ${HOME}/steamcmd +quit
-WORKDIR ${HOME}
+RUN /home/steam/steamcmd +quit
+WORKDIR /home/steam
 
 # --------------------------
 # Runtime User (required for PUID/PGID mapping)
@@ -125,7 +121,7 @@ USER root
 # --------------------------
 # Volume + Port
 # --------------------------
-VOLUME ${HOME}/enshrouded
+VOLUME /home/steam/enshrouded
 EXPOSE 15637/udp
 
 # --------------------------
