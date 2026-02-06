@@ -14,20 +14,22 @@ fi
 # Colors (ASCII only)
 init_colors() {
   if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
-  C_RESET=$'\033[0m'
-  C_DIM=$'\033[2m'
-  C_RED=$'\033[31m'
-  C_GREEN=$'\033[32m'
-  C_OK=$'\033[1;32m'
-  C_YELLOW=$'\033[33m'
-else
-  C_RESET=""
-  C_DIM=""
-  C_RED=""
-  C_GREEN=""
-  C_OK=""
-  C_YELLOW=""
-fi
+    C_RESET=$'\033[0m'
+    C_DIM=$'\033[2m'
+    C_RED=$'\033[31m'
+    C_GREEN=$'\033[32m'
+    C_OK=$'\033[1;32m'
+    C_YELLOW=$'\033[33m'
+    C_PURPLE=$'\033[35m'
+  else
+    C_RESET=""
+    C_DIM=""
+    C_RED=""
+    C_GREEN=""
+    C_OK=""
+    C_YELLOW=""
+    C_PURPLE=""
+  fi
 }
 init_colors
 
@@ -46,7 +48,7 @@ level_num() {
 }
 
 timestamp() {
-  date -u "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || printf "%s" "1970-01-01T00:00:00Z"
+  date -u "+%Y-%m-%d %H:%M:%S" 2>/dev/null || printf "%s" "1970-01-01 00:00:00"
 }
 
 level_label() {

@@ -1240,7 +1240,7 @@ ensure_writable_dir() {
 
   warn "Permission check failed for: $dir"
 
-  if ! is_true "$AUTO_FIX_PERMS"; then
+  if ! is_true "${AUTO_FIX_PERMS:-}"; then
     return 1
   fi
 

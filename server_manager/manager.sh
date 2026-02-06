@@ -2,16 +2,44 @@
 BOOTSTRAP_LOG_FILE="${MANAGER_BOOTSTRAP_LOG_FILE:-/home/steam/enshrouded/manager-bootstrap.log}"
 
 bootstrap_timestamp() {
-  date -u "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || printf "%s" "1970-01-01T00:00:00Z"
+  date -u "+%Y-%m-%d %H:%M:%S" 2>/dev/null || printf "%s" "1970-01-01 00:00:00"
+}
+
+bootstrap_color_enabled() {
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    return 1
+  fi
+  [[ -t 1 ]]
+}
+
+bootstrap_format_message() {
+  local msg tag
+  msg="$*"
+  tag="[BOOT]"
+  if [[ -n "${C_PURPLE:-}" ]]; then
+    tag="${C_PURPLE}[BOOT]${C_RESET}"
+  elif bootstrap_color_enabled; then
+    local c_reset c_purple
+    c_reset=$'\033[0m'
+    c_purple=$'\033[35m'
+    tag="${c_purple}[BOOT]${c_reset}"
+  fi
+  printf "%s %s" "$tag" "$msg"
 }
 
 bootstrap_log() {
-  local msg
-  msg="$(bootstrap_timestamp) [BOOT] [server_manager] $*"
-  printf "%s\n" "$msg" >&2 || true
+  local msg formatted out
+  msg="$*"
+  formatted="$(bootstrap_format_message "$msg")"
+  if declare -F log_ts_force >/dev/null 2>&1; then
+    log_ts_force info "$formatted"
+  else
+    out="$(bootstrap_timestamp) $formatted"
+    printf "%s\n" "$out" || true
+  fi
   if [[ -n "${BOOTSTRAP_LOG_FILE:-}" ]]; then
     mkdir -p "$(dirname "$BOOTSTRAP_LOG_FILE")" 2>/dev/null || true
-    printf "%s\n" "$msg" >>"$BOOTSTRAP_LOG_FILE" 2>/dev/null || true
+    printf "%s\n" "$(bootstrap_timestamp) [BOOT] [server_manager] $msg" >>"$BOOTSTRAP_LOG_FILE" 2>/dev/null || true
   fi
 }
 
