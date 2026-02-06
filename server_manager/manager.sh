@@ -222,14 +222,12 @@ run_syslog_log_streamer_foreground() {
     if [[ -z "$line" ]]; then
       continue
     fi
-    local sev rest ts msg level
+    local sev rest msg level
     if [[ "$line" == *"|"* ]]; then
       sev="${line%%|*}"
       rest="${line#*|}"
       if [[ "$rest" == *"|"* ]]; then
-        ts="${rest%%|*}"
         msg="${rest#*|}"
-        msg="$ts $msg"
       else
         msg="$rest"
       fi
@@ -245,7 +243,7 @@ run_syslog_log_streamer_foreground() {
       *) level="info" ;;
     esac
     log_context_push "syslog"
-    log_no_ts_force "$level" "$msg"
+    log_ts_force "$level" "$msg"
     log_context_pop
   done
 }

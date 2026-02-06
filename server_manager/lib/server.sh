@@ -195,17 +195,21 @@ run_supervisor_log_streamer_foreground() {
       continue
     fi
     log_context_push "supervisor"
-    local msg
-    msg="supervisord: $line"
+    local msg clean_line
+    clean_line="$line"
+    if [[ "$clean_line" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]][0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}[[:space:]](.*)$ ]]; then
+      clean_line="${BASH_REMATCH[1]}"
+    fi
+    msg="supervisord: $clean_line"
     case "$line" in
       *" ERROR "*)
-        log_no_ts_force error "$msg"
+        log_ts_force error "$msg"
         ;;
       *" WARN "*|*" WARNING "*)
-        log_no_ts_force warn "$msg"
+        log_ts_force warn "$msg"
         ;;
       *)
-        log_no_ts_force info "$msg"
+        log_ts_force info "$msg"
         ;;
     esac
     log_context_pop
@@ -604,7 +608,7 @@ log_streamer_loop() {
           continue
         fi
         log_context_push "server-log"
-        log_no_ts_force info "$line"
+        log_ts_force info "$line"
         log_context_pop
       done &
       tail_pid=$!

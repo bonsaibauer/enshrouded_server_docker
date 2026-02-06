@@ -90,6 +90,20 @@ log_no_ts_force() {
   printf "[%s] %s %s\n" "$(level_label "$level")" "$prefix" "$message"
 }
 
+log_ts_force() {
+  local level message
+  level="${1:-info}"
+  shift || true
+  message="$*"
+  local context prefix
+  context="${LOG_CONTEXT:-server_manager}"
+  prefix="[server_manager]"
+  if [[ -n "$context" && "$context" != "server_manager" ]]; then
+    prefix="$prefix [$context]"
+  fi
+  printf "%s [%s] %s %s\n" "$(timestamp)" "$(level_label "$level")" "$prefix" "$message"
+}
+
 log_pipe() {
   local level context line prev
   level="${1:-info}"
@@ -102,7 +116,7 @@ log_pipe() {
     if [[ -z "$line" ]]; then
       continue
     fi
-    log_no_ts_force "$level" "$line"
+    log_ts_force "$level" "$line"
   done
   LOG_CONTEXT="$prev"
 }
