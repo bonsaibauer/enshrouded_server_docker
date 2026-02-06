@@ -52,7 +52,7 @@
   "userGroups": [
     {
       "name": "Admin",
-      "password": "AdminXXXXXXXX",
+      "password": null,
       "canKickBan": true,
       "canAccessInventories": true,
       "canEditWorld": true,
@@ -62,7 +62,7 @@
     },
     {
       "name": "Friend",
-      "password": "FriendXXXXXXXX",
+      "password": null,
       "canKickBan": false,
       "canAccessInventories": true,
       "canEditWorld": true,
@@ -72,7 +72,7 @@
     },
     {
       "name": "Guest",
-      "password": "GuestXXXXXXXX",
+      "password": null,
       "canKickBan": false,
       "canAccessInventories": false,
       "canEditWorld": true,
@@ -82,7 +82,7 @@
     },
     {
       "name": "Visitor",
-      "password": "VisitorXXXXXXXX",
+      "password": null,
       "canKickBan": false,
       "canAccessInventories": false,
       "canEditWorld": false,

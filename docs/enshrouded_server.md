@@ -9,7 +9,7 @@ This document includes:
 - General server settings
 - Gameplay settings (ordered as in the config file)
 - User group permissions
-- [Example enshrouded_server.json](../ressources/enshrouded_server.json)
+- [Example enshrouded_server.json](../server_manager/profiles_enshrouded/default/enshrouded_server.json)
 
 
 ---
