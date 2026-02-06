@@ -46,7 +46,7 @@ level_num() {
 }
 
 timestamp() {
-  date -u "+%Y-%m-%dT%H:%M:%SZ"
+  date -u "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || printf "%s" "1970-01-01T00:00:00Z"
 }
 
 level_label() {
@@ -60,8 +60,26 @@ level_label() {
   esac
 }
 
+log_emit() {
+  local line err_trap errexit_was_set
+  line="$1"
+  err_trap="$(trap -p ERR)"
+  trap - ERR
+  errexit_was_set=0
+  [[ $- == *e* ]] && errexit_was_set=1
+  set +e
+  printf "%s\n" "$line"
+  ((errexit_was_set)) && set -e
+  if [[ -n "$err_trap" ]]; then
+    eval "$err_trap"
+  else
+    trap - ERR
+  fi
+  return 0
+}
+
 log() {
-  local level message
+  local level message out
   level="${1:-info}"
   shift || true
   message="$*"
@@ -72,12 +90,14 @@ log() {
     if [[ -n "$context" && "$context" != "server_manager" ]]; then
       prefix="$prefix [$context]"
     fi
-    printf "%s [%s] %s %s\n" "$(timestamp)" "$(level_label "$level")" "$prefix" "$message"
+    printf -v out "%s [%s] %s %s" "$(timestamp)" "$(level_label "$level")" "$prefix" "$message"
+    log_emit "$out"
   fi
+  return 0
 }
 
 log_no_ts_force() {
-  local level message
+  local level message out
   level="${1:-info}"
   shift || true
   message="$*"
@@ -87,11 +107,13 @@ log_no_ts_force() {
   if [[ -n "$context" && "$context" != "server_manager" ]]; then
     prefix="$prefix [$context]"
   fi
-  printf "[%s] %s %s\n" "$(level_label "$level")" "$prefix" "$message"
+  printf -v out "[%s] %s %s" "$(level_label "$level")" "$prefix" "$message"
+  log_emit "$out"
+  return 0
 }
 
 log_ts_force() {
-  local level message
+  local level message out
   level="${1:-info}"
   shift || true
   message="$*"
@@ -101,7 +123,9 @@ log_ts_force() {
   if [[ -n "$context" && "$context" != "server_manager" ]]; then
     prefix="$prefix [$context]"
   fi
-  printf "%s [%s] %s %s\n" "$(timestamp)" "$(level_label "$level")" "$prefix" "$message"
+  printf -v out "%s [%s] %s %s" "$(timestamp)" "$(level_label "$level")" "$prefix" "$message"
+  log_emit "$out"
+  return 0
 }
 
 log_pipe() {
