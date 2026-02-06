@@ -2,8 +2,8 @@
 
 # Log streaming helpers.
 
-LOG_STREAM_PID_FILE="${LOG_STREAM_PID_FILE:-$RUN_DIR/enshrouded-logstream.pid}"
-LOG_STREAM_TAIL_PID_FILE="${LOG_STREAM_TAIL_PID_FILE:-$RUN_DIR/enshrouded-logtail.pid}"
+LOG_STREAM_PID_FILE="$RUN_DIR/enshrouded-logstream.pid"
+LOG_STREAM_TAIL_PID_FILE="$RUN_DIR/enshrouded-logtail.pid"
 
 get_log_dir() {
   if [[ -n "${ENSHROUDED_LOG_DIR:-}" ]]; then

@@ -56,20 +56,20 @@ init_crontab() {
 }
 
 handle_requests() {
-  if [[ -f "$REQUEST_DIR/update" ]]; then
-    rm -f "$REQUEST_DIR/update"
+  if [[ -f "$RUN_DIR/update" ]]; then
+    rm -f "$RUN_DIR/update"
     info "Processing update request"
     update_now || true
   fi
 
-  if [[ -f "$REQUEST_DIR/backup" ]]; then
-    rm -f "$REQUEST_DIR/backup"
+  if [[ -f "$RUN_DIR/backup" ]]; then
+    rm -f "$RUN_DIR/backup"
     info "Processing backup request"
     backup_now || true
   fi
 
-  if [[ -f "$REQUEST_DIR/restart" ]]; then
-    rm -f "$REQUEST_DIR/restart"
+  if [[ -f "$RUN_DIR/restart" ]]; then
+    rm -f "$RUN_DIR/restart"
     info "Processing restart request"
     restart_server || true
   fi

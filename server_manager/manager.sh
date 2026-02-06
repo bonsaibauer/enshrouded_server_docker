@@ -87,7 +87,7 @@ ensure_root_and_map_user() {
 
   if [[ -z "${PUID:-}" || -z "${PGID:-}" || ! "$PUID" =~ ^[0-9]+$ || ! "$PGID" =~ ^[0-9]+$ || "$PUID" -eq 0 || "$PGID" -eq 0 ]]; then
     local detect_path detected_uid detected_gid
-    for detect_path in "$INSTALL_PATH" "$(dirname "$CONFIG_FILE")" "$HOME_DIR"; do
+    for detect_path in "$INSTALL_PATH" "$(dirname "$CONFIG_FILE")" "$HOME"; do
       if [[ -e "$detect_path" ]]; then
         detected_uid="$(stat -c '%u' "$detect_path" 2>/dev/null || true)"
         detected_gid="$(stat -c '%g' "$detect_path" 2>/dev/null || true)"
@@ -116,7 +116,7 @@ ensure_root_and_map_user() {
   mkdir -p "$INSTALL_PATH" "$RUN_DIR"
   groupmod -o -g "$PGID" steam
   usermod -o -u "$PUID" -g "$PGID" steam
-  chown -R "$PUID:$PGID" "$HOME_DIR" 2>/dev/null || true
+  chown -R "$PUID:$PGID" "$HOME" 2>/dev/null || true
   chown -R "$PUID:$PGID" "$INSTALL_PATH" 2>/dev/null || true
   chown -R "$PUID:$PGID" "$RUN_DIR" 2>/dev/null || true
 }
@@ -144,7 +144,7 @@ setup_environment() {
 manager_cleanup() {
   stop_log_streamer
   clear_pid "$PID_MANAGER_FILE"
-  rm -f "$REQUEST_DIR/update" "$REQUEST_DIR/backup" "$REQUEST_DIR/restart" 2>/dev/null || true
+  rm -f "$RUN_DIR/update" "$RUN_DIR/backup" "$RUN_DIR/restart" 2>/dev/null || true
 }
 
 handle_shutdown() {
@@ -245,9 +245,10 @@ manager_run() {
     ensure_root_and_map_user
     preflight_permissions
     start_cron_daemon
+    local runtime_home
+    runtime_home="${HOME:-/home/steam}"
     exec runuser -u steam -p -- env \
-      HOME="$HOME_DIR" \
-      HOME_DIR="$HOME_DIR" \
+      HOME="$runtime_home" \
       INSTALL_PATH="$INSTALL_PATH" \
       CONFIG_FILE="$CONFIG_FILE" \
       STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH" \

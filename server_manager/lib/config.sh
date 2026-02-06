@@ -184,7 +184,6 @@ manager_config_path() {
 declare -a MANAGER_VARS=(
   PUID
   PGID
-  MANAGER_BIN
   NO_COLOR
   LOG_LEVEL
   LOG_CONTEXT
@@ -192,28 +191,13 @@ declare -a MANAGER_VARS=(
   AUTO_FIX_PERMS
   AUTO_FIX_DIR_MODE
   AUTO_FIX_FILE_MODE
-  HOME_DIR
-  INSTALL_PATH
-  CONFIG_FILE
-  VERSION_FILE_PATH
   SAVEFILE_NAME
-  ENSHROUDED_BINARY
   STOP_TIMEOUT
-  RUN_DIR
-  REQUEST_DIR
-  PID_MANAGER_FILE
-  PID_SERVER_FILE
-  PID_UPDATE_FILE
-  PID_BACKUP_FILE
   STEAM_APP_ID
   GAME_BRANCH
   STEAMCMD_ARGS
-  STEAMCMD_PATH
   PROTON_CMD
   WINESERVER_PATH
-  STEAM_COMPAT_CLIENT_INSTALL_PATH
-  STEAM_COMPAT_DATA_PATH
-  WINEPREFIX
   WINEDEBUG
   WINETRICKS
   AUTO_UPDATE
@@ -235,8 +219,6 @@ declare -a MANAGER_VARS=(
   LOG_TAIL_LINES
   LOG_POLL_INTERVAL
   LOG_FILE_PATTERN
-  LOG_STREAM_PID_FILE
-  LOG_STREAM_TAIL_PID_FILE
   BACKUP_DIR
   BACKUP_MAX_COUNT
   BACKUP_PRE_HOOK
@@ -256,7 +238,6 @@ declare -a MANAGER_VARS=(
 declare -A MANAGER_JSON_PATH=(
   [PUID]=".puid"
   [PGID]=".pgid"
-  [MANAGER_BIN]=".managerBin"
   [NO_COLOR]=".noColor"
   [LOG_LEVEL]=".logLevel"
   [LOG_CONTEXT]=".logContext"
@@ -264,28 +245,13 @@ declare -A MANAGER_JSON_PATH=(
   [AUTO_FIX_PERMS]=".autoFixPerms"
   [AUTO_FIX_DIR_MODE]=".autoFixDirMode"
   [AUTO_FIX_FILE_MODE]=".autoFixFileMode"
-  [HOME_DIR]=".homeDir"
-  [INSTALL_PATH]=".installPath"
-  [CONFIG_FILE]=".configFile"
-  [VERSION_FILE_PATH]=".versionFilePath"
   [SAVEFILE_NAME]=".savefileName"
-  [ENSHROUDED_BINARY]=".enshroudedBinary"
   [STOP_TIMEOUT]=".stopTimeout"
-  [RUN_DIR]=".runDir"
-  [REQUEST_DIR]=".requestDir"
-  [PID_MANAGER_FILE]=".pidManagerFile"
-  [PID_SERVER_FILE]=".pidServerFile"
-  [PID_UPDATE_FILE]=".pidUpdateFile"
-  [PID_BACKUP_FILE]=".pidBackupFile"
   [STEAM_APP_ID]=".steamAppId"
   [GAME_BRANCH]=".gameBranch"
   [STEAMCMD_ARGS]=".steamcmdArgs"
-  [STEAMCMD_PATH]=".steamcmdPath"
   [PROTON_CMD]=".protonCmd"
   [WINESERVER_PATH]=".wineserverPath"
-  [STEAM_COMPAT_CLIENT_INSTALL_PATH]=".steamCompatClientInstallPath"
-  [STEAM_COMPAT_DATA_PATH]=".steamCompatDataPath"
-  [WINEPREFIX]=".wineprefix"
   [WINEDEBUG]=".winedebug"
   [WINETRICKS]=".winetricks"
   [AUTO_UPDATE]=".autoUpdate"
@@ -307,8 +273,6 @@ declare -A MANAGER_JSON_PATH=(
   [LOG_TAIL_LINES]=".logTailLines"
   [LOG_POLL_INTERVAL]=".logPollInterval"
   [LOG_FILE_PATTERN]=".logFilePattern"
-  [LOG_STREAM_PID_FILE]=".logStreamPidFile"
-  [LOG_STREAM_TAIL_PID_FILE]=".logStreamTailPidFile"
   [BACKUP_DIR]=".backupDir"
   [BACKUP_MAX_COUNT]=".backupMaxCount"
   [BACKUP_PRE_HOOK]=".backupPreHook"
@@ -577,9 +541,6 @@ manager_default_for_var() {
     PUID|PGID)
       echo ""
       ;;
-    MANAGER_BIN)
-      echo "${MANAGER_BIN:-}"
-      ;;
     NO_COLOR)
       echo "${NO_COLOR:-}"
       ;;
@@ -601,60 +562,11 @@ manager_default_for_var() {
     AUTO_FIX_FILE_MODE)
       echo "${AUTO_FIX_FILE_MODE:-664}"
       ;;
-    HOME_DIR)
-      if [[ -n "${HOME_DIR:-}" ]]; then
-        echo "$HOME_DIR"
-      else
-        echo "${HOME:-/home/steam}"
-      fi
-      ;;
-    INSTALL_PATH)
-      home="${HOME_DIR:-${HOME:-/home/steam}}"
-      echo "$home/enshrouded"
-      ;;
-    CONFIG_FILE)
-      home="${HOME_DIR:-${HOME:-/home/steam}}"
-      install="${INSTALL_PATH:-$home/enshrouded}"
-      echo "$install/enshrouded_server.json"
-      ;;
-    VERSION_FILE_PATH)
-      home="${HOME_DIR:-${HOME:-/home/steam}}"
-      install="${INSTALL_PATH:-$home/enshrouded}"
-      echo "$install/.current_version"
-      ;;
     SAVEFILE_NAME)
       echo "${SAVEFILE_NAME:-3ad85aea}"
       ;;
-    ENSHROUDED_BINARY)
-      home="${HOME_DIR:-${HOME:-/home/steam}}"
-      install="${INSTALL_PATH:-$home/enshrouded}"
-      echo "$install/enshrouded_server.exe"
-      ;;
     STOP_TIMEOUT)
       echo "${STOP_TIMEOUT:-60}"
-      ;;
-    RUN_DIR)
-      echo "${RUN_DIR:-/var/run/enshrouded}"
-      ;;
-    REQUEST_DIR)
-      run_dir="${RUN_DIR:-/var/run/enshrouded}"
-      echo "$run_dir/requests"
-      ;;
-    PID_MANAGER_FILE)
-      run_dir="${RUN_DIR:-/var/run/enshrouded}"
-      echo "$run_dir/enshrouded-manager.pid"
-      ;;
-    PID_SERVER_FILE)
-      run_dir="${RUN_DIR:-/var/run/enshrouded}"
-      echo "$run_dir/enshrouded-server.pid"
-      ;;
-    PID_UPDATE_FILE)
-      run_dir="${RUN_DIR:-/var/run/enshrouded}"
-      echo "$run_dir/enshrouded-updater.pid"
-      ;;
-    PID_BACKUP_FILE)
-      run_dir="${RUN_DIR:-/var/run/enshrouded}"
-      echo "$run_dir/enshrouded-backup.pid"
       ;;
     STEAM_APP_ID)
       echo "${STEAM_APP_ID:-2278520}"
@@ -665,32 +577,11 @@ manager_default_for_var() {
     STEAMCMD_ARGS)
       echo "${STEAMCMD_ARGS:-validate}"
       ;;
-    STEAMCMD_PATH)
-      home="${HOME_DIR:-${HOME:-/home/steam}}"
-      echo "$home/steamcmd"
-      ;;
     PROTON_CMD)
       echo "${PROTON_CMD:-/usr/local/bin/proton}"
       ;;
     WINESERVER_PATH)
       echo "${WINESERVER_PATH:-/usr/local/bin/files/bin/wineserver}"
-      ;;
-    STEAM_COMPAT_CLIENT_INSTALL_PATH)
-      home="${HOME_DIR:-${HOME:-/home/steam}}"
-      echo "$home/.steam/steam"
-      ;;
-    STEAM_COMPAT_DATA_PATH)
-      home="${HOME_DIR:-${HOME:-/home/steam}}"
-      install="${INSTALL_PATH:-$home/enshrouded}"
-      app_id="${STEAM_APP_ID:-2278520}"
-      echo "$install/steamapps/compatdata/$app_id"
-      ;;
-    WINEPREFIX)
-      home="${HOME_DIR:-${HOME:-/home/steam}}"
-      install="${INSTALL_PATH:-$home/enshrouded}"
-      app_id="${STEAM_APP_ID:-2278520}"
-      compat="${STEAM_COMPAT_DATA_PATH:-$install/steamapps/compatdata/$app_id}"
-      echo "$compat/pfx"
       ;;
     WINEDEBUG)
       echo "${WINEDEBUG:--all}"
@@ -754,14 +645,6 @@ manager_default_for_var() {
       ;;
     LOG_FILE_PATTERN)
       echo "${LOG_FILE_PATTERN:-*.log}"
-      ;;
-    LOG_STREAM_PID_FILE)
-      run_dir="${RUN_DIR:-/var/run/enshrouded}"
-      echo "$run_dir/enshrouded-logstream.pid"
-      ;;
-    LOG_STREAM_TAIL_PID_FILE)
-      run_dir="${RUN_DIR:-/var/run/enshrouded}"
-      echo "$run_dir/enshrouded-logtail.pid"
       ;;
     BACKUP_DIR)
       echo "${BACKUP_DIR:-backups}"
@@ -1285,7 +1168,7 @@ verify_variables() {
 }
 
 ensure_base_dirs() {
-  mkdir -p "$INSTALL_PATH" "$RUN_DIR" "$REQUEST_DIR"
+  mkdir -p "$INSTALL_PATH" "$RUN_DIR"
 }
 
 resolve_save_dir() {
@@ -1357,7 +1240,6 @@ preflight_permissions() {
 
   ensure_writable_dir "$INSTALL_PATH" || true
   ensure_writable_dir "$RUN_DIR" || true
-  ensure_writable_dir "$REQUEST_DIR" || true
   ensure_writable_dir "$save_dir" || true
   ensure_writable_dir "$log_dir" || true
   ensure_writable_dir "$backup_dir" || true
@@ -1374,7 +1256,7 @@ create_folders() {
 
 ensure_steam_paths() {
   mkdir -p "$WINEPREFIX" "$STEAM_COMPAT_DATA_PATH" "$STEAM_COMPAT_CLIENT_INSTALL_PATH"
-  mkdir -p "$HOME_DIR/.steam" "$HOME_DIR/.steam/sdk32" "$HOME_DIR/.steam/sdk64"
+  mkdir -p "${HOME:-/home/steam}/.steam" "${HOME:-/home/steam}/.steam/sdk32" "${HOME:-/home/steam}/.steam/sdk64"
 }
 
 create_default_config() {

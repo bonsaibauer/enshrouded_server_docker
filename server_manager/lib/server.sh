@@ -13,17 +13,35 @@ read_server_pid() {
 
 find_server_pids() {
   if command -v pgrep >/dev/null 2>&1; then
-    pgrep -f '[e]nshrouded_server'
+    pgrep -f '[e]nshrouded_server\.exe'
   else
-    ps axww | grep '[e]nshrouded_server' | awk '{print $1}'
+    ps axww | grep '[e]nshrouded_server\.exe' | awk '{print $1}'
   fi
+}
+
+pid_matches_server() {
+  local pid cmd
+  pid="$1"
+  if [[ -z "$pid" || ! -r "/proc/$pid/cmdline" ]]; then
+    return 1
+  fi
+  cmd="$(tr '\0' ' ' </proc/"$pid"/cmdline 2>/dev/null || true)"
+  case "$cmd" in
+    *"enshrouded_server.exe"*)
+      return 0
+      ;;
+  esac
+  return 1
 }
 
 is_server_running() {
   local pid
   pid="$(read_server_pid)"
-  if pid_alive "$pid"; then
+  if pid_alive "$pid" && pid_matches_server "$pid"; then
     return 0
+  fi
+  if [[ -n "$pid" ]]; then
+    clear_pid "$PID_SERVER_FILE"
   fi
   if [[ -n "$(find_server_pids)" ]]; then
     return 0

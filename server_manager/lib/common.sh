@@ -157,29 +157,28 @@ generate_password() {
 }
 
 # Defaults
-HOME_DIR="${HOME_DIR:-${HOME:-/home/steam}}"
-INSTALL_PATH="${INSTALL_PATH:-$HOME_DIR/enshrouded}"
-CONFIG_FILE="${CONFIG_FILE:-$INSTALL_PATH/enshrouded_server.json}"
-VERSION_FILE_PATH="${VERSION_FILE_PATH:-$INSTALL_PATH/.current_version}"
+HOME="/home/steam"
+INSTALL_PATH="/home/steam/enshrouded"
+CONFIG_FILE="/home/steam/enshrouded/enshrouded_server.json"
+VERSION_FILE_PATH="/home/steam/enshrouded/.current_version"
 SAVEFILE_NAME="${SAVEFILE_NAME:-3ad85aea}"
 
 STEAM_APP_ID="${STEAM_APP_ID:-2278520}"
 GAME_BRANCH="${GAME_BRANCH:-public}"
 STEAMCMD_ARGS="${STEAMCMD_ARGS:-validate}"
-STEAMCMD_PATH="${STEAMCMD_PATH:-$HOME_DIR/steamcmd}"
+STEAMCMD_PATH="/home/steam/steamcmd"
 PROTON_CMD="${PROTON_CMD:-/usr/local/bin/proton}"
 WINESERVER_PATH="${WINESERVER_PATH:-/usr/local/bin/files/bin/wineserver}"
 
-STEAM_COMPAT_CLIENT_INSTALL_PATH="${STEAM_COMPAT_CLIENT_INSTALL_PATH:-$HOME_DIR/.steam/steam}"
-STEAM_COMPAT_DATA_PATH="${STEAM_COMPAT_DATA_PATH:-$INSTALL_PATH/steamapps/compatdata/$STEAM_APP_ID}"
-WINEPREFIX="${WINEPREFIX:-$STEAM_COMPAT_DATA_PATH/pfx}"
+STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/steam/.steam/steam"
+STEAM_COMPAT_DATA_PATH="/home/steam/enshrouded/steamapps/compatdata/2278520"
+WINEPREFIX="/home/steam/enshrouded/steamapps/compatdata/2278520/pfx"
 
-RUN_DIR="${RUN_DIR:-/var/run/enshrouded}"
-REQUEST_DIR="${REQUEST_DIR:-$RUN_DIR/requests}"
-PID_MANAGER_FILE="${PID_MANAGER_FILE:-$RUN_DIR/enshrouded-manager.pid}"
-PID_SERVER_FILE="${PID_SERVER_FILE:-$RUN_DIR/enshrouded-server.pid}"
-PID_UPDATE_FILE="${PID_UPDATE_FILE:-$RUN_DIR/enshrouded-updater.pid}"
-PID_BACKUP_FILE="${PID_BACKUP_FILE:-$RUN_DIR/enshrouded-backup.pid}"
+RUN_DIR="/var/run/enshrouded"
+PID_MANAGER_FILE="/var/run/enshrouded/enshrouded-manager.pid"
+PID_SERVER_FILE="/var/run/enshrouded/enshrouded-server.pid"
+PID_UPDATE_FILE="/var/run/enshrouded/enshrouded-updater.pid"
+PID_BACKUP_FILE="/var/run/enshrouded/enshrouded-backup.pid"
 
 AUTO_UPDATE="${AUTO_UPDATE:-true}"
 AUTO_UPDATE_INTERVAL="${AUTO_UPDATE_INTERVAL:-1800}"
@@ -208,7 +207,7 @@ BACKUP_MAX_COUNT="${BACKUP_MAX_COUNT:-0}"
 PRINT_ADMIN_PASSWORD="${PRINT_ADMIN_PASSWORD:-true}"
 
 ensure_run_dirs() {
-  mkdir -p "$RUN_DIR" "$REQUEST_DIR"
+  mkdir -p "$RUN_DIR"
 }
 
 write_pid() {
@@ -246,5 +245,5 @@ request_action() {
   local action
   action="$1"
   ensure_run_dirs
-  echo "$(timestamp)" >"$REQUEST_DIR/$action"
+  echo "$(timestamp)" >"$RUN_DIR/$action"
 }

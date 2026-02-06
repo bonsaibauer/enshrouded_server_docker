@@ -18,10 +18,6 @@ These are the `ENV` defaults baked into `Dockerfile`. You can override them at r
 | **LC_ALL** | Locale override | "en_US.UTF-8" | Locale string |
 | **HOME** | Home directory | "/home/steam" | Changing affects many derived paths |
 | **STEAM_APP_ID** | Steam app id for Enshrouded | "2278520" | Must match Enshrouded server app id |
-| **STEAM_COMPAT_CLIENT_INSTALL_PATH** | Steam client path | "/home/steam/.steam/steam" | Used by Proton/SteamCMD |
-| **STEAM_COMPAT_DATA_PATH** | Proton compat data | "/home/steam/enshrouded/steamapps/compatdata/2278520" | Used by Proton |
-| **WINEPREFIX** | Wine prefix | "/home/steam/enshrouded/steamapps/compatdata/2278520/pfx" | Used by Proton |
-
 ---
 
 ## Server Manager Core (ENSHROUDED_)
@@ -111,13 +107,12 @@ These map to `gameSettings` and `gameSettingsPreset` in the JSON. Values are onl
 
 ## Server Manager Runtime
 
-The manager also reads (and creates if missing) `server_manager.json` next to `enshrouded_server.json`. Values are applied in this order: ENV > `server_manager.json` > defaults. Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `server_manager.json`; if they are missing, the manager tries to detect them from `INSTALL_PATH`, the config directory, or `HOME_DIR`.
+The manager also reads (and creates if missing) `server_manager.json` next to `enshrouded_server.json`. Values are applied in this order: ENV > `server_manager.json` > defaults. Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `server_manager.json`; if they are missing, the manager tries to detect them from `INSTALL_PATH`, the config directory, or `HOME`.
 
 | Variable | Description | Example / Default Value | Options / Notes |
 |---------|-------------|--------------------------|-----------------|
 | **PUID** | User ID for `steam` user mapping | (required) | Must be numeric and not 0 |
 | **PGID** | Group ID for `steam` user mapping | (required) | Must be numeric and not 0 |
-| **MANAGER_BIN** | Path to manager script | "/opt/enshrouded/manager/manager.sh" | Used for cron commands |
 | **NO_COLOR** | Disable ANSI colors | unset | Set to any value to disable |
 | **LOG_LEVEL** | Log verbosity | "info" | debug / info / warn / error |
 | **LOG_CONTEXT** | Log context label | "manager" | Internal |
@@ -125,19 +120,8 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **AUTO_FIX_PERMS** | Auto-fix ownership/permissions on key dirs | true | true / false |
 | **AUTO_FIX_DIR_MODE** | chmod mode for directories when auto-fix runs | "775" | Octal string |
 | **AUTO_FIX_FILE_MODE** | chmod mode for files when auto-fix runs | "664" | Octal string |
-| **HOME_DIR** | Base home path | "/home/steam" | Defaults to `HOME` |
-| **INSTALL_PATH** | Server install path | "/home/steam/enshrouded" | Used for binaries/config |
-| **CONFIG_FILE** | JSON config path | "/home/steam/enshrouded/enshrouded_server.json" | |
-| **VERSION_FILE_PATH** | Version file path | "/home/steam/enshrouded/.current_version" | |
 | **SAVEFILE_NAME** | Savefile base name | "3ad85aea" | Used for backups |
-| **ENSHROUDED_BINARY** | Server binary path | "/home/steam/enshrouded/enshrouded_server.exe" | |
 | **STOP_TIMEOUT** | Shutdown timeout (seconds) | 60 | Integer seconds |
-| **RUN_DIR** | Runtime directory | "/var/run/enshrouded" | Must be writable |
-| **REQUEST_DIR** | Request queue dir | "/var/run/enshrouded/requests" | |
-| **PID_MANAGER_FILE** | Manager PID file | "/var/run/enshrouded/enshrouded-manager.pid" | |
-| **PID_SERVER_FILE** | Server PID file | "/var/run/enshrouded/enshrouded-server.pid" | |
-| **PID_UPDATE_FILE** | Update PID file | "/var/run/enshrouded/enshrouded-updater.pid" | |
-| **PID_BACKUP_FILE** | Backup PID file | "/var/run/enshrouded/enshrouded-backup.pid" | |
 
 ---
 
@@ -148,12 +132,8 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **STEAM_APP_ID** | Steam app id | "2278520" | Must match Enshrouded server |
 | **GAME_BRANCH** | Steam branch | "public" | e.g., `public`, `experimental` |
 | **STEAMCMD_ARGS** | SteamCMD args | "validate" | Passed to `app_update` |
-| **STEAMCMD_PATH** | steamcmd path | "/home/steam/steamcmd" | |
 | **PROTON_CMD** | Proton launcher | "/usr/local/bin/proton" | |
 | **WINESERVER_PATH** | wineserver path | "/usr/local/bin/files/bin/wineserver" | |
-| **STEAM_COMPAT_CLIENT_INSTALL_PATH** | Steam client path | "/home/steam/.steam/steam" | |
-| **STEAM_COMPAT_DATA_PATH** | Proton compat data path | "/home/steam/enshrouded/steamapps/compatdata/2278520" | |
-| **WINEPREFIX** | Wine prefix | "/home/steam/enshrouded/steamapps/compatdata/2278520/pfx" | |
 | **WINEDEBUG** | Wine debug flags | "-all" | Optional; set to adjust output |
 | **WINETRICKS** | winetricks path | "/usr/local/bin/winetricks" | |
 

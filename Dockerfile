@@ -41,9 +41,9 @@ ENV DEBIAN_FRONTEND="noninteractive" \
     LC_ALL="en_US.UTF-8" \
     HOME="/home/steam" \
     STEAM_APP_ID="2278520" \
-    STEAM_COMPAT_CLIENT_INSTALL_PATH="${HOME}/.steam/steam" \
-    STEAM_COMPAT_DATA_PATH="${HOME}/enshrouded/steamapps/compatdata/2278520" \
-    WINEPREFIX="${HOME}/enshrouded/steamapps/compatdata/2278520/pfx"
+    STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/steam/.steam/steam" \
+    STEAM_COMPAT_DATA_PATH="/home/steam/enshrouded/steamapps/compatdata/2278520" \
+    WINEPREFIX="/home/steam/enshrouded/steamapps/compatdata/2278520/pfx"
 
 # --------------------------
 # Base Tools + Locale
