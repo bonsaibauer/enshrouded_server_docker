@@ -114,18 +114,25 @@ These map to `gameSettings` and `gameSettingsPreset` in the JSON. Values are onl
 
 ## Server Manager Runtime
 
-The manager also reads (and creates if missing) `server_manager.json` next to `enshrouded_server.json`. Values are applied in this order: ENV > `server_manager.json` > defaults. Defaults come from the `default` profile applied at first creation (see `docs/server_manager_profiles.md`). Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `server_manager.json`; if they are missing, the manager tries to detect them from `INSTALL_PATH`, the config directory, or `HOME`.
+The manager reads (and creates if missing) `/server_manager/server_manager.json`. This file is the single source of truth and is always editable. On startup, the selected profile file from `/profile/<name>/server_manager.json` is copied to `/server_manager/server_manager.json` if the config is missing or a stub. Values are applied in this order: ENV > `/server_manager/server_manager.json` > defaults. Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `/server_manager/server_manager.json`; if they are missing, the manager tries to detect them from `INSTALL_PATH`, the config directory, or `HOME`.
+
+Server Manager data is stored under `/server_manager/` in the mounted volume:
+- `/server_manager/server_manager.json` (effective config, always edit this file)
+- `/server_manager/manager-bootstrap.log` (early bootstrap log)
+- `/server_manager/run/` (runtime files, PID files, supervisor socket/logs)
+
+Profile files are stored at `/profile/<name>/server_manager.json`.
 
 | Variable | Description | Example / Default Value | Options / Notes |
 |---------|-------------|--------------------------|-----------------| 
-| **MANAGER_PROFILE** | Profile used on first creation of `server_manager.json` | "default" | Only applied when the file is created for the first time; ignored afterwards (see `docs/server_manager_profiles.md`) |
+| **MANAGER_PROFILE** | Profile used to seed `/server_manager/server_manager.json` | "default" | The full profile file is copied when the config is missing or a stub; afterwards the config remains the source of truth (see `docs/server_manager_profiles.md`) |
 | **PUID** | User ID for `steam` user mapping | (required) | Must be numeric and not 0 |
 | **PGID** | Group ID for `steam` user mapping | (required) | Must be numeric and not 0 |
 | **NO_COLOR** | Disable ANSI colors | unset | Set to any value to disable |
 | **LOG_LEVEL** | Log verbosity | "info" | debug / info / warn / error |
 | **LOG_CONTEXT** | Log context label | "server_manager" | Internal |
 | **UMASK** | Default umask | "027" | Octal string |
-| **AUTO_FIX_PERMS** | Auto-fix ownership/permissions on key dirs | true | true / false |
+| **AUTO_FIX_PERMS** | Auto-fix ownership/permissions on key dirs | true | Default-on even when unset; set to `false` to disable (and it will be logged) |
 | **AUTO_FIX_DIR_MODE** | chmod mode for directories when auto-fix runs | "775" | Octal string |
 | **AUTO_FIX_FILE_MODE** | chmod mode for files when auto-fix runs | "664" | Octal string |
 | **SAVEFILE_NAME** | Savefile base name | "3ad85aea" | Used for backups |

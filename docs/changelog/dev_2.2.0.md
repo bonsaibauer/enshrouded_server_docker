@@ -81,13 +81,13 @@ The major shift is the introduction of a **server manager** under `server_manage
 ### 2.7 Cron Scheduling & Requests
 
 - **Cron scheduling** for updates, backups, and restarts is written into crontab and triggers `supervisorctl` jobs (`server-manager-update/backup/restart`). 【F:server_manager/manager.sh†L304-L352】
-- **Request queue** via files (`update`/`backup`/`restart`) under `/var/run/enshrouded` is processed by the running manager loop. 【F:server_manager/manager.sh†L486-L503】【F:server_manager/lib/common.sh†L269-L342】
+- **Request queue** via files (`update`/`backup`/`restart`) under `/server_manager/run` is processed by the running manager loop. 【F:server_manager/manager.sh†L486-L503】【F:server_manager/lib/common.sh†L269-L342】
 
 **Detail:** Cron only starts if schedules are set and cron is available; output is routed to PID1 stdout/stderr via `/proc/1/fd/*`. 【F:server_manager/manager.sh†L304-L352】
 
 ### 2.8 Configuration Management (JSON + ENV)
 
-- The manager manages both `enshrouded_server.json` and **`server_manager.json`** (manager-specific config). 【F:server_manager/lib/config.sh†L234-L352】【F:server_manager/lib/config.sh†L800-L872】
+- The manager manages both `enshrouded_server.json` and **`/server_manager/server_manager.json`** (manager-specific config, single source of truth). 【F:server_manager/lib/config.sh†L234-L352】【F:server_manager/lib/config.sh†L800-L872】
 - ENV overrides JSON with validation; invalid values are warned and ignored. 【F:server_manager/lib/config.sh†L352-L444】【F:server_manager/lib/config.sh†L800-L872】
 - **User groups** and **game settings** are fully configurable via ENV with validation, defaults, and warnings. 【F:server_manager/lib/config.sh†L1043-L1364】【F:server_manager/lib/config.sh†L1366-L1628】
 - On first creation, `enshrouded_server.json` is generated from the selected profile, `bans` is ensured, and file permissions are set to `600`. 【F:server_manager/lib/config.sh†L1292-L1321】
@@ -97,8 +97,8 @@ The major shift is the introduction of a **server manager** under `server_manage
 
 ### 2.9 Profile-Based Defaults (Manager + Enshrouded)
 
-- The manager supports **profile-based initial config**: `EN_PROFILE` selects the `enshrouded_server.json` template and `MANAGER_PROFILE` selects the `server_manager.json` defaults; invalid names fall back to `default`. 【F:server_manager/lib/config.sh†L79-L234】
-- Profiles are applied **only when the config file is created**; subsequent runs keep existing JSON and apply ENV overrides and normal defaults. 【F:server_manager/lib/config.sh†L810-L862】【F:server_manager/lib/config.sh†L1292-L1321】
+- The manager supports **profile-based initial config**: `EN_PROFILE` selects the `enshrouded_server.json` template and `MANAGER_PROFILE` selects the manager profile copied to `/server_manager/server_manager.json` when missing or a stub; invalid names fall back to `default`. 【F:server_manager/lib/config.sh†L79-L234】【F:server_manager/lib/config.sh†L810-L862】
+- Profiles are copied **only when the config is missing or a stub**; subsequent runs keep existing JSON and apply ENV overrides and normal defaults. 【F:server_manager/lib/config.sh†L810-L862】【F:server_manager/lib/config.sh†L1292-L1321】
 - **Shipped profiles** include a default Enshrouded server profile and manager profiles `default.json` and `manual.json` (manual disables automation and cron scheduling). 【F:server_manager/profiles_enshrouded/default/enshrouded_server.json†L1-L95】【F:server_manager/profiles/default.json†L1-L49】【F:server_manager/profiles/manual.json†L1-L49】
 
 ### 2.10 Supervisor, Cron Jobs & Syslog Streaming
@@ -109,14 +109,14 @@ The major shift is the introduction of a **server manager** under `server_manage
 
 ### 2.11 Permissions, User Mapping & Preflight Checks
 
-- `PUID`/`PGID` are required and used to map the `steam` user and fix ownership on key directories (`HOME`, `INSTALL_PATH`, `RUN_DIR`). 【F:server_manager/manager.sh†L112-L128】
-- Preflight checks ensure install/save/log/backup paths are writable and can auto-fix ownership/modes via `AUTO_FIX_PERMS`, `AUTO_FIX_DIR_MODE`, `AUTO_FIX_FILE_MODE`. 【F:server_manager/lib/config.sh†L1228-L1276】
+- `PUID`/`PGID` are required and used to map the `steam` user for permission checks. 【F:server_manager/manager.sh†L112-L128】
+- Preflight checks ensure install/save/log/backup plus `/server_manager` paths are writable and can auto-fix ownership/modes via `AUTO_FIX_PERMS`, `AUTO_FIX_DIR_MODE`, `AUTO_FIX_FILE_MODE` (default-on). 【F:server_manager/lib/config.sh†L1228-L1276】
 - `UMASK` is applied during setup to standardize new file modes. 【F:server_manager/lib/common.sh†L204-L208】【F:server_manager/manager.sh†L131-L148】
 
 ### 2.12 Status, Requests & Concurrency
 
 - `status` summarizes manager/server/supervisor/job states, uptime, players, and current version. 【F:server_manager/manager.sh†L520-L575】
-- PID files under `/var/run/enshrouded` prevent overlapping actions, and request files (`update`/`backup`/`restart`) trigger async jobs. 【F:server_manager/lib/common.sh†L269-L304】【F:server_manager/manager.sh†L470-L503】
+- PID files under `/server_manager/run` prevent overlapping actions, and request files (`update`/`backup`/`restart`) trigger async jobs. 【F:server_manager/lib/common.sh†L269-L304】【F:server_manager/manager.sh†L470-L503】
 
 ---
 
@@ -126,12 +126,12 @@ With the server manager, the project now exposes a **much broader standardized E
 
 ### 3.1 Profile Selection (EN_PROFILE / MANAGER_PROFILE)
 
-- New profile selectors: `EN_PROFILE` (Enshrouded defaults) and `MANAGER_PROFILE` (manager defaults) are applied only on first creation of their respective JSON files. 【F:docs/environment.md†L22-L27】【F:docs/environment.md†L115-L121】【F:server_manager/lib/config.sh†L79-L234】【F:server_manager/lib/config.sh†L810-L862】【F:server_manager/lib/config.sh†L1292-L1321】
+- New profile selectors: `EN_PROFILE` (Enshrouded defaults) and `MANAGER_PROFILE` (manager defaults) are copied into their JSON files when missing or stubbed. 【F:docs/environment.md†L22-L27】【F:docs/environment.md†L115-L121】【F:server_manager/lib/config.sh†L79-L234】【F:server_manager/lib/config.sh†L810-L862】【F:server_manager/lib/config.sh†L1292-L1321】
 
 ### 3.2 Manager Core Variables
 
 - Required UID/GID mapping: **`PUID`** and **`PGID`**, both validated and mandatory. 【F:server_manager/manager.sh†L112-L119】【F:docs/environment.md†L121-L123】
-- Paths/runtime: fixed under `/home/steam` and `/var/run/enshrouded`. 【F:server_manager/lib/common.sh†L249-L274】
+- Paths/runtime: fixed under `/home/steam` and `/server_manager` (`/server_manager/run` for runtime files). 【F:server_manager/lib/common.sh†L249-L274】
 - Logging & formatting: `LOG_LEVEL`, `LOG_CONTEXT`, `NO_COLOR`, `UMASK`. 【F:server_manager/lib/common.sh†L34-L105】【F:docs/environment.md†L124-L127】
 - Permissions & shutdown: `AUTO_FIX_PERMS`, `AUTO_FIX_DIR_MODE`, `AUTO_FIX_FILE_MODE`, `STOP_TIMEOUT`. 【F:docs/environment.md†L128-L133】【F:server_manager/lib/config.sh†L1228-L1276】
 

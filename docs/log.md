@@ -17,8 +17,9 @@
 | `<INSTALL_PATH>/logs` (default) | Enshrouded server | Used as log directory if no override is set | `INSTALL_PATH` defaults to `/home/steam/enshrouded`. |
 | `<ENSHROUDED_LOG_DIR>` | Enshrouded server | Overrides log directory when set | Can be absolute or relative to `INSTALL_PATH`. |
 | `<logDirectory>` from `enshrouded_server.json` | Enshrouded server | Used when `ENSHROUDED_LOG_DIR` is not set | Default is `./logs`. |
-| `/var/run/enshrouded/server-manager-supervisord.log` | supervisord | Streamed by supervisor logstream | Fixed path. |
-| `/var/run/enshrouded/server-manager-syslog.log` | rsyslog | Streamed by syslog logstream | Fixed path; created only if `rsyslogd` is available. |
+| `/server_manager/manager-bootstrap.log` | Server Manager bootstrap | Early bootstrap logging before supervisor starts | Stored in the mounted volume. |
+| `/server_manager/run/server-manager-supervisord.log` | supervisord | Streamed by supervisor logstream | Fixed path. |
+| `/server_manager/run/server-manager-syslog.log` | rsyslog | Streamed by syslog logstream | Fixed path; created only if `rsyslogd` is available. |
 
 ## Logging Settings
 | Setting | Default | Scope | Detailed behavior |

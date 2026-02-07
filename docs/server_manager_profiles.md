@@ -1,20 +1,23 @@
 # Server Manager Profiles
 
-Profiles define the initial defaults that are written to `server_manager.json` when it is created for the first time. After creation, profiles are not re-applied; runtime precedence is ENV > `server_manager.json` > defaults.
+Profiles define the full Server Manager configuration. On startup, the selected profile file is copied to `/server_manager/server_manager.json` if the config is missing or a stub. After that, `/server_manager/server_manager.json` remains the source of truth; runtime precedence is ENV > `/server_manager/server_manager.json` > defaults. The manager always writes a full, effective configuration there (stubs are replaced).
 
 Profile selection:
 - `MANAGER_PROFILE` (ENV) if set and valid
 - Otherwise `default`
 
 Profile files (full `server_manager.json` shape):
-- `default`: `../server_manager/profiles/default.json`
-- `manual`: `../server_manager/profiles/manual.json`
+- Runtime profiles live at `/profile/<name>/server_manager.json`.
+- Template files shipped in the image:
+  - `default`: `../server_manager/profiles/default.json`
+  - `manual`: `../server_manager/profiles/manual.json`
 
 ## Default Profile
 
 This profile defines the full default set of Server Manager values and acts as the baseline for comparisons.
 
-JSON: `../server_manager/profiles/default.json`
+Template JSON: `../server_manager/profiles/default.json`  
+Runtime path: `/profile/default/server_manager.json`
 
 Full settings:
 | Setting | Value | Notes |
@@ -63,7 +66,8 @@ Full settings:
 
 This profile disables automation and scheduling, but still defines the full Server Manager config for easier manual editing.
 
-JSON: `../server_manager/profiles/manual.json`
+Template JSON: `../server_manager/profiles/manual.json`  
+Runtime path: `/profile/manual/server_manager.json`
 
 Key differences to `default`:
 | Setting | Value | Notes |

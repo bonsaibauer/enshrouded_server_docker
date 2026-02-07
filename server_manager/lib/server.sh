@@ -204,12 +204,15 @@ run_supervisor_log_streamer_foreground() {
     if [[ -z "$line" ]]; then
       continue
     fi
-    log_context_push "supervisor"
     local msg clean_line
     clean_line="$line"
     if [[ "$clean_line" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]][0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}[[:space:]](.*)$ ]]; then
       clean_line="${BASH_REMATCH[1]}"
     fi
+    if [[ "$clean_line" == *"reaped unknown pid"* ]]; then
+      continue
+    fi
+    log_context_push "supervisor"
     msg="supervisord: $clean_line"
     case "$line" in
       *" ERROR "*)
@@ -234,10 +237,50 @@ read_server_pid() {
 
 find_server_pids() {
   if command -v pgrep >/dev/null 2>&1; then
-    pgrep -f '[e]nshrouded_server\.exe'
+    pgrep -f '[e]nshrouded_server\.exe' || true
   else
-    ps axww | grep '[e]nshrouded_server\.exe' | awk '{print $1}'
+    ps axww | grep '[e]nshrouded_server\.exe' | awk '{print $1}' || true
   fi
+}
+
+snapshot_server_pids() {
+  find_server_pids | tr ' ' '\n' | awk 'NF' | sort -n | uniq || true
+}
+
+find_new_server_pid() {
+  local before after pid
+  before="$1"
+  after="$2"
+  for pid in $after; do
+    if ! grep -qx "$pid" <<<"$before"; then
+      echo "$pid"
+      return 0
+    fi
+  done
+  return 1
+}
+
+wait_for_server_pid() {
+  local timeout start before after pid
+  timeout="${1:-20}"
+  before="$2"
+  start="$(date +%s)"
+  while true; do
+    after="$(snapshot_server_pids)"
+    pid="$(find_new_server_pid "$before" "$after" || true)"
+    if [[ -n "$pid" ]]; then
+      echo "$pid"
+      return 0
+    fi
+    if [[ -z "$before" && -n "$after" ]]; then
+      echo "$after" | head -n1
+      return 0
+    fi
+    if [[ $(( $(date +%s) - start )) -ge "$timeout" ]]; then
+      return 1
+    fi
+    sleep 0.2
+  done
 }
 
 is_server_running() {
@@ -449,36 +492,109 @@ server_shutdown() {
 
 run_server_foreground() {
   log_context_push "server"
-  wait_for_server_download
-  cd "$INSTALL_PATH" || fatal "Could not cd $INSTALL_PATH"
 
-  chmod +x "$ENSHROUDED_BINARY" || true
+  local stop_requested backoff_base backoff_max min_uptime start_timeout backoff
+  stop_requested=0
+  backoff_base="${CRASH_BACKOFF_BASE:-2}"
+  backoff_max="${CRASH_BACKOFF_MAX:-60}"
+  min_uptime="${CRASH_BACKOFF_MIN_UPTIME:-30}"
+  start_timeout="${START_PID_TIMEOUT:-30}"
+  backoff="$backoff_base"
 
-  export WINEDEBUG="${WINEDEBUG:--all}"
-  export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
-  export STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH"
-  export WINEPREFIX="$WINEPREFIX"
+  builtin trap 'stop_requested=1' SIGINT SIGTERM
 
-  info "Server log dir: $(get_log_dir) (pattern: $LOG_FILE_PATTERN)"
-  info "Start server"
-  "$PROTON_CMD" runinprefix "$ENSHROUDED_BINARY" &
-  local pid=$!
-  echo "$pid" >"$PID_SERVER_FILE"
+  while true; do
+    if (( stop_requested )); then
+      break
+    fi
 
-  builtin trap 'server_shutdown "$pid"' SIGINT SIGTERM
+    wait_for_server_download
+    cd "$INSTALL_PATH" || fatal "Could not cd $INSTALL_PATH"
+    chmod +x "$ENSHROUDED_BINARY" || true
 
-  ok "Start complete: server online"
+    export WINEDEBUG="${WINEDEBUG:--all}"
+    export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH"
+    export STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH"
+    export WINEPREFIX="$WINEPREFIX"
 
-  local rc=0
-  if ! wait "$pid"; then
-    rc=$?
-  fi
+    local log_dir
+    log_dir="$(get_log_dir)"
+    if [[ -n "$log_dir" && ! -w "$log_dir" ]]; then
+      warn "Log directory not writable: $log_dir"
+    fi
 
-  cleanup_wine
-  clear_pid "$PID_SERVER_FILE"
-  ok "Stop complete"
+    info "Server log dir: $log_dir (pattern: $LOG_FILE_PATTERN)"
+    info "Start server"
+
+    local before wrapper_pid server_pid
+    before="$(snapshot_server_pids)"
+    "$PROTON_CMD" runinprefix "$ENSHROUDED_BINARY" > >(log_pipe info "server") 2>&1 &
+    wrapper_pid=$!
+
+    server_pid=""
+    if ! server_pid="$(wait_for_server_pid "$start_timeout" "$before")"; then
+      warn "Start failed: server process not detected"
+      if pid_alive "$wrapper_pid"; then
+        kill "$wrapper_pid" 2>/dev/null || true
+        wait "$wrapper_pid" 2>/dev/null || true
+      fi
+      cleanup_wine
+      if (( stop_requested )); then
+        break
+      fi
+      warn "Restarting server after ${backoff}s (process not detected)"
+      sleep "$backoff"
+      if [[ "$backoff" -lt "$backoff_max" ]]; then
+        backoff=$(( backoff * 2 ))
+        if [[ "$backoff" -gt "$backoff_max" ]]; then
+          backoff="$backoff_max"
+        fi
+      fi
+      continue
+    fi
+
+    echo "$server_pid" >"$PID_SERVER_FILE"
+    ok "Start complete: server online (pid $server_pid)"
+
+    local start_ts
+    start_ts="$(date +%s)"
+    while pid_alive "$server_pid"; do
+      if (( stop_requested )); then
+        server_shutdown "$server_pid"
+        break
+      fi
+      sleep 1
+    done
+
+    local uptime
+    uptime=$(( $(date +%s) - start_ts ))
+    if pid_alive "$wrapper_pid"; then
+      wait "$wrapper_pid" 2>/dev/null || true
+    fi
+    cleanup_wine
+    clear_pid "$PID_SERVER_FILE"
+    ok "Stop complete"
+
+    if (( stop_requested )); then
+      break
+    fi
+
+    if [[ "$uptime" -lt "$min_uptime" ]]; then
+      warn "Server exited after ${uptime}s; backing off ${backoff}s"
+      sleep "$backoff"
+      if [[ "$backoff" -lt "$backoff_max" ]]; then
+        backoff=$(( backoff * 2 ))
+        if [[ "$backoff" -gt "$backoff_max" ]]; then
+          backoff="$backoff_max"
+        fi
+      fi
+    else
+      backoff="$backoff_base"
+    fi
+  done
+
   log_context_pop
-  return $rc
+  return 0
 }
 
 start_server() {
@@ -627,19 +743,16 @@ log_streamer_loop() {
 
   while true; do
     latest="$(latest_log_file)"
-    if [[ -n "$latest" && "$latest" != "$current_file" ]]; then
+    if [[ -n "$latest" ]]; then
+      if [[ "$latest" == "$current_file" ]] && pid_alive "$tail_pid"; then
+        sleep "$LOG_POLL_INTERVAL"
+        continue
+      fi
       if pid_alive "$tail_pid"; then
         kill "$tail_pid" 2>/dev/null || true
       fi
       info "Start log stream: $latest"
-      tail -n "$LOG_TAIL_LINES" -F "$latest" 2>/dev/null | while IFS= read -r line; do
-        if [[ -z "$line" ]]; then
-          continue
-        fi
-        log_context_push "server-log"
-        log_ts_force info "$line"
-        log_context_pop
-      done &
+      tail -n "$LOG_TAIL_LINES" -F "$latest" 2>/dev/null | log_pipe info "server-log" &
       tail_pid=$!
       current_file="$latest"
     fi
@@ -652,8 +765,12 @@ run_log_streamer_foreground() {
     return 0
   fi
   log_context_push "logs"
+  set +e
   log_streamer_loop
+  local rc=$?
+  set -e
   log_context_pop
+  return $rc
 }
 
 stop_log_streamer() {

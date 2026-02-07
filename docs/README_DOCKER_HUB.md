@@ -138,7 +138,7 @@ Common adjustments:
 | `-p <host_port>:15637/udp` | `-p 25000:15637/udp` (external UDP 25000) |
 | `-e PUID/PGID` | In this tutorial: `-e PUID=$(id -u enshrouded) -e PGID=$(id -g enshrouded)`; you can also set them individually, e.g. `-e PUID=1001 -e PGID=1001`. |
 | `-e EN_PROFILE` | `-e EN_PROFILE=default` (applied only when `enshrouded_server.json` is created for the first time). |
-| `-e MANAGER_PROFILE` | `-e MANAGER_PROFILE=default` (profiles are applied only when `server_manager.json` is created for the first time). |
+| `-e MANAGER_PROFILE` | `-e MANAGER_PROFILE=default` (profile is copied to `/server_manager/server_manager.json` when missing or a stub). |
 | `-v <host_path>:/home/steam/enshrouded` | `-v /srv/enshrouded:/home/steam/enshrouded` |
 | `bonsaibauer/enshrouded_server_docker:<tag>` | `bonsaibauer/enshrouded_server_docker:latest` (see [Docker Hub tags](https://hub.docker.com/r/bonsaibauer/enshrouded_server_docker/tags)) |
 
@@ -153,6 +153,20 @@ Configure the server via file:
 
 ```
 /home/enshrouded/server_1/enshrouded_server.json   # adjust `server_1` if you mounted a different folder
+```
+
+Server Manager config and data live under the mounted `/server_manager/` directory:
+
+```
+/home/enshrouded/server_1/server_manager/server_manager.json
+/home/enshrouded/server_1/server_manager/manager-bootstrap.log
+/home/enshrouded/server_1/server_manager/run/
+```
+
+Profile files are stored at:
+
+```
+/home/enshrouded/server_1/profile/<name>/server_manager.json
 ```
 
 👉 **Note**: In the normal case just leave `"ip": "0.0.0.0"` — the server stays reachable without adding your public IP.

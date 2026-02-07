@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
-BOOTSTRAP_LOG_FILE="${MANAGER_BOOTSTRAP_LOG_FILE:-/home/steam/enshrouded/manager-bootstrap.log}"
+MANAGER_DATA_DIR="/server_manager"
+BOOTSTRAP_LOG_FILE="/server_manager/manager-bootstrap.log"
 BOOTSTRAP_CMD="${1:-}"
 if [[ -z "${BOOTSTRAP_FORCE_COLOR:-}" ]]; then
-  case "$BOOTSTRAP_CMD" in
-    bootstrap|run)
-      BOOTSTRAP_FORCE_COLOR="true"
-      ;;
-  esac
+  BOOTSTRAP_FORCE_COLOR="true"
 fi
 
 bootstrap_timestamp() {
@@ -50,8 +47,17 @@ bootstrap_format_message() {
   printf "%s %s" "$tag" "$msg"
 }
 
+bootstrap_log_path() {
+  local file
+  file="${BOOTSTRAP_LOG_FILE:-}"
+  if [[ -z "$file" ]]; then
+    return 0
+  fi
+  printf "%s" "$file"
+}
+
 bootstrap_log() {
-  local msg formatted out
+  local msg formatted out file
   msg="$*"
   formatted="$(bootstrap_format_message "$msg")"
   if declare -F log_ts_force >/dev/null 2>&1; then
@@ -60,9 +66,10 @@ bootstrap_log() {
     out="$(bootstrap_timestamp) $formatted"
     printf "%s\n" "$out" || true
   fi
-  if [[ -n "${BOOTSTRAP_LOG_FILE:-}" ]]; then
-    mkdir -p "$(dirname "$BOOTSTRAP_LOG_FILE")" 2>/dev/null || true
-    printf "%s\n" "$(bootstrap_timestamp) [BOOT] [server_manager] $msg" >>"$BOOTSTRAP_LOG_FILE" 2>/dev/null || true
+  file="$(bootstrap_log_path)"
+  if [[ -n "$file" ]]; then
+    mkdir -p "$(dirname "$file")" 2>/dev/null || true
+    printf "%s\n" "$(bootstrap_timestamp) [BOOT] [server_manager] $msg" >>"$file" 2>/dev/null || true
   fi
 }
 
@@ -120,7 +127,93 @@ build_sanitized_env() {
   fi
 }
 
+bootstrap_prepare_manager_dirs() {
+  local install_dir data_target profile_target
+  install_dir="/home/steam/enshrouded"
+  data_target="${install_dir}/server_manager"
+  profile_target="${install_dir}/profile"
+
+  mkdir -p "$data_target" "$profile_target" 2>/dev/null || true
+
+  bootstrap_move_dir_contents() {
+    local from to label now dest
+    from="$1"
+    to="$2"
+    label="$3"
+    now="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || echo "unknown")"
+    dest="$to"
+    mkdir -p "$to" 2>/dev/null || true
+
+    shopt -s dotglob nullglob
+    local -a items=("$from"/*)
+    shopt -u dotglob nullglob
+    if [[ "${#items[@]}" -eq 0 ]]; then
+      return 0
+    fi
+
+    shopt -s dotglob nullglob
+    local -a target_items=("$to"/*)
+    shopt -u dotglob nullglob
+    if [[ "${#target_items[@]}" -ne 0 ]]; then
+      dest="$to/migrated-${label}-${now}"
+      mkdir -p "$dest" 2>/dev/null || true
+    fi
+
+    if ! mv "${items[@]}" "$dest/" 2>/dev/null; then
+      bootstrap_log "WARN: failed to migrate $label data from $from to $dest"
+      return 1
+    fi
+    rmdir "$from" 2>/dev/null || true
+    bootstrap_log "migrated $label data from $from to $dest"
+  }
+
+  bootstrap_ensure_volume_link() {
+    local link target label real target_real
+    link="$1"
+    target="$2"
+    label="$3"
+
+    if [[ -L "$link" ]]; then
+      real="$(readlink -f "$link" 2>/dev/null || true)"
+      target_real="$(readlink -f "$target" 2>/dev/null || true)"
+      if [[ -n "$real" && -n "$target_real" && "$real" == "$target_real" ]]; then
+        return 0
+      fi
+      if [[ -n "$real" && -d "$real" && "$real" != "$target_real" ]]; then
+        bootstrap_move_dir_contents "$real" "$target" "$label" || true
+      fi
+      rm -f "$link" 2>/dev/null || true
+    fi
+
+    if [[ -e "$link" && ! -L "$link" ]]; then
+      if command -v mountpoint >/dev/null 2>&1 && mountpoint -q "$link"; then
+        bootstrap_log "WARN: $label dir is a mountpoint; leaving as-is: $link"
+        return 0
+      fi
+      if [[ -d "$link" ]]; then
+        bootstrap_move_dir_contents "$link" "$target" "$label" || true
+        rm -rf "$link" 2>/dev/null || true
+      else
+        rm -f "$link" 2>/dev/null || true
+      fi
+    fi
+
+    if [[ ! -e "$link" ]]; then
+      ln -s "$target" "$link" 2>/dev/null || true
+    fi
+    if [[ ! -e "$link" ]]; then
+      mkdir -p "$link" 2>/dev/null || true
+    fi
+  }
+
+  bootstrap_ensure_volume_link "/server_manager" "$data_target" "server_manager"
+  bootstrap_ensure_volume_link "/profile" "$profile_target" "profile"
+
+  mkdir -p /server_manager/run 2>/dev/null || true
+}
+
 # Defensive: avoid inherited shell hooks or function overrides.
+bootstrap_prepare_manager_dirs
 bootstrap_diagnostics
 unset BASH_ENV ENV PROMPT_COMMAND
 if declare -F trap >/dev/null 2>&1; then
@@ -284,9 +377,6 @@ ensure_root_and_map_user() {
   mkdir -p "$INSTALL_PATH" "$RUN_DIR"
   groupmod -o -g "$PGID" steam
   usermod -o -u "$PUID" -g "$PGID" steam
-  chown -R "$PUID:$PGID" "$HOME" 2>/dev/null || true
-  chown -R "$PUID:$PGID" "$INSTALL_PATH" 2>/dev/null || true
-  chown -R "$PUID:$PGID" "$RUN_DIR" 2>/dev/null || true
 }
 
 setup_environment() {
@@ -319,11 +409,11 @@ manager_bootstrap() {
   setup_syslog || true
   ok "Bootstrap complete"
   require_cmd supervisord
-  exec /usr/bin/supervisord -c /opt/enshrouded/manager/supervisord.conf
+  exec /usr/bin/supervisord -c /opt/enshrouded/manager/supervisord.conf >/dev/null 2>&1
 }
 
 RSYSLOG_CONF="/etc/rsyslog.d/server_manager_stdout.conf"
-RSYSLOG_STATE_DIR="/var/spool/rsyslog"
+RSYSLOG_STATE_DIR="${RSYSLOG_STATE_DIR:-${MANAGER_DATA_DIR}/rsyslog}"
 SYSLOG_LOG_FILE="$RUN_DIR/server-manager-syslog.log"
 
 syslog_running() {
@@ -345,19 +435,19 @@ setup_syslog() {
   mkdir -p "$(dirname "$RSYSLOG_CONF")" 2>/dev/null || true
   mkdir -p "$RSYSLOG_STATE_DIR" 2>/dev/null || true
   mkdir -p "$RUN_DIR" 2>/dev/null || true
-  cat >"$RSYSLOG_CONF" <<'EOF'
-$FileOwner root
-$FileGroup root
-$PrivDropToUser root
-$PrivDropToGroup root
-$WorkDirectory /var/spool/rsyslog
+  cat >"$RSYSLOG_CONF" <<EOF
+\$FileOwner root
+\$FileGroup root
+\$PrivDropToUser root
+\$PrivDropToGroup root
+\$WorkDirectory ${RSYSLOG_STATE_DIR}
 module(load="imuxsock")
-$IMUXSockRateLimitInterval 0
-$template server_manager,"%syslogseverity-text:::uppercase%|%timegenerated:::date-rfc3339%|%syslogtag%%msg:::sp-if-no-1st-sp%%msg:::drop-last-lf%\n"
-$ActionFileDefaultTemplate server_manager
+\$IMUXSockRateLimitInterval 0
+\$template server_manager,"%syslogseverity-text:::uppercase%|%timegenerated:::date-rfc3339%|%syslogtag%%msg:::sp-if-no-1st-sp%%msg:::drop-last-lf%\\n"
+\$ActionFileDefaultTemplate server_manager
 
 :msg, contains, "[session] Pending packets list is full" stop
-*.* /var/run/enshrouded/server-manager-syslog.log
+*.* ${SYSLOG_LOG_FILE}
 EOF
 }
 
@@ -778,7 +868,7 @@ tail_logs() {
 healthcheck() {
   local conf socket comm state
   conf="/opt/enshrouded/manager/supervisord.conf"
-  socket="/var/run/enshrouded/server-manager-supervisor.sock"
+  socket="${RUN_DIR}/server-manager-supervisor.sock"
 
   if ! command -v supervisorctl >/dev/null 2>&1; then
     echo "unhealthy: supervisorctl missing" >&2

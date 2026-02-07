@@ -84,7 +84,10 @@ EN_PROFILE_DIR="${MANAGER_ROOT:-/opt/enshrouded/manager}/profiles_enshrouded"
 EN_CONFIG_CREATED="false"
 
 MANAGER_PROFILE_DEFAULT="default"
-MANAGER_PROFILE_DIR="${MANAGER_ROOT:-/opt/enshrouded/manager}/profiles"
+MANAGER_DATA_DIR="/server_manager"
+MANAGER_PROFILE_ROOT="/profile"
+MANAGER_PROFILE_DIR="$MANAGER_PROFILE_ROOT"
+MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT:-/opt/enshrouded/manager}/profiles}"
 
 is_bool() {
   case "$1" in
@@ -187,9 +190,7 @@ env_was_set() {
 }
 
 manager_config_path() {
-  local dir
-  dir="$(dirname "$CONFIG_FILE")"
-  printf "%s/server_manager.json" "$dir"
+  printf "%s/server_manager.json" "$MANAGER_DATA_DIR"
 }
 
 enshrouded_profile_path() {
@@ -216,7 +217,13 @@ enshrouded_profile_resolve() {
 manager_profile_path() {
   local name
   name="${1:-$MANAGER_PROFILE_DEFAULT}"
-  printf "%s/%s.json" "$MANAGER_PROFILE_DIR" "$name"
+  printf "%s/%s/server_manager.json" "$MANAGER_PROFILE_DIR" "$name"
+}
+
+manager_profile_template_path() {
+  local name
+  name="${1:-$MANAGER_PROFILE_DEFAULT}"
+  printf "%s/%s.json" "$MANAGER_PROFILE_TEMPLATE_DIR" "$name"
 }
 
 manager_profile_resolve() {
@@ -232,6 +239,150 @@ manager_profile_resolve() {
   fi
   warn "Profile not found: $name (fallback: $MANAGER_PROFILE_DEFAULT)"
   echo "$MANAGER_PROFILE_DEFAULT"
+}
+
+ensure_manager_paths() {
+  local data_link profile_link data_target profile_target data_real target_real profile_real profile_target_real
+  data_link="$MANAGER_DATA_DIR"
+  profile_link="$MANAGER_PROFILE_ROOT"
+  data_target="${INSTALL_PATH}/server_manager"
+  profile_target="${INSTALL_PATH}/profile"
+
+  mkdir -p "$data_target" "$profile_target" 2>/dev/null || true
+
+  ensure_volume_link() {
+    local link target label real target_real
+    link="$1"
+    target="$2"
+    label="$3"
+
+    migrate_dir_contents() {
+      local from to now dest
+      from="$1"
+      to="$2"
+      now="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || echo "unknown")"
+      dest="$to"
+      mkdir -p "$to" 2>/dev/null || true
+
+      shopt -s dotglob nullglob
+      local -a items=("$from"/*)
+      shopt -u dotglob nullglob
+      if [[ "${#items[@]}" -eq 0 ]]; then
+        return 0
+      fi
+
+      shopt -s dotglob nullglob
+      local -a target_items=("$to"/*)
+      shopt -u dotglob nullglob
+      if [[ "${#target_items[@]}" -ne 0 ]]; then
+        dest="$to/migrated-${label}-${now}"
+        mkdir -p "$dest" 2>/dev/null || true
+      fi
+
+      if ! mv "${items[@]}" "$dest/" 2>/dev/null; then
+        warn "Failed to migrate $label data from $from to $dest"
+        return 1
+      fi
+      rmdir "$from" 2>/dev/null || true
+      info "Migrated $label data from $from to $dest"
+    }
+
+    if [[ -L "$link" ]]; then
+      real="$(readlink -f "$link" 2>/dev/null || true)"
+      target_real="$(readlink -f "$target" 2>/dev/null || true)"
+      if [[ -n "$real" && -n "$target_real" && "$real" == "$target_real" ]]; then
+        return 0
+      fi
+      if [[ -n "$real" && -d "$real" && "$real" != "$target_real" ]]; then
+        migrate_dir_contents "$real" "$target" || true
+      fi
+      rm -f "$link" 2>/dev/null || true
+    fi
+
+    if [[ -e "$link" && ! -L "$link" ]]; then
+      if command -v mountpoint >/dev/null 2>&1 && mountpoint -q "$link"; then
+        warn "$label dir is a mountpoint; leaving as-is: $link"
+        return 0
+      fi
+      if [[ -d "$link" ]]; then
+        migrate_dir_contents "$link" "$target" || true
+        rm -rf "$link" 2>/dev/null || true
+      else
+        rm -f "$link" 2>/dev/null || true
+      fi
+    fi
+
+    if [[ ! -e "$link" ]]; then
+      ln -s "$target" "$link" 2>/dev/null || true
+    fi
+    if [[ ! -e "$link" ]]; then
+      mkdir -p "$link" 2>/dev/null || true
+    fi
+  }
+
+  ensure_volume_link "$data_link" "$data_target" "server_manager"
+  ensure_volume_link "$profile_link" "$profile_target" "profile"
+
+  data_real="$(readlink -f "$data_link" 2>/dev/null || true)"
+  target_real="$(readlink -f "$data_target" 2>/dev/null || true)"
+  if [[ -n "$data_real" && -n "$target_real" && "$data_real" != "$target_real" ]]; then
+    warn "Manager data dir is not in mounted volume: $data_link -> $data_real (expected $target_real)"
+  fi
+
+  profile_real="$(readlink -f "$profile_link" 2>/dev/null || true)"
+  profile_target_real="$(readlink -f "$profile_target" 2>/dev/null || true)"
+  if [[ -n "$profile_real" && -n "$profile_target_real" && "$profile_real" != "$profile_target_real" ]]; then
+    warn "Manager profile dir is not in mounted volume: $profile_link -> $profile_real (expected $profile_target_real)"
+  fi
+
+  mkdir -p "$data_link/run" 2>/dev/null || true
+}
+
+ensure_manager_profile_file() {
+  local profile profile_file template_file
+  profile="$1"
+  profile_file="$(manager_profile_path "$profile")"
+  template_file="$(manager_profile_template_path "$profile")"
+
+  if [[ -f "$profile_file" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$template_file" ]]; then
+    fatal "Server Manager profile template not found: $template_file"
+  fi
+  mkdir -p "$(dirname "$profile_file")" 2>/dev/null || true
+  if ! jq -e '.' "$template_file" >/dev/null 2>&1; then
+    fatal "Invalid JSON in server manager profile template: $template_file"
+  fi
+  cp "$template_file" "$profile_file"
+  ok "Server Manager profile created: $profile_file"
+}
+
+manager_config_is_stub() {
+  local file
+  file="$1"
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  if ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    return 1
+  fi
+  jq -e 'keys | all(. == "profile" or . == "profileApplied")' "$file" >/dev/null 2>&1
+}
+
+copy_manager_profile_to_config() {
+  local profile_file config_file
+  profile_file="$1"
+  config_file="$2"
+  if [[ ! -f "$profile_file" ]]; then
+    fatal "Server Manager profile not found: $profile_file"
+  fi
+  if ! jq -e '.' "$profile_file" >/dev/null 2>&1; then
+    fatal "Invalid JSON in server manager profile: $profile_file"
+  fi
+  mkdir -p "$(dirname "$config_file")" 2>/dev/null || true
+  cp "$profile_file" "$config_file"
+  ok "Server Manager config created from profile: $profile_file"
 }
 
 manager_profile_key_exists() {
@@ -325,8 +476,6 @@ apply_manager_profile_defaults() {
     printf -v "$var" '%s' "$value"
   done
 
-  manager_config_set "$file" --arg p "$profile" '.profile = $p'
-  manager_config_set "$file" '.profileApplied = true'
 }
 
 declare -a MANAGER_VARS=(
@@ -753,7 +902,7 @@ cleanup_manager_config_paths() {
   local file temp_file
   file="$1"
   temp_file="$(mktemp)"
-  if jq 'del(.protonCmd, .wineserverPath, .winetricks)' "$file" >"$temp_file"; then
+  if jq 'del(.protonCmd, .wineserverPath, .winetricks, .profile, .profileApplied)' "$file" >"$temp_file"; then
     mv "$temp_file" "$file"
   else
     rm -f "$temp_file"
@@ -762,53 +911,28 @@ cleanup_manager_config_paths() {
 }
 
 update_or_create_manager_config() {
-  local file new_file
-  local is_new_file new_profile
+  local file profile profile_file
   require_cmd jq
   MANAGER_EXPLICIT_VARS=()
   MANAGER_ENV_IGNORE=()
   MANAGER_JSON_INVALID=()
 
+  ensure_manager_paths
+  profile="$(manager_profile_resolve)"
+  ensure_manager_profile_file "$profile"
+  profile_file="$(manager_profile_path "$profile")"
+
   file="$(manager_config_path)"
-  is_new_file="false"
-  if [[ ! -f "$file" ]]; then
-    is_new_file="true"
+  if [[ ! -f "$file" ]] || manager_config_is_stub "$file"; then
+    copy_manager_profile_to_config "$profile_file" "$file"
   fi
-  ensure_manager_config_file "$file"
   if ! jq -e '.' "$file" >/dev/null 2>&1; then
     fatal "Invalid JSON in $file"
   fi
   cleanup_manager_config_paths "$file"
 
-  if [[ "$is_new_file" == "true" ]]; then
-    new_profile="$(manager_profile_resolve)"
-    apply_manager_profile_defaults "$file" "$new_profile"
-  fi
-
   apply_manager_env_overrides "$file"
   load_manager_config_values "$file"
-
-  new_file="$(manager_config_path)"
-  if [[ "$new_file" != "$file" ]]; then
-    file="$new_file"
-    is_new_file="false"
-    if [[ ! -f "$file" ]]; then
-      is_new_file="true"
-    fi
-    ensure_manager_config_file "$file"
-    if ! jq -e '.' "$file" >/dev/null 2>&1; then
-      fatal "Invalid JSON in $file"
-    fi
-    cleanup_manager_config_paths "$file"
-    MANAGER_EXPLICIT_VARS=()
-    MANAGER_JSON_INVALID=()
-    if [[ "$is_new_file" == "true" ]]; then
-      new_profile="$(manager_profile_resolve)"
-      apply_manager_profile_defaults "$file" "$new_profile"
-    fi
-    apply_manager_env_overrides "$file"
-    load_manager_config_values "$file"
-  fi
 
   apply_manager_defaults "$file"
   load_manager_config_values "$file"
@@ -1152,6 +1276,7 @@ verify_variables() {
 }
 
 ensure_base_dirs() {
+  ensure_manager_paths
   mkdir -p "$INSTALL_PATH" "$RUN_DIR"
 }
 
@@ -1179,6 +1304,37 @@ resolve_backup_dir() {
   abs_path "$BACKUP_DIR"
 }
 
+AUTO_FIX_PERMS_LOGGED="false"
+
+auto_fix_enabled() {
+  local value
+  value="${AUTO_FIX_PERMS-}"
+  if [[ -z "$value" ]]; then
+    return 0
+  fi
+  case "$value" in
+    false|FALSE|0|no|NO)
+      log_auto_fix_disabled_once
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+log_auto_fix_disabled_once() {
+  if [[ "${AUTO_FIX_PERMS_LOGGED:-false}" == "true" ]]; then
+    return 0
+  fi
+  case "${AUTO_FIX_PERMS-}" in
+    false|FALSE|0|no|NO)
+      AUTO_FIX_PERMS_LOGGED="true"
+      warn "AUTO_FIX_PERMS disabled (value: ${AUTO_FIX_PERMS})"
+      ;;
+  esac
+}
+
 ensure_writable_dir() {
   local dir
   dir="$1"
@@ -1194,9 +1350,8 @@ ensure_writable_dir() {
 
   warn "Permission check failed for: $dir"
 
-  local auto_fix
-  auto_fix="${AUTO_FIX_PERMS:-true}"
-  if ! is_true "$auto_fix"; then
+  if ! auto_fix_enabled; then
+    log_auto_fix_disabled_once
     info "Auto permission repair disabled for: $dir (AUTO_FIX_PERMS=${AUTO_FIX_PERMS:-<unset>})"
     return 1
   fi
@@ -1221,15 +1376,44 @@ ensure_writable_dir() {
 
 preflight_permissions() {
   local save_dir log_dir backup_dir
+  local -a failed
+  failed=()
+  ensure_manager_paths
+  if ! auto_fix_enabled; then
+    log_auto_fix_disabled_once
+  fi
   save_dir="$(resolve_save_dir)"
   log_dir="$(resolve_log_dir)"
   backup_dir="$(resolve_backup_dir)"
 
-  ensure_writable_dir "$INSTALL_PATH" || true
-  ensure_writable_dir "$RUN_DIR" || true
-  ensure_writable_dir "$save_dir" || true
-  ensure_writable_dir "$log_dir" || true
-  ensure_writable_dir "$backup_dir" || true
+  if ! ensure_writable_dir "$MANAGER_DATA_DIR"; then
+    failed+=("$MANAGER_DATA_DIR")
+  fi
+  if ! ensure_writable_dir "$MANAGER_PROFILE_DIR"; then
+    failed+=("$MANAGER_PROFILE_DIR")
+  fi
+  if ! ensure_writable_dir "$INSTALL_PATH"; then
+    failed+=("$INSTALL_PATH")
+  fi
+  if ! ensure_writable_dir "$RUN_DIR"; then
+    failed+=("$RUN_DIR")
+  fi
+  if ! ensure_writable_dir "$save_dir"; then
+    failed+=("$save_dir")
+  fi
+  if ! ensure_writable_dir "$log_dir"; then
+    failed+=("$log_dir")
+  fi
+  if ! ensure_writable_dir "$backup_dir"; then
+    failed+=("$backup_dir")
+  fi
+
+  if [[ "${#failed[@]}" -gt 0 ]]; then
+    if auto_fix_enabled; then
+      fatal "Permission check failed after auto-fix for: ${failed[*]}"
+    fi
+    fatal "Permission check failed (AUTO_FIX_PERMS=${AUTO_FIX_PERMS:-<unset>}) for: ${failed[*]}"
+  fi
 }
 
 create_folders() {

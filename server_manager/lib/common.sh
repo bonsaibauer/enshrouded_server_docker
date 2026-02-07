@@ -13,7 +13,17 @@ fi
 
 # Colors (ASCII only)
 init_colors() {
-  if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  local force_color
+  force_color="${FORCE_COLOR:-}"
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    C_RESET=""
+    C_DIM=""
+    C_RED=""
+    C_GREEN=""
+    C_OK=""
+    C_YELLOW=""
+    C_PURPLE=""
+  elif [[ -t 1 || "$force_color" == "1" || "$force_color" == "true" || "${BOOTSTRAP_FORCE_COLOR:-}" == "1" || "${BOOTSTRAP_FORCE_COLOR:-}" == "true" ]]; then
     C_RESET=$'\033[0m'
     C_DIM=$'\033[2m'
     C_RED=$'\033[31m'
@@ -281,12 +291,17 @@ STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/steam/.steam/steam"
 STEAM_COMPAT_DATA_PATH="/home/steam/enshrouded/steamapps/compatdata/2278520"
 WINEPREFIX="/home/steam/enshrouded/steamapps/compatdata/2278520/pfx"
 
-RUN_DIR="/var/run/enshrouded"
-PID_MANAGER_FILE="/var/run/enshrouded/enshrouded-manager.pid"
-PID_SERVER_FILE="/var/run/enshrouded/enshrouded-server.pid"
-PID_UPDATE_FILE="/var/run/enshrouded/enshrouded-updater.pid"
-PID_BACKUP_FILE="/var/run/enshrouded/enshrouded-backup.pid"
-PID_RESTART_FILE="/var/run/enshrouded/enshrouded-restart.pid"
+MANAGER_DATA_DIR="/server_manager"
+MANAGER_PROFILE_ROOT="/profile"
+MANAGER_PROFILE_DIR="$MANAGER_PROFILE_ROOT"
+MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT:-/opt/enshrouded/manager}/profiles}"
+
+RUN_DIR="${MANAGER_DATA_DIR}/run"
+PID_MANAGER_FILE="${RUN_DIR}/enshrouded-manager.pid"
+PID_SERVER_FILE="${RUN_DIR}/enshrouded-server.pid"
+PID_UPDATE_FILE="${RUN_DIR}/enshrouded-updater.pid"
+PID_BACKUP_FILE="${RUN_DIR}/enshrouded-backup.pid"
+PID_RESTART_FILE="${RUN_DIR}/enshrouded-restart.pid"
 
 AUTO_UPDATE="${AUTO_UPDATE:-true}"
 AUTO_UPDATE_INTERVAL="${AUTO_UPDATE_INTERVAL:-1800}"

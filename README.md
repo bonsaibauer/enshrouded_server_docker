@@ -47,7 +47,8 @@ Road to Release — Enshrouded is slated for an Autumn 2026 launch; the roadmap 
 
 - All server/gameplay fields are documented in [`docs/enshrouded_server.md`](docs/enshrouded_server.md).
 - A complete sample with every setting populated ships in [`server_manager/profiles_enshrouded/default/enshrouded_server.json`](server_manager/profiles_enshrouded/default/enshrouded_server.json).
-- The default `server_manager.json` template lives in [`server_manager/profiles/default.json`](server_manager/profiles/default.json).
+- The Server Manager config lives at `/server_manager/server_manager.json` (single source of truth). The default template lives in [`server_manager/profiles/default.json`](server_manager/profiles/default.json).
+- Server Manager data lives under `/server_manager/` in the mounted volume (including `/server_manager/server_manager.json`, `/server_manager/manager-bootstrap.log`, and `/server_manager/run/` runtime files).
 - Server Manager and Docker commands live in [`docs/server_manager_commands.md`](docs/server_manager_commands.md).
 - Server Manager profiles (default/manual) are documented in [`docs/server_manager_profiles.md`](docs/server_manager_profiles.md).
 - Enshrouded server profiles are documented in [`docs/enshrouded_profiles.md`](docs/enshrouded_profiles.md).
@@ -276,7 +277,7 @@ Common adjustments:
 | `-p <host_port>:15637/udp` | `-p 25000:15637/udp` (external UDP 25000) |
 | `-e PUID/PGID` | In this tutorial: `-e PUID=$(id -u enshrouded) -e PGID=$(id -g enshrouded)`; you can also set them individually, e.g. `-e PUID=1001 -e PGID=1001`. |
 | `-e EN_PROFILE` | `-e EN_PROFILE=default` (applied only when `enshrouded_server.json` is created for the first time). |
-| `-e MANAGER_PROFILE` | `-e MANAGER_PROFILE=default` (profiles are applied only when `server_manager.json` is created for the first time). |
+| `-e MANAGER_PROFILE` | `-e MANAGER_PROFILE=default` (profile is copied to `/server_manager/server_manager.json` when missing or a stub). |
 | `-e ENSHROUDED_NAME` | `-e ENSHROUDED_NAME="My Enshrouded Server"` |
 | `-e ENSHROUDED_ROLE_0_PASSWORD` | `-e ENSHROUDED_ROLE_0_PASSWORD="MyAdminPassword"` |
 | `-v <host_path>:/home/steam/enshrouded` | `-v /srv/enshrouded:/home/steam/enshrouded` |
