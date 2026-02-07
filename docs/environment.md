@@ -144,7 +144,7 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 
 ---
 
-## Updates and Health Checks
+## Updates and Safe Checks
 
 | Variable | Description | Example / Default Value | Options / Notes |
 |---------|-------------|--------------------------|-----------------|
@@ -153,8 +153,6 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **AUTO_UPDATE_ON_BOOT** | Update on manager start | true | true / false |
 | **AUTO_RESTART_ON_UPDATE** | Restart after update | true | true / false |
 | **SAFE_MODE** | Skip update/restart if player count unknown | true | true / false |
-| **HEALTH_CHECK_INTERVAL** | Health check interval (seconds) | 300 | 0 disables checks |
-| **HEALTH_CHECK_ON_START** | Health check on start | true | true / false |
 | **UPDATE_CHECK_PLAYERS** | Require 0 players before update | false | true / false |
 | **RESTART_CHECK_PLAYERS** | Require 0 players before restart | false | true / false |
 | **A2S_TIMEOUT** | A2S query timeout (seconds) | 2 | Float |

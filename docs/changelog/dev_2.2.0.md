@@ -1,4 +1,4 @@
-# Changelog (Comparison v1.2.1 → Current)
+# Changelog (Comparison v1.2.1 → dev_2.2.0)
 
 This changelog describes **all relevant changes since v1.2.1**. Focus: GitHub Actions workflows, introduction of the server manager, new functionality/automation, new environment variables, and documentation updates. It also includes details about architecture, runtime flow, defaults, validation, and practical container operation.
 
@@ -26,7 +26,7 @@ This changelog describes **all relevant changes since v1.2.1**. Focus: GitHub Ac
 
 ## 2) Introduction of the Server Manager (Core Feature)
 
-The major shift is the introduction of a **server manager** under `server_manager/`. It replaces the old entrypoint logic and consolidates **start, stop, update, restart, backup, health checks, logs, cron scheduling, and configuration management** into a modular system.
+The major shift is the introduction of a **server manager** under `server_manager/`. It replaces the old entrypoint logic and consolidates **start, stop, update, restart, backup, logs, cron scheduling, and configuration management** into a modular system.
 
 **Primary goals:** stable operation (PID1 handling), scheduled updates/backups, robust validation, better logging, and controlled automation. 【F:server_manager/manager.sh†L21-L208】
 
@@ -54,13 +54,13 @@ The major shift is the introduction of a **server manager** under `server_manage
 
 **Detail:** If Proton files are missing an update is forced; if build IDs are unavailable the manager warns and may skip updates to stay safe. 【F:server_manager/lib/update.sh†L20-L53】
 
-### 2.4 Health Checks & Player Query (A2S)
+### 2.4 Player Query (A2S) & Safe Mode
 
 - **A2S queries** provide player counts, enabling safe update/restart decisions. 【F:server_manager/lib/server.sh†L45-L119】
 - **SAFE_MODE**, **UPDATE_CHECK_PLAYERS**, **RESTART_CHECK_PLAYERS** enforce “only when empty” behavior. 【F:server_manager/lib/server.sh†L121-L172】【F:server_manager/lib/common.sh†L280-L296】
 - The manager installs `python-a2s` at setup time when missing to enable A2S player checks. 【F:server_manager/lib/config.sh†L1614-L1627】
 
-**Detail:** A2S uses `python-a2s` with retry/timeout control to avoid blocking health checks. 【F:server_manager/lib/config.sh†L1614-L1627】【F:server_manager/lib/server.sh†L45-L119】
+**Detail:** A2S uses `python-a2s` with retry/timeout control to avoid blocking safe checks. 【F:server_manager/lib/config.sh†L1614-L1627】【F:server_manager/lib/server.sh†L45-L119】
 
 ### 2.5 Logging & Log Streaming
 
@@ -137,11 +137,11 @@ With the server manager, the project now exposes a **much broader standardized E
 
 **Detail:** `PUID/PGID` are strictly validated (non-zero numeric), preventing invalid user mappings. 【F:server_manager/manager.sh†L112-L119】
 
-### 3.3 Update/Restart/Health
+### 3.3 Update/Restart/Safe Checks
 
 - Automated update/restart logic: `AUTO_UPDATE`, `AUTO_UPDATE_INTERVAL`, `AUTO_UPDATE_ON_BOOT`, `AUTO_RESTART_ON_UPDATE`. 【F:server_manager/lib/common.sh†L276-L279】【F:docs/environment.md†L151-L155】
 - Player checks & safe mode: `SAFE_MODE`, `UPDATE_CHECK_PLAYERS`, `RESTART_CHECK_PLAYERS`. 【F:server_manager/lib/common.sh†L280-L296】【F:docs/environment.md†L158-L163】
-- Health check timing and A2S controls: `HEALTH_CHECK_INTERVAL`, `HEALTH_CHECK_ON_START`, `A2S_TIMEOUT`, `A2S_RETRIES`, `A2S_RETRY_DELAY`. 【F:server_manager/lib/common.sh†L289-L293】【F:docs/environment.md†L159-L165】
+- A2S controls: `A2S_TIMEOUT`, `A2S_RETRIES`, `A2S_RETRY_DELAY`. 【F:server_manager/lib/common.sh†L289-L293】【F:docs/environment.md†L159-L165】
 
 **Detail:** `SAFE_MODE=true` skips update/restart when player count is unknown. 【F:server_manager/lib/server.sh†L121-L172】
 
@@ -170,7 +170,7 @@ With the server manager, the project now exposes a **much broader standardized E
 ## 4) Docker Image & Entrypoint Architecture
 
 - The Dockerfile now **bundles the server manager** under `/opt/enshrouded/manager` and uses it to bootstrap into supervisor PID1. 【F:Dockerfile†L104-L108】【F:Dockerfile†L128-L131】
-- The image is no longer driven by a single entrypoint script; instead, a **persistent manager process** handles updates, restarts, health checks, and cron. 【F:server_manager/manager.sh†L131-L208】
+- The image is no longer driven by a single entrypoint script; instead, a **persistent manager process** handles updates, restarts, and cron. 【F:server_manager/manager.sh†L131-L208】
 
 **Detail:** The manager starts as root, applies UID/GID mapping for the `steam` user, then re-execs as `steam` for safer runtime permissions. 【F:server_manager/manager.sh†L112-L128】【F:server_manager/manager.sh†L647-L667】
 
@@ -211,4 +211,4 @@ With the server manager, the project now exposes a **much broader standardized E
 
 ## 6) Summary
 
-Since v1.2.1, the project has evolved from a one-shot startup script to a **full-featured, configurable server manager**. Build-id–based updates, backups, health checks, cron scheduling, supervisor-managed jobs, log streaming (including syslog/supervisor streams), permission mapping/auto-fix, **profile-based defaults** (including a manual profile to disable automation), and granular ENV-based configuration make deployments more stable, reproducible, and maintainable. CI workflows are more secure and resilient against fork-PR limitations. 【F:server_manager/manager.sh†L21-L208】【F:server_manager/lib/update.sh†L28-L175】【F:server_manager/lib/backup.sh†L1-L119】【F:server_manager/manager.sh†L152-L287】【F:server_manager/lib/config.sh†L1228-L1276】【F:server_manager/supervisord.conf†L1-L145】【F:server_manager/profiles/manual.json†L1-L49】【F:.github/workflows/dev.yml†L14-L152】
+Since v1.2.1, the project has evolved from a one-shot startup script to a **full-featured, configurable server manager**. Build-id–based updates, backups, cron scheduling, supervisor-managed jobs, log streaming (including syslog/supervisor streams), permission mapping/auto-fix, **profile-based defaults** (including a manual profile to disable automation), and granular ENV-based configuration make deployments more stable, reproducible, and maintainable. CI workflows are more secure and resilient against fork-PR limitations. 【F:server_manager/manager.sh†L21-L208】【F:server_manager/lib/update.sh†L28-L175】【F:server_manager/lib/backup.sh†L1-L119】【F:server_manager/manager.sh†L152-L287】【F:server_manager/lib/config.sh†L1228-L1276】【F:server_manager/supervisord.conf†L1-L145】【F:server_manager/profiles/manual.json†L1-L49】【F:.github/workflows/dev.yml†L14-L152】

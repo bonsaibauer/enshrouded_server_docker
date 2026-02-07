@@ -350,8 +350,6 @@ declare -a MANAGER_VARS=(
   AUTO_UPDATE_ON_BOOT
   AUTO_RESTART_ON_UPDATE
   SAFE_MODE
-  HEALTH_CHECK_INTERVAL
-  HEALTH_CHECK_ON_START
   UPDATE_CHECK_PLAYERS
   RESTART_CHECK_PLAYERS
   A2S_TIMEOUT
@@ -394,8 +392,6 @@ declare -A MANAGER_JSON_PATH=(
   [AUTO_UPDATE_ON_BOOT]=".autoUpdateOnBoot"
   [AUTO_RESTART_ON_UPDATE]=".autoRestartOnUpdate"
   [SAFE_MODE]=".safeMode"
-  [HEALTH_CHECK_INTERVAL]=".healthCheckInterval"
-  [HEALTH_CHECK_ON_START]=".healthCheckOnStart"
   [UPDATE_CHECK_PLAYERS]=".updateCheckPlayers"
   [RESTART_CHECK_PLAYERS]=".restartCheckPlayers"
   [A2S_TIMEOUT]=".a2sTimeout"
@@ -422,7 +418,6 @@ declare -A MANAGER_TYPE=(
   [PGID]="int"
   [STEAM_APP_ID]="int"
   [AUTO_UPDATE_INTERVAL]="int"
-  [HEALTH_CHECK_INTERVAL]="int"
   [A2S_RETRIES]="int"
   [BACKUP_MAX_COUNT]="int"
   [STOP_TIMEOUT]="int"
@@ -433,7 +428,6 @@ declare -A MANAGER_TYPE=(
   [AUTO_UPDATE_ON_BOOT]="bool"
   [AUTO_RESTART_ON_UPDATE]="bool"
   [SAFE_MODE]="bool"
-  [HEALTH_CHECK_ON_START]="bool"
   [UPDATE_CHECK_PLAYERS]="bool"
   [RESTART_CHECK_PLAYERS]="bool"
   [ENABLE_CRON]="bool"
@@ -580,10 +574,6 @@ validate_manager_value() {
       validate_int_min "$var" "$value" 1 "$mode"
       return $?
       ;;
-    HEALTH_CHECK_INTERVAL)
-      validate_int_min "$var" "$value" 0 "$mode"
-      return $?
-      ;;
     A2S_RETRIES)
       validate_int_min "$var" "$value" 0 "$mode"
       return $?
@@ -623,7 +613,7 @@ validate_manager_value() {
         esac
       fi
       ;;
-    AUTO_UPDATE|AUTO_UPDATE_ON_BOOT|AUTO_RESTART_ON_UPDATE|SAFE_MODE|HEALTH_CHECK_ON_START|UPDATE_CHECK_PLAYERS|RESTART_CHECK_PLAYERS|ENABLE_CRON|PRINT_GROUP_PASSWORDS)
+    AUTO_UPDATE|AUTO_UPDATE_ON_BOOT|AUTO_RESTART_ON_UPDATE|SAFE_MODE|UPDATE_CHECK_PLAYERS|RESTART_CHECK_PLAYERS|ENABLE_CRON|PRINT_GROUP_PASSWORDS)
       if [[ "$mode" == "hard" ]]; then
         validate_bool "$var" "$value"
       else

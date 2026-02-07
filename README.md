@@ -186,9 +186,16 @@ sudo mkdir -p /home/enshrouded/server_1
 Set proper ownership:
 
 ```bash
-sudo chown enshrouded:enshrouded /home/enshrouded/server_1
+sudo chown -R enshrouded:enshrouded /home/enshrouded/server_1
 ```
-> `chown enshrouded:enshrouded /home/enshrouded/server_1`: assigns ownership to the enshrouded user.
+> `chown -R enshrouded:enshrouded /home/enshrouded/server_1`: assigns ownership to the enshrouded user (recursive so existing files are fixed too).
+
+Ensure group write access:
+
+```bash
+sudo chmod -R u+rwX,g+rwX /home/enshrouded/server_1
+```
+> `chmod -R u+rwX,g+rwX /home/enshrouded/server_1`: ensures logs/saves are writable by the mapped user and group.
 
 Add the current login user to the enshrouded group (same access as enshrouded):
 

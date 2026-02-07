@@ -361,29 +361,6 @@ PY
   fi
 }
 
-health_check() {
-  log_context_push "health"
-  local port players
-  port="$(get_query_port)"
-  if ! is_server_running; then
-    warn "Health: server not running"
-    log_context_pop
-    return 1
-  fi
-
-  QUERY_PORT="$port"
-  players="$(query_player_count)"
-  if [[ "$players" == "unknown" ]]; then
-    warn "Health: server running, no A2S response on port $port"
-    log_context_pop
-    return 1
-  fi
-
-  info "Health: server running, players=$players, port=$port"
-  log_context_pop
-  return 0
-}
-
 check_server_empty() {
   local mode flag count
   mode="${1:-update}"
@@ -630,14 +607,17 @@ get_log_dir() {
 }
 
 latest_log_file() {
-  local log_dir
+  local log_dir latest
   log_dir="$(get_log_dir)"
   if [[ ! -d "$log_dir" ]]; then
-    echo ""
-    return
+    return 0
   fi
-  find "$log_dir" -maxdepth 1 -type f -name "$LOG_FILE_PATTERN" -printf '%T@ %p\n' 2>/dev/null \
-    | sort -nr | head -n1 | cut -d' ' -f2-
+  latest="$(find "$log_dir" -maxdepth 1 -type f -name "$LOG_FILE_PATTERN" -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -n1 | cut -d' ' -f2- || true)"
+  if [[ -n "$latest" ]]; then
+    printf "%s" "$latest"
+  fi
+  return 0
 }
 
 log_streamer_loop() {

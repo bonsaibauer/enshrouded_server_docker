@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 BOOTSTRAP_LOG_FILE="${MANAGER_BOOTSTRAP_LOG_FILE:-/home/steam/enshrouded/manager-bootstrap.log}"
+BOOTSTRAP_CMD="${1:-}"
+if [[ -z "${BOOTSTRAP_FORCE_COLOR:-}" ]]; then
+  case "$BOOTSTRAP_CMD" in
+    bootstrap|run)
+      BOOTSTRAP_FORCE_COLOR="true"
+      ;;
+  esac
+fi
 
 bootstrap_timestamp() {
   date -u "+%Y-%m-%d %H:%M:%S" 2>/dev/null || printf "%s" "1970-01-01 00:00:00"
@@ -9,7 +17,22 @@ bootstrap_color_enabled() {
   if [[ -n "${NO_COLOR:-}" ]]; then
     return 1
   fi
+  if [[ "${BOOTSTRAP_FORCE_COLOR:-}" == "true" || "${BOOTSTRAP_FORCE_COLOR:-}" == "1" || "${FORCE_COLOR:-}" == "1" ]]; then
+    return 0
+  fi
   [[ -t 1 ]]
+}
+
+bootstrap_debug_enabled() {
+  if [[ "${MANAGER_BOOTSTRAP_DEBUG:-false}" == "true" ]]; then
+    return 0
+  fi
+  case "${BOOTSTRAP_CMD:-}" in
+    bootstrap)
+      return 0
+      ;;
+  esac
+  return 1
 }
 
 bootstrap_format_message() {
@@ -44,7 +67,7 @@ bootstrap_log() {
 }
 
 bootstrap_diagnostics() {
-  if [[ "${MANAGER_BOOTSTRAP_DEBUG:-true}" != "true" ]]; then
+  if ! bootstrap_debug_enabled; then
     return 0
   fi
 
@@ -147,12 +170,16 @@ export MANAGER_ROOT
 safe_source() {
   local file rc
   file="$1"
-  bootstrap_log "source begin: $file"
+  if bootstrap_debug_enabled; then
+    bootstrap_log "source begin: $file"
+  fi
   set +e
   . "$file"
   rc=$?
   set -e
-  bootstrap_log "source end: $file rc=$rc"
+  if bootstrap_debug_enabled; then
+    bootstrap_log "source end: $file rc=$rc"
+  fi
   return "$rc"
 }
 
@@ -217,7 +244,6 @@ startup_summary() {
   ui_kv "Preset" "$preset"
   ui_kv "Auto Update" "$AUTO_UPDATE"
   ui_kv "Update Interval" "${AUTO_UPDATE_INTERVAL}s"
-  ui_kv "Health Check" "${HEALTH_CHECK_INTERVAL}s"
   ui_kv "Safe Mode" "$SAFE_MODE"
   ui_hr
 }
@@ -783,10 +809,8 @@ healthcheck() {
 
 manager_loop() {
   local next_update_check now
-  local next_health_check
   local server_stopped_notice
   next_update_check=$(( $(date +%s) + AUTO_UPDATE_INTERVAL ))
-  next_health_check=$(( $(date +%s) + HEALTH_CHECK_INTERVAL ))
   server_stopped_notice="false"
 
   while true; do
@@ -797,11 +821,6 @@ manager_loop() {
       info "Update check (auto)"
       start_update_async || true
       next_update_check=$(( now + AUTO_UPDATE_INTERVAL ))
-    fi
-
-    if [[ "$HEALTH_CHECK_INTERVAL" -gt 0 ]] && [[ "$now" -ge "$next_health_check" ]] && ! action_in_progress; then
-      health_check || true
-      next_health_check=$(( now + HEALTH_CHECK_INTERVAL ))
     fi
 
     if ! is_server_running; then
@@ -871,15 +890,20 @@ manager_run() {
   start_cron_daemon
 
   if is_true "$AUTO_UPDATE_ON_BOOT"; then
-    start_update_async || true
+    if action_in_progress; then
+      warn "Update on boot skipped: update/restart in progress"
+    else
+      info "Update on boot"
+      update_now || warn "Update on boot failed"
+    fi
   fi
 
   if ! is_server_running; then
-    start_server
-  fi
-
-  if is_true "$HEALTH_CHECK_ON_START"; then
-    health_check || true
+    if action_in_progress; then
+      warn "Start skipped: update/restart in progress"
+    else
+      start_server
+    fi
   fi
 
   ok "Start complete: Server Manager online"

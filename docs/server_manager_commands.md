@@ -43,6 +43,7 @@ docker exec enshroudedserver manager.sh restart
 docker exec enshroudedserver manager.sh update
 docker exec enshroudedserver manager.sh backup
 docker exec enshroudedserver manager.sh logs
+docker exec enshroudedserver manager.sh healthcheck
 docker exec enshroudedserver manager.sh help
 ```
 
@@ -55,6 +56,7 @@ docker exec enshroudedserver manager.sh help
 /opt/enshrouded/manager/manager.sh update
 /opt/enshrouded/manager/manager.sh backup
 /opt/enshrouded/manager/manager.sh logs
+/opt/enshrouded/manager/manager.sh healthcheck
 /opt/enshrouded/manager/manager.sh help
 ```
 
@@ -66,6 +68,7 @@ supervisorctl -c /opt/enshrouded/manager/supervisord.conf stop server-manager
 ```
 
 **Supervisor Programs (Names)**
+- `server-manager-daemon` (Server Manager process)
 - `server-manager` (Enshrouded server process)
 - `server-manager-update`
 - `server-manager-backup`
@@ -83,7 +86,6 @@ The following env vars control schedules:
 - `BACKUP_CRON`
 - `RESTART_CRON`
 
-Auto-update and health checks:
+Auto-update and safe checks:
 - `AUTO_UPDATE`
 - `AUTO_UPDATE_INTERVAL`
-- `HEALTH_CHECK_INTERVAL`

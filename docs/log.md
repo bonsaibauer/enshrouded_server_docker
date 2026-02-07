@@ -30,3 +30,11 @@
 | `NO_COLOR` | unset | Output formatting | When stdout is a TTY, level labels use ANSI colors. `docker logs` shows plain text because stdout is not a TTY. |
 
 Logs are always streamed to stdout from the latest server log file.
+
+## Permissions Troubleshooting
+If `server-manager-logstream` keeps restarting or no server logs appear in `docker logs`, check ownership and permissions of the mounted volume:
+
+```bash
+sudo chown -R enshrouded:enshrouded /home/enshrouded/server_1
+sudo chmod -R u+rwX,g+rwX /home/enshrouded/server_1
+```

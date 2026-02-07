@@ -19,8 +19,6 @@
   "autoUpdateOnBoot": true,
   "autoRestartOnUpdate": true,
   "safeMode": true,
-  "healthCheckInterval": 300,
-  "healthCheckOnStart": true,
   "updateCheckPlayers": false,
   "restartCheckPlayers": false,
   "a2sTimeout": 2,

@@ -39,8 +39,6 @@ Full settings:
 | `autoUpdateOnBoot` | `true` | Update check on boot |
 | `autoRestartOnUpdate` | `true` | Restart after update enabled |
 | `safeMode` | `true` | Skip update/restart if players unknown |
-| `healthCheckInterval` | `300` | Health check every 300s |
-| `healthCheckOnStart` | `true` | Run health check on start |
 | `updateCheckPlayers` | `false` | Updates allowed even with players |
 | `restartCheckPlayers` | `false` | Restarts allowed even with players |
 | `a2sTimeout` | `2` | A2S timeout 2s |
