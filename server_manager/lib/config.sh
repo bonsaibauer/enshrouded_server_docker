@@ -1194,7 +1194,10 @@ ensure_writable_dir() {
 
   warn "Permission check failed for: $dir"
 
-  if ! is_true "${AUTO_FIX_PERMS:-}"; then
+  local auto_fix
+  auto_fix="${AUTO_FIX_PERMS:-true}"
+  if ! is_true "$auto_fix"; then
+    info "Auto permission repair disabled for: $dir (AUTO_FIX_PERMS=${AUTO_FIX_PERMS:-<unset>})"
     return 1
   fi
 
