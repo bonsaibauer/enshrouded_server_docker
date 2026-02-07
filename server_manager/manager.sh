@@ -168,7 +168,8 @@ print_help() {
 Usage: $MANAGER_BIN <command>
 
 Commands:
-  run             Start Server Manager (PID1 mode, handles signals)
+  run             Start Server Manager loop (expects supervisord running)
+  bootstrap       Prepare runtime and exec supervisord (PID1)
   setup           Setup Server Manager (config, directories, a2s)
   start           Start server
   stop            Stop server (or Server Manager if running)
@@ -177,6 +178,7 @@ Commands:
   backup          Backup now
   status          Show status (Server Manager + Server)
   logs            Tail latest log file
+  healthcheck     Docker healthcheck (supervisor + manager)
   help            Show this help
 
 Notes:
@@ -215,10 +217,8 @@ startup_summary() {
   ui_kv "Preset" "$preset"
   ui_kv "Auto Update" "$AUTO_UPDATE"
   ui_kv "Update Interval" "${AUTO_UPDATE_INTERVAL}s"
-  ui_kv "Auto Restart" "$AUTO_RESTART"
   ui_kv "Health Check" "${HEALTH_CHECK_INTERVAL}s"
   ui_kv "Safe Mode" "$SAFE_MODE"
-  ui_kv "Log To Stdout" "$LOG_TO_STDOUT"
   ui_hr
 }
 
@@ -282,6 +282,18 @@ setup_environment() {
   bootstrap_hook
   prepare_a2s_library
   ok "Setup complete"
+}
+
+manager_bootstrap() {
+  update_or_create_manager_config
+  init_colors
+  set_umask
+  ensure_root_and_map_user
+  preflight_permissions
+  setup_syslog || true
+  ok "Bootstrap complete"
+  require_cmd supervisord
+  exec /usr/bin/supervisord -c /opt/enshrouded/manager/supervisord.conf
 }
 
 RSYSLOG_CONF="/etc/rsyslog.d/server_manager_stdout.conf"
@@ -413,6 +425,18 @@ stop_syslog_daemon() {
       supervisor_program_stop "$name"
     fi
   fi
+}
+
+supervisor_is_pid1() {
+  if is_true "${SUPERVISOR_PID1:-}"; then
+    return 0
+  fi
+  if ! command -v ps >/dev/null 2>&1; then
+    return 1
+  fi
+  local comm
+  comm="$(ps -p 1 -o comm= 2>/dev/null || true)"
+  [[ "$comm" == "supervisord" ]]
 }
 
 run_syslog_foreground() {
@@ -639,9 +663,13 @@ handle_requests() {
 }
 
 manager_cleanup() {
-  stop_log_streamer
-  stop_syslog_daemon || true
-  supervisor_shutdown
+  if supervisor_is_pid1; then
+    info "Supervisor is PID1; skipping managed shutdown"
+  else
+    stop_log_streamer
+    stop_syslog_daemon || true
+    supervisor_shutdown
+  fi
   clear_pid "$PID_MANAGER_FILE"
   rm -f "$RUN_DIR/update" "$RUN_DIR/backup" "$RUN_DIR/restart" 2>/dev/null || true
 }
@@ -718,19 +746,47 @@ tail_logs() {
     return 1
   fi
   info "Start log tail: $latest"
-  tail -n "${LOG_TAIL_LINES:-200}" -F "$latest" 2>/dev/null | log_pipe info "server-log"
+  tail -n "$LOG_TAIL_LINES" -F "$latest" 2>/dev/null | log_pipe info "server-log"
+}
+
+healthcheck() {
+  local conf socket comm state
+  conf="/opt/enshrouded/manager/supervisord.conf"
+  socket="/var/run/enshrouded/server-manager-supervisor.sock"
+
+  if ! command -v supervisorctl >/dev/null 2>&1; then
+    echo "unhealthy: supervisorctl missing" >&2
+    return 1
+  fi
+  if ! [[ -S "$socket" ]]; then
+    echo "unhealthy: supervisor socket missing: $socket" >&2
+    return 1
+  fi
+  if ! supervisorctl -c "$conf" pid >/dev/null 2>&1; then
+    echo "unhealthy: supervisorctl not responding" >&2
+    return 1
+  fi
+  if command -v ps >/dev/null 2>&1; then
+    comm="$(ps -p 1 -o comm= 2>/dev/null || true)"
+    if [[ "$comm" != "supervisord" ]]; then
+      echo "unhealthy: pid1 is not supervisord (pid1=$comm)" >&2
+      return 1
+    fi
+  fi
+  state="$(supervisorctl -c "$conf" status server-manager-daemon 2>/dev/null | awk '{print $2}')"
+  if [[ "$state" != "RUNNING" ]]; then
+    echo "unhealthy: server-manager-daemon state=$state" >&2
+    return 1
+  fi
+  return 0
 }
 
 manager_loop() {
   local next_update_check now
-  local restart_attempts
   local next_health_check
-  local restart_suppressed
   local server_stopped_notice
   next_update_check=$(( $(date +%s) + AUTO_UPDATE_INTERVAL ))
   next_health_check=$(( $(date +%s) + HEALTH_CHECK_INTERVAL ))
-  restart_attempts=0
-  restart_suppressed="false"
   server_stopped_notice="false"
 
   while true; do
@@ -750,41 +806,16 @@ manager_loop() {
 
     if ! is_server_running; then
       if action_in_progress; then
-        if [[ "$restart_suppressed" != "true" ]]; then
-          warn "Auto restart skipped: update/restart in progress"
-          restart_suppressed="true"
-        fi
         sleep 2
         continue
       fi
-      restart_suppressed="false"
-      if is_true "$AUTO_RESTART"; then
-        warn "Stop detected: server process exited"
-        restart_attempts=$((restart_attempts + 1))
-        if [[ "$AUTO_RESTART_MAX_ATTEMPTS" -gt 0 && "$restart_attempts" -gt "$AUTO_RESTART_MAX_ATTEMPTS" ]]; then
-          warn "Stop Server Manager loop: auto restart limit reached"
-          return 1
-        fi
-        warn "Start restart in ${AUTO_RESTART_DELAY}s (attempt ${restart_attempts})"
-        sleep "$AUTO_RESTART_DELAY"
-        start_server || true
-        start_log_streamer || true
-        continue
-      fi
-      if is_true "${EXIT_ON_SERVER_STOP:-}"; then
-        warn "Stop detected: server process exited"
-        return 0
-      fi
       if [[ "$server_stopped_notice" != "true" ]]; then
-        warn "Stop detected: server process exited"
-        warn "Auto restart disabled; manager will stay idle (set EXIT_ON_SERVER_STOP=true to exit)"
+        warn "Server not running (supervisor manages restarts)"
         server_stopped_notice="true"
       fi
       sleep 2
       continue
     else
-      restart_attempts=0
-      restart_suppressed="false"
       server_stopped_notice="false"
     fi
 
@@ -820,6 +851,7 @@ manager_run() {
   fi
 
   shift || true
+  update_or_create_manager_config
 
   ui_banner
   ui_kv "Server Manager Version" "$MANAGER_VERSION"
@@ -836,6 +868,8 @@ manager_run() {
 
   startup_summary
 
+  start_cron_daemon
+
   if is_true "$AUTO_UPDATE_ON_BOOT"; then
     start_update_async || true
   fi
@@ -843,8 +877,6 @@ manager_run() {
   if ! is_server_running; then
     start_server
   fi
-
-  start_log_streamer
 
   if is_true "$HEALTH_CHECK_ON_START"; then
     health_check || true
@@ -892,6 +924,9 @@ case "$cmd" in
   run)
     manager_run "$@"
     ;;
+  bootstrap)
+    manager_bootstrap
+    ;;
   setup)
     setup_environment
     ;;
@@ -937,6 +972,9 @@ case "$cmd" in
     ;;
   logs)
     tail_logs
+    ;;
+  healthcheck)
+    healthcheck
     ;;
   help|--help|-h)
     print_help

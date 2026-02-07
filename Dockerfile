@@ -55,7 +55,6 @@ RUN set -eux \
     python3 \
     locales \
     zip \
-    tini \
 && sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
 && locale-gen en_US.UTF-8 \
 && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
@@ -115,7 +114,7 @@ RUN mkdir -p "/home/steam/.steam" \
 # --------------------------
 ADD ./server_manager /opt/enshrouded/manager
 RUN find /opt/enshrouded/manager -type f -name "*.sh" -exec sed -i 's/\r$//' {} + \
-&& chmod +x /opt/enshrouded/manager/manager.sh /opt/enshrouded/manager/lib/*.sh \
+&& chmod +x /opt/enshrouded/manager/*.sh /opt/enshrouded/manager/lib/*.sh \
 && ln -sf /opt/enshrouded/manager/manager.sh /usr/local/bin/manager.sh \
 && bash -n /opt/enshrouded/manager/manager.sh \
 && find /opt/enshrouded/manager/lib -type f -name "*.sh" -print0 | xargs -0 -n1 bash -n \
@@ -140,6 +139,9 @@ VOLUME /home/steam/enshrouded
 EXPOSE 15637/udp
 
 # --------------------------
-# Default Entrypoint
+# Default Entrypoint (supervisord PID1)
 # --------------------------
-ENTRYPOINT [ "/usr/bin/tini", "--", "/opt/enshrouded/manager/manager.sh", "run" ]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["/opt/enshrouded/manager/manager.sh", "healthcheck"]
+
+ENTRYPOINT [ "/opt/enshrouded/manager/manager.sh", "bootstrap" ]

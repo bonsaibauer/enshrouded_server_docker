@@ -144,7 +144,7 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 
 ---
 
-## Updates, Restarts, Health Checks
+## Updates and Health Checks
 
 | Variable | Description | Example / Default Value | Options / Notes |
 |---------|-------------|--------------------------|-----------------|
@@ -152,10 +152,6 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **AUTO_UPDATE_INTERVAL** | Update interval (seconds) | 1800 | Integer seconds |
 | **AUTO_UPDATE_ON_BOOT** | Update on manager start | true | true / false |
 | **AUTO_RESTART_ON_UPDATE** | Restart after update | true | true / false |
-| **AUTO_RESTART** | Auto-restart if server exits | true | true / false |
-| **AUTO_RESTART_DELAY** | Delay before restart (seconds) | 10 | Integer seconds |
-| **AUTO_RESTART_MAX_ATTEMPTS** | Max restart attempts | 0 | 0 = unlimited |
-| **EXIT_ON_SERVER_STOP** | Exit manager when server stops and auto-restart is disabled | false | true / false |
 | **SAFE_MODE** | Skip update/restart if player count unknown | true | true / false |
 | **HEALTH_CHECK_INTERVAL** | Health check interval (seconds) | 300 | 0 disables checks |
 | **HEALTH_CHECK_ON_START** | Health check on start | true | true / false |
@@ -167,17 +163,11 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 
 ---
 
+Supervisor handles server process restarts; there is no manager-side auto-restart setting.
+
 ## Logging
 
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **LOG_TO_STDOUT** | Stream logs to stdout | true | true / false |
-| **LOG_TAIL_LINES** | Tail lines per log file | 200 | Integer |
-| **LOG_POLL_INTERVAL** | Log file poll interval (seconds) | 2 | Integer seconds |
-| **LOG_FILE_PATTERN** | Log file glob | "*.log" | Used by `find -name` |
-| **LOG_DUMP_ON_EXIT** | Dump server log tail when server exits | true | true / false |
-| **LOG_DUMP_LINES** | Lines to dump on exit | 200 | Integer (0 disables) |
-| **LOG_DUMP_MIN_UPTIME** | Minimum uptime before skipping dump on clean exit | 20 | Integer seconds |
+Server log output is always streamed to stdout from the latest log file in `<INSTALL_PATH>/logs`.
 
 ---
 

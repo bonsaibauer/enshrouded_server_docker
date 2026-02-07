@@ -1,3 +1,5 @@
+[![Made With Love](https://img.shields.io/badge/Made%20with%20%E2%9D%A4%EF%B8%8F-by%20bonsaibauer-green)](https://github.com/bonsaibauer)&nbsp;&nbsp;
+
 [![Repository](https://img.shields.io/badge/Repository-enshrouded__server__docker-blue?style=flat&logo=github)](https://github.com/bonsaibauer/enshrouded_server_docker)&nbsp;&nbsp;
 ![License](https://img.shields.io/badge/License-MIT-blue)&nbsp;&nbsp;
 

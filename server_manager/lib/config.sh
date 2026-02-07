@@ -349,9 +349,6 @@ declare -a MANAGER_VARS=(
   AUTO_UPDATE_INTERVAL
   AUTO_UPDATE_ON_BOOT
   AUTO_RESTART_ON_UPDATE
-  AUTO_RESTART
-  AUTO_RESTART_DELAY
-  AUTO_RESTART_MAX_ATTEMPTS
   SAFE_MODE
   HEALTH_CHECK_INTERVAL
   HEALTH_CHECK_ON_START
@@ -360,10 +357,6 @@ declare -a MANAGER_VARS=(
   A2S_TIMEOUT
   A2S_RETRIES
   A2S_RETRY_DELAY
-  LOG_TO_STDOUT
-  LOG_TAIL_LINES
-  LOG_POLL_INTERVAL
-  LOG_FILE_PATTERN
   BACKUP_DIR
   BACKUP_MAX_COUNT
   BACKUP_PRE_HOOK
@@ -400,9 +393,6 @@ declare -A MANAGER_JSON_PATH=(
   [AUTO_UPDATE_INTERVAL]=".autoUpdateInterval"
   [AUTO_UPDATE_ON_BOOT]=".autoUpdateOnBoot"
   [AUTO_RESTART_ON_UPDATE]=".autoRestartOnUpdate"
-  [AUTO_RESTART]=".autoRestart"
-  [AUTO_RESTART_DELAY]=".autoRestartDelay"
-  [AUTO_RESTART_MAX_ATTEMPTS]=".autoRestartMaxAttempts"
   [SAFE_MODE]=".safeMode"
   [HEALTH_CHECK_INTERVAL]=".healthCheckInterval"
   [HEALTH_CHECK_ON_START]=".healthCheckOnStart"
@@ -411,10 +401,6 @@ declare -A MANAGER_JSON_PATH=(
   [A2S_TIMEOUT]=".a2sTimeout"
   [A2S_RETRIES]=".a2sRetries"
   [A2S_RETRY_DELAY]=".a2sRetryDelay"
-  [LOG_TO_STDOUT]=".logToStdout"
-  [LOG_TAIL_LINES]=".logTailLines"
-  [LOG_POLL_INTERVAL]=".logPollInterval"
-  [LOG_FILE_PATTERN]=".logFilePattern"
   [BACKUP_DIR]=".backupDir"
   [BACKUP_MAX_COUNT]=".backupMaxCount"
   [BACKUP_PRE_HOOK]=".backupPreHook"
@@ -436,12 +422,8 @@ declare -A MANAGER_TYPE=(
   [PGID]="int"
   [STEAM_APP_ID]="int"
   [AUTO_UPDATE_INTERVAL]="int"
-  [AUTO_RESTART_DELAY]="int"
-  [AUTO_RESTART_MAX_ATTEMPTS]="int"
   [HEALTH_CHECK_INTERVAL]="int"
   [A2S_RETRIES]="int"
-  [LOG_TAIL_LINES]="int"
-  [LOG_POLL_INTERVAL]="int"
   [BACKUP_MAX_COUNT]="int"
   [STOP_TIMEOUT]="int"
   [A2S_TIMEOUT]="number"
@@ -450,12 +432,10 @@ declare -A MANAGER_TYPE=(
   [AUTO_UPDATE]="bool"
   [AUTO_UPDATE_ON_BOOT]="bool"
   [AUTO_RESTART_ON_UPDATE]="bool"
-  [AUTO_RESTART]="bool"
   [SAFE_MODE]="bool"
   [HEALTH_CHECK_ON_START]="bool"
   [UPDATE_CHECK_PLAYERS]="bool"
   [RESTART_CHECK_PLAYERS]="bool"
-  [LOG_TO_STDOUT]="bool"
   [ENABLE_CRON]="bool"
   [PRINT_GROUP_PASSWORDS]="bool"
 )
@@ -600,27 +580,11 @@ validate_manager_value() {
       validate_int_min "$var" "$value" 1 "$mode"
       return $?
       ;;
-    AUTO_RESTART_DELAY)
-      validate_int_min "$var" "$value" 0 "$mode"
-      return $?
-      ;;
-    AUTO_RESTART_MAX_ATTEMPTS)
-      validate_int_min "$var" "$value" 0 "$mode"
-      return $?
-      ;;
     HEALTH_CHECK_INTERVAL)
       validate_int_min "$var" "$value" 0 "$mode"
       return $?
       ;;
     A2S_RETRIES)
-      validate_int_min "$var" "$value" 0 "$mode"
-      return $?
-      ;;
-    LOG_TAIL_LINES)
-      validate_int_min "$var" "$value" 0 "$mode"
-      return $?
-      ;;
-    LOG_POLL_INTERVAL)
       validate_int_min "$var" "$value" 0 "$mode"
       return $?
       ;;
@@ -659,7 +623,7 @@ validate_manager_value() {
         esac
       fi
       ;;
-    AUTO_UPDATE|AUTO_UPDATE_ON_BOOT|AUTO_RESTART_ON_UPDATE|AUTO_RESTART|SAFE_MODE|HEALTH_CHECK_ON_START|UPDATE_CHECK_PLAYERS|RESTART_CHECK_PLAYERS|LOG_TO_STDOUT|ENABLE_CRON|PRINT_GROUP_PASSWORDS)
+    AUTO_UPDATE|AUTO_UPDATE_ON_BOOT|AUTO_RESTART_ON_UPDATE|SAFE_MODE|HEALTH_CHECK_ON_START|UPDATE_CHECK_PLAYERS|RESTART_CHECK_PLAYERS|ENABLE_CRON|PRINT_GROUP_PASSWORDS)
       if [[ "$mode" == "hard" ]]; then
         validate_bool "$var" "$value"
       else

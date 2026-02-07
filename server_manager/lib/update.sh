@@ -165,7 +165,6 @@ update_now() {
 
   if is_true "$AUTO_RESTART_ON_UPDATE"; then
     start_server
-    start_log_streamer || true
   fi
 
   update_post_hook

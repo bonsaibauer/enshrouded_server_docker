@@ -7,9 +7,9 @@
 | `2026-02-06T17:45:13Z [OK] [server_manager] Start complete: server online` | Server Manager core | `log()` / `ok()` | Includes manager UTC timestamp. `OK` is a distinct level. |
 | `2026-02-06T17:45:30Z [WARN] [server_manager] Stop detected: server process exited` | Server Manager core | `log()` / `warn()` | Includes manager UTC timestamp. Same format as INFO/OK/ERROR. |
 | `2026-02-06T17:45:31Z [INFO] [server_manager] [update] SteamCMD: ...` | Manager command output (piped) | `run_logged` / `run_hook_logged` -> `log_pipe` | Manager timestamp is added to all piped output. Context label is set by the caller (e.g., `update`, `backup`). |
-| `2026-02-06T17:45:32Z [INFO] [server_manager] [server-log] [Session] 'HostOnline' (up)!` | Enshrouded server log file (streamed) | `server-manager-logstream` or `manager.sh logs` | Manager timestamp is added to each streamed server log line. Controlled by `LOG_TO_STDOUT`, `LOG_TAIL_LINES`, `LOG_POLL_INTERVAL`, `LOG_FILE_PATTERN`. |
-| `2026-02-06T17:45:50Z [WARN] [server_manager] [supervisor] supervisord: WARN ...` | Supervisor log file (streamed) | `server-manager-supervisor-logstream` | Manager timestamp is added. The supervisor line timestamp is stripped to avoid double timestamps. Active only when `LOG_TO_STDOUT=true`. |
-| `2026-02-06T17:45:40Z [ERROR] [server_manager] [syslog] TAG: Message` | Syslog (streamed) | `server-manager-syslog` + `server-manager-syslog-logstream` | Manager timestamp is added. The syslog file timestamp is stripped to avoid double timestamps. Active only when `LOG_TO_STDOUT=true` and `rsyslogd` exists. Severity is mapped to debug/info/warn/error. |
+| `2026-02-06T17:45:32Z [INFO] [server_manager] [server-log] [Session] 'HostOnline' (up)!` | Enshrouded server log file (streamed) | `server-manager-logstream` or `manager.sh logs` | Manager timestamp is added to each streamed server log line (always enabled). |
+| `2026-02-06T17:45:50Z [WARN] [server_manager] [supervisor] supervisord: WARN ...` | Supervisor log file (streamed) | `server-manager-supervisor-logstream` | Manager timestamp is added. The supervisor line timestamp is stripped to avoid double timestamps. |
+| `2026-02-06T17:45:40Z [ERROR] [server_manager] [syslog] TAG: Message` | Syslog (streamed) | `server-manager-syslog` + `server-manager-syslog-logstream` | Manager timestamp is added. The syslog file timestamp is stripped to avoid double timestamps. `rsyslogd` must be available. Severity is mapped to debug/info/warn/error. |
 
 ## Log Files and Locations
 | File or directory | Produced by | Selection / usage | Notes |
@@ -25,13 +25,8 @@
 |---|---|---|---|
 | `ENSHROUDED_LOG_DIR` | unset | Server log files | Overrides log directory. Absolute path stays absolute; relative path is resolved under `INSTALL_PATH`. |
 | `logDirectory` (in `enshrouded_server.json`) | `./logs` | Server log files | Used when `ENSHROUDED_LOG_DIR` is not set. |
-| `LOG_FILE_PATTERN` | `*.log` | Server log selection | Used by logstream and `manager.sh logs` to find the newest log file (via `find -name`). |
-| `LOG_TO_STDOUT` | `true` | Streaming | Enables or disables: server logstream, syslog daemon, syslog logstream, supervisor logstream. Manager core logs still go to stdout. |
-| `LOG_TAIL_LINES` | `200` | Streaming | Number of lines passed to `tail -n` for server log streaming and `manager.sh logs`. |
-| `LOG_POLL_INTERVAL` | `2` | Streaming | Seconds between checks for a newer log file (log rotation handling). |
-| `LOG_DUMP_ON_EXIT` | `true` | Server exit diagnostics | When enabled, dump the tail of the latest server log after the server exits. |
-| `LOG_DUMP_LINES` | `200` | Server exit diagnostics | Number of lines dumped when `LOG_DUMP_ON_EXIT=true`. |
-| `LOG_DUMP_MIN_UPTIME` | `20` | Server exit diagnostics | Skip dump on clean exit if uptime is at least this many seconds. |
 | `LOG_LEVEL` | `info` | Manager core logs | Filters only timestamped manager logs (`log()` / `info()` / `warn()` / `error()` / `ok()` / `debug()`). It does not filter streamed or piped lines. |
 | `LOG_CONTEXT` | `server_manager` | Manager core logs | Default context label for manager logs. Streamed logs set their own context (`server-log`, `supervisor`, `syslog`, etc.). |
 | `NO_COLOR` | unset | Output formatting | When stdout is a TTY, level labels use ANSI colors. `docker logs` shows plain text because stdout is not a TTY. |
+
+Logs are always streamed to stdout from the latest server log file.

@@ -38,9 +38,6 @@ Full settings:
 | `autoUpdateInterval` | `1800` | Check every 1800s (30 min) |
 | `autoUpdateOnBoot` | `true` | Update check on boot |
 | `autoRestartOnUpdate` | `true` | Restart after update enabled |
-| `autoRestart` | `true` | Auto-restart on exit enabled |
-| `autoRestartDelay` | `10` | Wait 10s before auto-restart |
-| `autoRestartMaxAttempts` | `0` | Unlimited restart attempts |
 | `safeMode` | `true` | Skip update/restart if players unknown |
 | `healthCheckInterval` | `300` | Health check every 300s |
 | `healthCheckOnStart` | `true` | Run health check on start |
@@ -49,10 +46,6 @@ Full settings:
 | `a2sTimeout` | `2` | A2S timeout 2s |
 | `a2sRetries` | `2` | A2S retries 2 |
 | `a2sRetryDelay` | `1` | A2S retry delay 1s |
-| `logToStdout` | `true` | Log streaming to stdout enabled |
-| `logTailLines` | `200` | Tail 200 log lines |
-| `logPollInterval` | `2` | Poll every 2s |
-| `logFilePattern` | `*.log` | Only `*.log` files |
 | `backupDir` | `backups` | Backups stored in `backups/` |
 | `backupMaxCount` | `7` | Keep last 7 backups (older pruned) |
 | `backupPreHook` | `null` | No pre-backup hook |
@@ -80,7 +73,6 @@ Key differences to `default`:
 | `AUTO_UPDATE` | `false` | No periodic update checks |
 | `AUTO_UPDATE_ON_BOOT` | `false` | No update on boot |
 | `AUTO_RESTART_ON_UPDATE` | `false` | No restart after update |
-| `AUTO_RESTART` | `false` | No auto-restart on exit |
 | `ENABLE_CRON` | `false` | Scheduling disabled |
 | `UPDATE_CRON` | `null` | No update schedule |
 | `BACKUP_CRON` | `null` | No backup schedule |
