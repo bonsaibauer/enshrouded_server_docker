@@ -210,7 +210,7 @@ enshrouded_profile_resolve() {
     echo "$name"
     return 0
   fi
-  warn "Enshrouded profile not found: $name (fallback: $EN_PROFILE_DEFAULT)"
+  warn "Enshrouded profile not found: $name (fallback: $EN_PROFILE_DEFAULT)" >&2
   echo "$EN_PROFILE_DEFAULT"
 }
 
@@ -233,11 +233,11 @@ manager_profile_resolve() {
     echo "$MANAGER_PROFILE_DEFAULT"
     return 0
   fi
-  if [[ -f "$(manager_profile_path "$name")" ]]; then
+  if [[ -f "$(manager_profile_path "$name")" || -f "$(manager_profile_template_path "$name")" ]]; then
     echo "$name"
     return 0
   fi
-  warn "Profile not found: $name (fallback: $MANAGER_PROFILE_DEFAULT)"
+  warn "Profile not found: $name (fallback: $MANAGER_PROFILE_DEFAULT)" >&2
   echo "$MANAGER_PROFILE_DEFAULT"
 }
 
