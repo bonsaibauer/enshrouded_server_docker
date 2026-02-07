@@ -277,6 +277,8 @@ safe_source() {
 }
 
 safe_source "$ROOT_DIR/lib/common.sh"
+safe_source "$ROOT_DIR/lib/profile.sh"
+safe_source "$ROOT_DIR/lib/env.sh"
 safe_source "$ROOT_DIR/lib/config.sh"
 safe_source "$ROOT_DIR/lib/server.sh"
 safe_source "$ROOT_DIR/lib/update.sh"
