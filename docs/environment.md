@@ -155,6 +155,7 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **AUTO_RESTART** | Auto-restart if server exits | true | true / false |
 | **AUTO_RESTART_DELAY** | Delay before restart (seconds) | 10 | Integer seconds |
 | **AUTO_RESTART_MAX_ATTEMPTS** | Max restart attempts | 0 | 0 = unlimited |
+| **EXIT_ON_SERVER_STOP** | Exit manager when server stops and auto-restart is disabled | false | true / false |
 | **SAFE_MODE** | Skip update/restart if player count unknown | true | true / false |
 | **HEALTH_CHECK_INTERVAL** | Health check interval (seconds) | 300 | 0 disables checks |
 | **HEALTH_CHECK_ON_START** | Health check on start | true | true / false |
@@ -174,6 +175,9 @@ The manager also reads (and creates if missing) `server_manager.json` next to `e
 | **LOG_TAIL_LINES** | Tail lines per log file | 200 | Integer |
 | **LOG_POLL_INTERVAL** | Log file poll interval (seconds) | 2 | Integer seconds |
 | **LOG_FILE_PATTERN** | Log file glob | "*.log" | Used by `find -name` |
+| **LOG_DUMP_ON_EXIT** | Dump server log tail when server exits | true | true / false |
+| **LOG_DUMP_LINES** | Lines to dump on exit | 200 | Integer (0 disables) |
+| **LOG_DUMP_MIN_UPTIME** | Minimum uptime before skipping dump on clean exit | 20 | Integer seconds |
 
 ---
 

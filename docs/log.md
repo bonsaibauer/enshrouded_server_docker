@@ -29,6 +29,9 @@
 | `LOG_TO_STDOUT` | `true` | Streaming | Enables or disables: server logstream, syslog daemon, syslog logstream, supervisor logstream. Manager core logs still go to stdout. |
 | `LOG_TAIL_LINES` | `200` | Streaming | Number of lines passed to `tail -n` for server log streaming and `manager.sh logs`. |
 | `LOG_POLL_INTERVAL` | `2` | Streaming | Seconds between checks for a newer log file (log rotation handling). |
+| `LOG_DUMP_ON_EXIT` | `true` | Server exit diagnostics | When enabled, dump the tail of the latest server log after the server exits. |
+| `LOG_DUMP_LINES` | `200` | Server exit diagnostics | Number of lines dumped when `LOG_DUMP_ON_EXIT=true`. |
+| `LOG_DUMP_MIN_UPTIME` | `20` | Server exit diagnostics | Skip dump on clean exit if uptime is at least this many seconds. |
 | `LOG_LEVEL` | `info` | Manager core logs | Filters only timestamped manager logs (`log()` / `info()` / `warn()` / `error()` / `ok()` / `debug()`). It does not filter streamed or piped lines. |
 | `LOG_CONTEXT` | `server_manager` | Manager core logs | Default context label for manager logs. Streamed logs set their own context (`server-log`, `supervisor`, `syslog`, etc.). |
 | `NO_COLOR` | unset | Output formatting | When stdout is a TTY, level labels use ANSI colors. `docker logs` shows plain text because stdout is not a TTY. |

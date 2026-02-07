@@ -114,8 +114,32 @@ set -euo pipefail
 
 MANAGER_ENV_SNAPSHOT="$(env | cut -d= -f1 | tr '\n' ' ')"
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MANAGER_BIN="$ROOT_DIR/manager.sh"
+resolve_script_path() {
+  local source dir target
+  source="$1"
+
+  if command -v readlink >/dev/null 2>&1; then
+    while [[ -L "$source" ]]; do
+      dir="$(cd -P "$(dirname "$source")" && pwd)"
+      target="$(readlink "$source")"
+      if [[ "$target" == /* ]]; then
+        source="$target"
+      else
+        source="$dir/$target"
+      fi
+    done
+  fi
+
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$source"
+  else
+    (cd -P "$(dirname "$source")" && printf "%s/%s" "$(pwd)" "$(basename "$source")")
+  fi
+}
+
+SCRIPT_PATH="$(resolve_script_path "${BASH_SOURCE[0]}")"
+ROOT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
+MANAGER_BIN="$SCRIPT_PATH"
 MANAGER_ROOT="$ROOT_DIR"
 export MANAGER_BIN
 export MANAGER_ROOT
@@ -702,10 +726,12 @@ manager_loop() {
   local restart_attempts
   local next_health_check
   local restart_suppressed
+  local server_stopped_notice
   next_update_check=$(( $(date +%s) + AUTO_UPDATE_INTERVAL ))
   next_health_check=$(( $(date +%s) + HEALTH_CHECK_INTERVAL ))
   restart_attempts=0
   restart_suppressed="false"
+  server_stopped_notice="false"
 
   while true; do
     handle_requests
@@ -732,8 +758,8 @@ manager_loop() {
         continue
       fi
       restart_suppressed="false"
-      warn "Stop detected: server process exited"
       if is_true "$AUTO_RESTART"; then
+        warn "Stop detected: server process exited"
         restart_attempts=$((restart_attempts + 1))
         if [[ "$AUTO_RESTART_MAX_ATTEMPTS" -gt 0 && "$restart_attempts" -gt "$AUTO_RESTART_MAX_ATTEMPTS" ]]; then
           warn "Stop Server Manager loop: auto restart limit reached"
@@ -745,10 +771,21 @@ manager_loop() {
         start_log_streamer || true
         continue
       fi
-      return 0
+      if is_true "${EXIT_ON_SERVER_STOP:-}"; then
+        warn "Stop detected: server process exited"
+        return 0
+      fi
+      if [[ "$server_stopped_notice" != "true" ]]; then
+        warn "Stop detected: server process exited"
+        warn "Auto restart disabled; manager will stay idle (set EXIT_ON_SERVER_STOP=true to exit)"
+        server_stopped_notice="true"
+      fi
+      sleep 2
+      continue
     else
       restart_attempts=0
       restart_suppressed="false"
+      server_stopped_notice="false"
     fi
 
     sleep 2

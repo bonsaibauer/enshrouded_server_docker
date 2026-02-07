@@ -4,6 +4,9 @@
 
 ENSHROUDED_BINARY="$INSTALL_PATH/enshrouded_server.exe"
 STOP_TIMEOUT="${STOP_TIMEOUT:-60}"
+LOG_DUMP_ON_EXIT="${LOG_DUMP_ON_EXIT:-true}"
+LOG_DUMP_LINES="${LOG_DUMP_LINES:-200}"
+LOG_DUMP_MIN_UPTIME="${LOG_DUMP_MIN_UPTIME:-20}"
 
 SUPERVISOR_CONF="${MANAGER_ROOT:-/opt/enshrouded/manager}/supervisord.conf"
 SUPERVISOR_PID_FILE="$RUN_DIR/server-manager-supervisord.pid"
@@ -482,7 +485,10 @@ run_server_foreground() {
   export STEAM_COMPAT_DATA_PATH="$STEAM_COMPAT_DATA_PATH"
   export WINEPREFIX="$WINEPREFIX"
 
+  info "Server log dir: $(get_log_dir) (pattern: $LOG_FILE_PATTERN)"
   info "Start server"
+  local start_ts end_ts uptime dump_min_uptime
+  start_ts="$(date +%s 2>/dev/null || echo 0)"
   "$PROTON_CMD" runinprefix "$ENSHROUDED_BINARY" &
   local pid=$!
   echo "$pid" >"$PID_SERVER_FILE"
@@ -494,6 +500,29 @@ run_server_foreground() {
   local rc=0
   if ! wait "$pid"; then
     rc=$?
+  fi
+  end_ts="$(date +%s 2>/dev/null || echo 0)"
+  if [[ "$end_ts" -ge "$start_ts" ]]; then
+    uptime=$((end_ts - start_ts))
+  else
+    uptime=0
+  fi
+  dump_min_uptime="$LOG_DUMP_MIN_UPTIME"
+  if ! [[ "$dump_min_uptime" =~ ^[0-9]+$ ]]; then
+    dump_min_uptime=0
+  fi
+  if [[ "$rc" -ne 0 ]]; then
+    warn "Server exited with code $rc after ${uptime}s"
+    if is_true "$LOG_DUMP_ON_EXIT"; then
+      dump_server_log_tail
+    fi
+  elif [[ "$uptime" -lt "$dump_min_uptime" ]]; then
+    warn "Server exited cleanly after ${uptime}s (short uptime)"
+    if is_true "$LOG_DUMP_ON_EXIT"; then
+      dump_server_log_tail
+    fi
+  else
+    info "Server exited cleanly after ${uptime}s"
   fi
 
   cleanup_wine
@@ -627,6 +656,24 @@ get_log_dir() {
     return
   fi
   abs_path "./logs"
+}
+
+dump_server_log_tail() {
+  local log_file log_dir lines
+  log_dir="$(get_log_dir)"
+  log_file="$(latest_log_file)"
+  if [[ -z "$log_file" ]]; then
+    warn "No server log files found (dir: $log_dir, pattern: $LOG_FILE_PATTERN)"
+    return
+  fi
+
+  info "Server log file: $log_file"
+  lines="$LOG_DUMP_LINES"
+  if ! [[ "$lines" =~ ^[0-9]+$ ]] || [[ "$lines" -le 0 ]]; then
+    return
+  fi
+  info "Dumping last $lines lines from server log"
+  tail -n "$lines" "$log_file" 2>/dev/null | log_pipe info "server-log"
 }
 
 latest_log_file() {
