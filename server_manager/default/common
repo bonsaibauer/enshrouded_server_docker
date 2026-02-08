@@ -38,13 +38,52 @@ critical=10
 fatal=5
 log_level=${log_level:-$info}
 
-debug() { logstd $debug "DEBUG - [$$] - $*"; }
-info() { logstd $info "INFO - $*"; }
-warn() { logstd $warn "WARN - $*"; }
-error() { logerr $error "ERROR - $*"; }
-critical() { logerr $critical "CRITIAL - $*"; }
+init_colors() {
+  if [[ "${LOG_COLOR:-}" != "true" && "${LOG_COLOR:-}" != "TRUE" ]]; then
+    C_RESET=""
+    C_DIM=""
+    C_RED=""
+    C_YELLOW=""
+    C_GREEN=""
+    C_MAGENTA=""
+  elif [[ -t 1 ]]; then
+    C_RESET=$'\033[0m'
+    C_DIM=$'\033[2m'
+    C_RED=$'\033[31m'
+    C_YELLOW=$'\033[33m'
+    C_GREEN=$'\033[32m'
+    C_MAGENTA=$'\033[35m'
+  else
+    C_RESET=""
+    C_DIM=""
+    C_RED=""
+    C_YELLOW=""
+    C_GREEN=""
+    C_MAGENTA=""
+  fi
+}
+
+level_tag() {
+  case "$1" in
+    DEBUG) echo "${C_DIM}DEBUG${C_RESET}" ;;
+    INFO) echo "${C_GREEN}INFO${C_RESET}" ;;
+    WARN) echo "${C_YELLOW}WARN${C_RESET}" ;;
+    ERROR) echo "${C_RED}ERROR${C_RESET}" ;;
+    CRITIAL) echo "${C_MAGENTA}CRITIAL${C_RESET}" ;;
+    FATAL) echo "${C_RED}FATAL${C_RESET}" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+init_colors
+
+debug() { logstd $debug "$(level_tag DEBUG) - [$$] - $*"; }
+info() { logstd $info "$(level_tag INFO) - $*"; }
+warn() { logstd $warn "$(level_tag WARN) - $*"; }
+error() { logerr $error "$(level_tag ERROR) - $*"; }
+critical() { logerr $critical "$(level_tag CRITIAL) - $*"; }
 fatal() {
-  logerr $fatal "FATAL - $*"
+  logerr $fatal "$(level_tag FATAL) - $*"
   exit 1
 }
 

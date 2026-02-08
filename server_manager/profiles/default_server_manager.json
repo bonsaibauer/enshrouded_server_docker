@@ -1,6 +1,7 @@
 {
   "puid": 4711,
   "pgid": 4711,
+  "logColor": true,
   "savefileName": "3ad85aea",
   "steamAppId": 2278520,
   "gameBranch": "public",

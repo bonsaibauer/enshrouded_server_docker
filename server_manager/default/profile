@@ -18,6 +18,7 @@ EN_PROFILE_DIR="${EN_PROFILE_DIR:-${MANAGER_ROOT}/profiles_enshrouded}"
 declare -a MANAGER_VARS=(
   PUID
   PGID
+  LOG_COLOR
   SAVEFILE_NAME
   STEAM_APP_ID
   GAME_BRANCH
@@ -42,6 +43,7 @@ declare -a MANAGER_VARS=(
 declare -A MANAGER_JSON_PATH=(
   [PUID]=".puid"
   [PGID]=".pgid"
+  [LOG_COLOR]=".logColor"
   [SAVEFILE_NAME]=".savefileName"
   [STEAM_APP_ID]=".steamAppId"
   [GAME_BRANCH]=".gameBranch"
@@ -66,6 +68,7 @@ declare -A MANAGER_JSON_PATH=(
 declare -A MANAGER_TYPE=(
   [PUID]="int"
   [PGID]="int"
+  [LOG_COLOR]="bool"
   [STEAM_APP_ID]="int"
   [BACKUP_MAX_COUNT]="int"
   [UPDATE_CHECK_PLAYERS]="bool"
