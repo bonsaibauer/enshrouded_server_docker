@@ -79,19 +79,19 @@ manager_config_path() {
 manager_profile_path() {
   local name
   name="${1:-$MANAGER_PROFILE_DEFAULT}"
-  printf "%s/%s/server_manager.json" "$MANAGER_PROFILE_DIR" "$name"
+  printf "%s/%s/%s_server_manager.json" "$MANAGER_PROFILE_DIR" "$name" "$name"
 }
 
 manager_profile_template_path() {
   local name
   name="${1:-$MANAGER_PROFILE_DEFAULT}"
-  printf "%s/%s.json" "$MANAGER_PROFILE_TEMPLATE_DIR" "$name"
+  printf "%s/%s_server_manager.json" "$MANAGER_PROFILE_TEMPLATE_DIR" "$name"
 }
 
 enshrouded_profile_path() {
   local name
   name="${1:-$EN_PROFILE_DEFAULT}"
-  printf "%s/%s.json" "$EN_PROFILE_DIR" "$name"
+  printf "%s/%s_enshrouded_server.json" "$EN_PROFILE_DIR" "$name"
 }
 
 manager_profile_resolve() {

@@ -153,6 +153,49 @@ updateUserGroupConfig() {
         ;;
     esac
   done
+
+  ensureUserGroupPasswords
+}
+
+generatePassword() {
+  if [ -r /dev/urandom ]; then
+    LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12
+    return 0
+  fi
+  date +%s%N | sha256sum | cut -c1-12
+}
+
+ensureUserGroupPasswords() {
+  local count idx env_var current_password new_password
+
+  if ! jq -e '.userGroups' ${install_path}/enshrouded_server.json >/dev/null 2>&1; then
+    return 0
+  fi
+
+  count=$(jq -r '.userGroups | length' ${install_path}/enshrouded_server.json 2>/dev/null || echo 0)
+  if ! [[ "$count" =~ ^[0-9]+$ ]] || [[ "$count" -le 0 ]]; then
+    return 0
+  fi
+
+  for idx in $(seq 0 $((count - 1))); do
+    env_var="ENSHROUDED_ROLE_${idx}_PASSWORD"
+    if compgen -A variable | grep -q "^${env_var}$"; then
+      continue
+    fi
+
+    current_password="$(jq -r ".userGroups[$idx].password // empty" ${install_path}/enshrouded_server.json 2>/dev/null || echo "")"
+    if [[ -n "$current_password" ]]; then
+      continue
+    fi
+
+    new_password="$(generatePassword)"
+    if [[ -z "$new_password" ]]; then
+      warn "Could not generate password for group index $idx"
+      continue
+    fi
+
+    echo "$(jq --argjson group_index "$idx" --arg password "$new_password" '.userGroups[$group_index].password = $password' ${install_path}/enshrouded_server.json)" > ${install_path}/enshrouded_server.json
+  done
 }
 
 updateGameSettingsConfig() {
