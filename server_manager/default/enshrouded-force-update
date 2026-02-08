@@ -1,0 +1,18 @@
+#!/bin/bash
+. "$(dirname "$0")/common"
+. "$(dirname "$0")/profile.sh"
+. "$(dirname "$0")/env.sh"
+init_runtime_env
+
+main() {
+  info "Force Enshrouded update"
+  rm -f $version_file_path
+
+  # Remove steamapp manifests to solve steamcmd update issues #119
+  debug "Removing $install_path/$steamapp_path"
+  rm -rf $install_path/$steamapp_path
+
+  supervisorctl start enshrouded-updater
+}
+
+main

@@ -1,0 +1,22 @@
+#!/bin/bash
+. "$(dirname "$0")/common"
+. "$(dirname "$0")/profile.sh"
+. "$(dirname "$0")/env.sh"
+init_runtime_env
+. "$(dirname "$0")/enshrouded-bootstrap-shared"
+
+main() {
+  info "Running enshrouded-bootstrap"
+  prepareEnshroudedAppFolders
+  updateOrCreateEnshroudedServerConfig
+  prepareSteamA2sPythonLibrary
+
+  # no proton bootstrap needed
+
+  initCrontab
+  bootstrapHook
+  supervisorctl start enshrouded-updater
+  info "Bootstrap complete"
+}
+
+main

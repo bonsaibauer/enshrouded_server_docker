@@ -1,0 +1,136 @@
+#!/bin/bash
+. "$(dirname "$0")/common"
+. "$(dirname "$0")/profile.sh"
+. "$(dirname "$0")/env.sh"
+init_runtime_env
+
+pidfile=$enshrouded_backup_pidfile
+save_dir=""
+backup_dir=""
+
+main() {
+  info "Running enshrouded-backup"
+  prepareBackup
+  info "enshrouded-backup complete"
+}
+
+prepareBackup() {
+  if [ -f "$pidfile" ]; then
+    info "Found existing PID file - checking process"
+    checkLock $pidfile
+  fi
+
+  getSaveDir
+  getBackupDir
+
+  if [ ! -f "$save_dir/$savefile_name-index" ]; then
+    warn "Save file not found - aborting backup"
+    return
+  fi
+
+  trap shutdown SIGINT SIGTERM
+
+  backupAndCleanup &
+  enshrouded_backup_pid=$!
+  echo $enshrouded_backup_pid >"$pidfile"
+  wait $enshrouded_backup_pid
+}
+
+backupAndCleanup() {
+  backup
+  cleanup
+  backupPostHook
+  clearLock "$pidfile"
+}
+
+backup() {
+  local latest_save_index latest_savefile_name backup_file_name
+  debug "run backup"
+
+  # parse save index json to get latest save file
+  latest_save_index=$(jq -r '.latest' "$save_dir/$savefile_name-index")
+
+  # if index = 0 save game is just $savefile_name otherwise $savefile_name-$index
+  if [ "$latest_save_index" -eq 0 ]; then
+    latest_savefile_name="$savefile_name"
+  else
+    latest_savefile_name="$savefile_name-$latest_save_index"
+  fi
+
+  # check if latest save file exists
+  if [ ! -f "$save_dir/$latest_savefile_name" ]; then
+    warn "Latest save file not found - aborting backup"
+    return
+  fi
+
+  backupPreHook
+
+  # create new index file
+  cat > /tmp/$savefile_name-index <<EOF
+  {
+    "latest": 0,
+    "time": $(jq -r '.time' "$save_dir/$savefile_name-index"),
+    "deleted": false
+  }
+EOF
+
+  backup_file_name="$(date +%Y-%m-%d_%H-%M-%S)-$savefile_name.zip"
+  info "Backing up save file to $backup_dir/$backup_file_name"
+  debug "zip -j \"$backup_dir/$backup_file_name\" \"$save_dir/$latest_savefile_name\" \"/tmp/$savefile_name-index\""
+  zip -j "$backup_dir/$backup_file_name" "$save_dir/$latest_savefile_name" /tmp/$savefile_name-index
+  debug "echo -ne \"@ $latest_savefile_name\n@=$savefile_name\n\" | zipnote -w \"$backup_dir/$backup_file_name\""
+  echo -ne "@ $latest_savefile_name\n@=$savefile_name\n" | zipnote -w "$backup_dir/$backup_file_name"
+}
+
+cleanup() {
+  debug "run cleanup"
+
+  # skip if BACKUP_MAX_COUNT is not set or is 0
+  if [ -z "$BACKUP_MAX_COUNT" ] || [ "$BACKUP_MAX_COUNT" -eq 0 ]; then
+    warn "Skipping cleanup - BACKUP_MAX_COUNT is not set or is 0 (infinite)"
+    return
+  fi
+
+  info "Removing old backups with number of backups set to $BACKUP_MAX_COUNT"
+  find "$backup_dir" -type f -printf '%T@ %p\n' | sort -n | cut -d' ' -f 2- | head -n -$BACKUP_MAX_COUNT | xargs rm -fv
+}
+
+getSaveDir() {
+  if [ -z "$ENSHROUDED_SAVE_DIR" ]; then
+    ENSHROUDED_SAVE_DIR=$(jq -r '.saveDirectory' ${install_path}/enshrouded_server.json)
+  fi
+  if [[ "$ENSHROUDED_SAVE_DIR" == /* ]]; then
+    save_dir="$ENSHROUDED_SAVE_DIR"
+  else
+    save_dir="$install_path/$ENSHROUDED_SAVE_DIR"
+  fi
+}
+
+getBackupDir() {
+  if [[ "$BACKUP_DIR" == /* ]]; then
+    backup_dir="$BACKUP_DIR"
+  else
+    backup_dir="$install_path/$BACKUP_DIR"
+  fi
+}
+
+backupPreHook() {
+  if [ -n "$BACKUP_PRE_HOOK" ]; then
+    info "Running backup pre hook: $BACKUP_PRE_HOOK"
+    eval "$BACKUP_PRE_HOOK"
+  fi
+}
+
+backupPostHook() {
+  if [ -n "$BACKUP_POST_HOOK" ]; then
+    info "Running backup post hook: $BACKUP_POST_HOOK"
+    eval "$BACKUP_POST_HOOK"
+  fi
+}
+
+shutdown() {
+  debug "Received signal to shut down enshrouded-backup"
+  clearLock "$pidfile"
+}
+
+main

@@ -1,0 +1,366 @@
+#!/usr/bin/env bash
+
+EN_PROFILE="${EN_PROFILE:-}"
+MANAGER_PROFILE="${MANAGER_PROFILE:-}"
+
+EN_PROFILE_DEFAULT="default"
+MANAGER_PROFILE_DEFAULT="default"
+
+PROFILE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANAGER_ROOT="${MANAGER_ROOT:-$PROFILE_SCRIPT_DIR}"
+
+MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-/server_manager}"
+MANAGER_PROFILE_ROOT="${MANAGER_PROFILE_ROOT:-/profile}"
+MANAGER_PROFILE_DIR="$MANAGER_PROFILE_ROOT"
+MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT}/profiles}"
+EN_PROFILE_DIR="${EN_PROFILE_DIR:-${MANAGER_ROOT}/profiles_enshrouded}"
+
+declare -a MANAGER_VARS=(
+  PUID
+  PGID
+  SAVEFILE_NAME
+  STEAM_APP_ID
+  GAME_BRANCH
+  STEAMCMD_ARGS
+  WINEDEBUG
+  UPDATE_CHECK_PLAYERS
+  RESTART_CHECK_PLAYERS
+  BACKUP_DIR
+  BACKUP_MAX_COUNT
+  BACKUP_PRE_HOOK
+  BACKUP_POST_HOOK
+  UPDATE_CRON
+  BACKUP_CRON
+  RESTART_CRON
+  BOOTSTRAP_HOOK
+  UPDATE_PRE_HOOK
+  UPDATE_POST_HOOK
+  RESTART_PRE_HOOK
+  RESTART_POST_HOOK
+)
+
+declare -A MANAGER_JSON_PATH=(
+  [PUID]=".puid"
+  [PGID]=".pgid"
+  [SAVEFILE_NAME]=".savefileName"
+  [STEAM_APP_ID]=".steamAppId"
+  [GAME_BRANCH]=".gameBranch"
+  [STEAMCMD_ARGS]=".steamcmdArgs"
+  [WINEDEBUG]=".winedebug"
+  [UPDATE_CHECK_PLAYERS]=".updateCheckPlayers"
+  [RESTART_CHECK_PLAYERS]=".restartCheckPlayers"
+  [BACKUP_DIR]=".backupDir"
+  [BACKUP_MAX_COUNT]=".backupMaxCount"
+  [BACKUP_PRE_HOOK]=".backupPreHook"
+  [BACKUP_POST_HOOK]=".backupPostHook"
+  [UPDATE_CRON]=".updateCron"
+  [BACKUP_CRON]=".backupCron"
+  [RESTART_CRON]=".restartCron"
+  [BOOTSTRAP_HOOK]=".bootstrapHook"
+  [UPDATE_PRE_HOOK]=".updatePreHook"
+  [UPDATE_POST_HOOK]=".updatePostHook"
+  [RESTART_PRE_HOOK]=".restartPreHook"
+  [RESTART_POST_HOOK]=".restartPostHook"
+)
+
+declare -A MANAGER_TYPE=(
+  [PUID]="int"
+  [PGID]="int"
+  [STEAM_APP_ID]="int"
+  [BACKUP_MAX_COUNT]="int"
+  [UPDATE_CHECK_PLAYERS]="bool"
+  [RESTART_CHECK_PLAYERS]="bool"
+)
+
+manager_config_path() {
+  printf "%s/server_manager.json" "$MANAGER_DATA_DIR"
+}
+
+manager_profile_path() {
+  local name
+  name="${1:-$MANAGER_PROFILE_DEFAULT}"
+  printf "%s/%s/server_manager.json" "$MANAGER_PROFILE_DIR" "$name"
+}
+
+manager_profile_template_path() {
+  local name
+  name="${1:-$MANAGER_PROFILE_DEFAULT}"
+  printf "%s/%s.json" "$MANAGER_PROFILE_TEMPLATE_DIR" "$name"
+}
+
+enshrouded_profile_path() {
+  local name
+  name="${1:-$EN_PROFILE_DEFAULT}"
+  printf "%s/%s.json" "$EN_PROFILE_DIR" "$name"
+}
+
+manager_profile_resolve() {
+  local name
+  name="${MANAGER_PROFILE:-}"
+  if [[ -z "$name" ]]; then
+    echo "$MANAGER_PROFILE_DEFAULT"
+    return 0
+  fi
+  if [[ -f "$(manager_profile_path "$name")" || -f "$(manager_profile_template_path "$name")" ]]; then
+    echo "$name"
+    return 0
+  fi
+  warn "Profile not found: $name (fallback: $MANAGER_PROFILE_DEFAULT)"
+  echo "$MANAGER_PROFILE_DEFAULT"
+}
+
+enshrouded_profile_resolve() {
+  local name
+  name="${EN_PROFILE:-}"
+  if [[ -z "$name" ]]; then
+    echo "$EN_PROFILE_DEFAULT"
+    return 0
+  fi
+  if [[ -f "$(enshrouded_profile_path "$name")" ]]; then
+    echo "$name"
+    return 0
+  fi
+  warn "Enshrouded profile not found: $name (fallback: $EN_PROFILE_DEFAULT)"
+  echo "$EN_PROFILE_DEFAULT"
+}
+
+ensure_manager_paths() {
+  mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_ROOT" "$MANAGER_DATA_DIR/run"
+}
+
+ensure_manager_profile_file() {
+  local profile profile_file template_file
+  profile="$1"
+  profile_file="$(manager_profile_path "$profile")"
+  template_file="$(manager_profile_template_path "$profile")"
+
+  if [[ -f "$profile_file" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$template_file" ]]; then
+    warn "Server Manager profile template not found: $template_file"
+    return 1
+  fi
+  if ! jq -e '.' "$template_file" >/dev/null 2>&1; then
+    warn "Invalid JSON in server manager profile template: $template_file"
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$profile_file")" 2>/dev/null || true
+  cp "$template_file" "$profile_file"
+  info "Server Manager profile created: $profile_file"
+}
+
+manager_json_get() {
+  local file var path
+  file="$1"
+  var="$2"
+  path="${MANAGER_JSON_PATH[$var]-}"
+  if [[ -z "$path" || ! -f "$file" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path // empty" "$file" 2>/dev/null || true
+}
+
+manager_value_is_valid() {
+  local var value type
+  var="$1"
+  value="$2"
+  type="${MANAGER_TYPE[$var]-string}"
+  case "$type" in
+    bool)
+      [[ "$value" == "true" || "$value" == "false" ]]
+      ;;
+    int)
+      [[ "$value" =~ ^-?[0-9]+$ ]]
+      ;;
+    number)
+      [[ "$value" =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+manager_config_set() {
+  local file temp_file
+  file="$1"
+  shift
+  temp_file="$(mktemp)"
+  if jq "$@" "$file" >"$temp_file"; then
+    mv "$temp_file" "$file"
+  else
+    rm -f "$temp_file"
+    warn "Failed to update $file (jq error)"
+  fi
+}
+
+manager_config_set_value() {
+  local file var value path type
+  file="$1"
+  var="$2"
+  value="${3-}"
+  path="${MANAGER_JSON_PATH[$var]-}"
+  type="${MANAGER_TYPE[$var]-string}"
+  if [[ -z "$path" ]]; then
+    return 0
+  fi
+  if [[ -z "$value" ]]; then
+    manager_config_set "$file" "$path = null"
+    return 0
+  fi
+  case "$type" in
+    bool|int|number)
+      manager_config_set "$file" --argjson val "$value" "$path = \$val"
+      ;;
+    *)
+      manager_config_set "$file" --arg val "$value" "$path = \$val"
+      ;;
+  esac
+}
+
+manager_profile_value_for_var() {
+  local profile var file value
+  profile="$1"
+  var="$2"
+  file="$(manager_profile_path "$profile")"
+  value="$(manager_json_get "$file" "$var")"
+  echo "$value"
+}
+
+update_or_create_manager_config() {
+  local config_file profile value env_value var
+
+  if ! command -v jq >/dev/null 2>&1; then
+    warn "jq not found: skipping server_manager.json initialization"
+    return 0
+  fi
+
+  ensure_manager_paths
+  profile="$(manager_profile_resolve)"
+
+  if ! ensure_manager_profile_file "$MANAGER_PROFILE_DEFAULT"; then
+    return 1
+  fi
+  if ! ensure_manager_profile_file "$profile"; then
+    return 1
+  fi
+
+  config_file="$(manager_config_path)"
+  if [[ ! -f "$config_file" ]] || ! jq -e 'type == "object"' "$config_file" >/dev/null 2>&1; then
+    cp "$(manager_profile_path "$profile")" "$config_file"
+    info "server_manager.json initialized from profile: $profile"
+  fi
+
+  for var in "${MANAGER_VARS[@]}"; do
+    env_value="$(printenv "$var" 2>/dev/null || true)"
+    if [[ -n "$env_value" ]]; then
+      value="$env_value"
+    else
+      value="$(manager_json_get "$config_file" "$var")"
+      if [[ -z "$value" ]]; then
+        value="$(manager_profile_value_for_var "$profile" "$var")"
+      fi
+    fi
+
+    if [[ -n "$value" ]] && ! manager_value_is_valid "$var" "$value"; then
+      warn "Invalid server_manager.json/profile value for $var (actual: $value)"
+      value=""
+    fi
+
+    printf -v "$var" '%s' "$value"
+    if [[ -n "$value" ]]; then
+      export "$var"
+    fi
+    manager_config_set_value "$config_file" "$var" "$value"
+  done
+}
+
+load_enshrouded_env_from_profile() {
+  local profile profile_file
+  profile="$(enshrouded_profile_resolve)"
+  profile_file="$(enshrouded_profile_path "$profile")"
+
+  if [[ ! -f "$profile_file" ]]; then
+    return 1
+  fi
+  if ! jq -e '.' "$profile_file" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if [[ -z "${ENSHROUDED_NAME:-}" ]]; then
+    ENSHROUDED_NAME="$(jq -r '.name // empty' "$profile_file")"
+  fi
+  if [[ -z "${ENSHROUDED_SAVE_DIR:-}" ]]; then
+    ENSHROUDED_SAVE_DIR="$(jq -r '.saveDirectory // empty' "$profile_file")"
+  fi
+  if [[ -z "${ENSHROUDED_LOG_DIR:-}" ]]; then
+    ENSHROUDED_LOG_DIR="$(jq -r '.logDirectory // empty' "$profile_file")"
+  fi
+  if [[ -z "${ENSHROUDED_IP:-}" ]]; then
+    ENSHROUDED_IP="$(jq -r '.ip // empty' "$profile_file")"
+  fi
+  if [[ -z "${ENSHROUDED_QUERY_PORT:-}" ]]; then
+    ENSHROUDED_QUERY_PORT="$(jq -r '.queryPort // empty' "$profile_file")"
+  fi
+  if [[ -z "${ENSHROUDED_SLOT_COUNT:-}" ]]; then
+    ENSHROUDED_SLOT_COUNT="$(jq -r '.slotCount // empty' "$profile_file")"
+  fi
+  if [[ -z "${ENSHROUDED_VOICE_CHAT_MODE:-}" ]]; then
+    ENSHROUDED_VOICE_CHAT_MODE="$(jq -r '.voiceChatMode // empty' "$profile_file")"
+  fi
+  if [[ -z "${ENSHROUDED_ENABLE_VOICE_CHAT:-}" ]]; then
+    ENSHROUDED_ENABLE_VOICE_CHAT="$(jq -r '.enableVoiceChat // empty' "$profile_file")"
+  fi
+  if [[ -z "${ENSHROUDED_ENABLE_TEXT_CHAT:-}" ]]; then
+    ENSHROUDED_ENABLE_TEXT_CHAT="$(jq -r '.enableTextChat // empty' "$profile_file")"
+  fi
+
+  return 0
+}
+
+init_runtime_env() {
+  if ! update_or_create_manager_config; then
+    fatal "Failed to initialize server_manager.json from profile"
+  fi
+  if ! load_enshrouded_env_from_profile; then
+    fatal "Failed to load Enshrouded profile defaults"
+  fi
+
+  savefile_name="$SAVEFILE_NAME"
+  steam_app_id="$STEAM_APP_ID"
+}
+
+ensure_enshrouded_config_from_profile() {
+  local profile source_profile config_file temp_file
+
+  config_file="${install_path}/enshrouded_server.json"
+  if [[ -f "$config_file" ]]; then
+    return 0
+  fi
+
+  profile="$(enshrouded_profile_resolve)"
+  source_profile="$(enshrouded_profile_path "$profile")"
+  if [[ ! -f "$source_profile" ]]; then
+    warn "No enshrouded profile file found: $EN_PROFILE_DIR"
+    return 1
+  fi
+  if ! jq -e '.' "$source_profile" >/dev/null 2>&1; then
+    warn "Invalid JSON in enshrouded profile: $source_profile"
+    return 1
+  fi
+
+  mkdir -p "$install_path"
+  temp_file="$(mktemp)"
+  if jq 'if has("bans") then . else . + {bans: []} end' "$source_profile" >"$temp_file"; then
+    mv "$temp_file" "$config_file"
+    info "Created enshrouded_server.json from profile: $profile"
+    return 0
+  fi
+
+  rm -f "$temp_file"
+  warn "Failed to create enshrouded_server.json from profile: $profile"
+  return 1
+}
