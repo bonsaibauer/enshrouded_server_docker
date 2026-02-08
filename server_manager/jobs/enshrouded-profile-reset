@@ -1,0 +1,38 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+init_runtime_env
+
+main() {
+  local profile source_profile config_file temp_file
+
+  info "Stopping enshrouded server"
+  supervisorctl stop enshrouded-server || true
+
+  profile="$(enshrouded_profile_resolve)"
+  source_profile="$(enshrouded_profile_path "$profile")"
+  config_file="${install_path}/enshrouded_server.json"
+
+  if [[ ! -f "$source_profile" ]]; then
+    fatal "Enshrouded profile not found: $source_profile"
+  fi
+  if ! jq -e '.' "$source_profile" >/dev/null 2>&1; then
+    fatal "Invalid JSON in enshrouded profile: $source_profile"
+  fi
+
+  temp_file="$(mktemp)"
+  if jq 'if has("bans") then . else . + {bans: []} end' "$source_profile" >"$temp_file"; then
+    mv "$temp_file" "$config_file"
+    chmod 600 "$config_file" 2>/dev/null || true
+    info "Enshrouded profile reset applied: $profile"
+  else
+    rm -f "$temp_file"
+    fatal "Failed to reset config from profile: $profile"
+  fi
+
+  info "Stop container for a clean start"
+  kill -INT "$(cat /var/run/supervisord.pid)"
+}
+
+main

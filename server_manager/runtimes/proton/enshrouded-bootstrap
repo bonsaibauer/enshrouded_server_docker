@@ -1,9 +1,9 @@
 #!/bin/bash
-. "$(dirname "$0")/common"
-. "$(dirname "$0")/profile"
-. "$(dirname "$0")/env"
+. "$(dirname "$0")/../../shared/common"
+. "$(dirname "$0")/../../shared/profile"
+. "$(dirname "$0")/../../shared/env"
 init_runtime_env
-. "$(dirname "$0")/enshrouded-bootstrap-shared"
+. "$(dirname "$0")/../../shared/enshrouded-bootstrap-shared"
 
 main() {
   info "Running enshrouded-bootstrap"

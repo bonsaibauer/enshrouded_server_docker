@@ -1,0 +1,32 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+init_runtime_env
+
+main() {
+  local profile source_profile config_file
+
+  info "Stopping enshrouded server"
+  supervisorctl stop enshrouded-server || true
+
+  profile="$(manager_profile_resolve)"
+  source_profile="$(manager_profile_path "$profile")"
+  config_file="$(manager_config_path)"
+
+  if [[ ! -f "$source_profile" ]]; then
+    fatal "Server Manager profile not found: $source_profile"
+  fi
+  if ! jq -e '.' "$source_profile" >/dev/null 2>&1; then
+    fatal "Invalid JSON in server manager profile: $source_profile"
+  fi
+
+  cp "$source_profile" "$config_file"
+  chmod 600 "$config_file" 2>/dev/null || true
+  info "Server Manager config reset from profile: $profile"
+
+  info "Stop container for a clean start"
+  kill -INT "$(cat /var/run/supervisord.pid)"
+}
+
+main

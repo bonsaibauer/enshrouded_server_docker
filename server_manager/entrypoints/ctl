@@ -20,7 +20,9 @@ Commands:
   scheduled-restart
                  Trigger enshrouded-restart job
   force-update   Trigger enshrouded-force-update
-  reset-roles    Trigger enshrouded-reset-roles
+  profile-reset  Trigger profile-reset
+  enshrouded-profile-reset
+                 Trigger enshrouded-profile-reset
   bootstrap      Trigger enshrouded-bootstrap
   cron-start     Start crond
   cron-stop      Stop crond
@@ -69,8 +71,11 @@ main() {
     force-update)
       run_supervisorctl start enshrouded-force-update
       ;;
-    reset-roles)
-      run_supervisorctl start enshrouded-reset-roles
+    profile-reset)
+      run_supervisorctl start profile-reset
+      ;;
+    enshrouded-profile-reset)
+      run_supervisorctl start enshrouded-profile-reset
       ;;
     bootstrap)
       run_supervisorctl start enshrouded-bootstrap

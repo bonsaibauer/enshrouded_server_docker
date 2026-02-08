@@ -1,213 +1,125 @@
 # Environment Variables
 
-This document lists all environment variables you can pass via `docker run -e ...` that are referenced by the `Dockerfile` and the `server_manager` scripts.
+Diese Datei dokumentiert die aktuell verwendeten ENV-Variablen des heutigen `server_manager`-Setups.
 
-Unless noted otherwise, leaving a variable unset means the manager will use the values from `enshrouded_server.json` (or its built-in defaults when it creates the file).
+Reihenfolge der Werteauflösung:
+1. ENV
+2. Laufzeitdateien (`/server_manager/server_manager.json`, `/opt/enshrouded/server/enshrouded_server.json`)
+3. Profil-Templates (nur bei Initialisierung)
 
----
+## Profilauswahl
 
-## Dockerfile Defaults
+| Variable | Beschreibung | Default |
+|---|---|---|
+| `MANAGER_PROFILE` | Wählt das Manager-Profil (Template) | `default` |
+| `EN_PROFILE` | Wählt das Enshrouded-Profil (Template) | `default` |
 
-These are the `ENV` defaults baked into `Dockerfile`. You can override them at runtime with `docker run -e`.
+## Manager-Variablen
 
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **DEBIAN_FRONTEND** | Noninteractive apt behavior | "noninteractive" | Affects apt; usually keep default |
-| **LANG** | Locale | "en_US.UTF-8" | Locale string |
-| **LANGUAGE** | Locale languages | "en_US:en" | Locale list |
-| **LC_ALL** | Locale override | "en_US.UTF-8" | Locale string |
-| **STEAM_APP_ID** | Steam app id for Enshrouded | "2278520" | Must match Enshrouded server app id |
----
+Diese Variablen werden aktiv über `server_manager/shared/profile` geladen.
 
-## Enshrouded Profiles
+| Variable | Typ | Default | Zweck |
+|---|---:|---|---|
+| `PUID` | int | `4711` | UID für `enshrouded` |
+| `PGID` | int | `4711` | GID für `enshrouded` |
+| `LOG_COLOR` | bool | `true` | Farbige Log-Level (nur bei TTY) |
+| `SAVEFILE_NAME` | string | `3ad85aea` | Basisname für Save/Backup |
+| `STEAM_APP_ID` | int | `2278520` | Steam App ID |
+| `GAME_BRANCH` | string | `public` | Steam Branch |
+| `STEAMCMD_ARGS` | string | `validate` | Zusätzliche SteamCMD-Args |
+| `WINEDEBUG` | string | `-all` | Wine Debug-Level |
+| `UPDATE_CHECK_PLAYERS` | bool | `false` | Update nur bei 0 Spielern |
+| `RESTART_CHECK_PLAYERS` | bool | `false` | Restart nur bei 0 Spielern |
+| `BACKUP_DIR` | string | `backups` | Backup-Zielordner |
+| `BACKUP_MAX_COUNT` | int | `0` | Anzahl Backups (`0` = unbegrenzt) |
+| `BACKUP_PRE_HOOK` | string | `null` | Hook vor Backup |
+| `BACKUP_POST_HOOK` | string | `null` | Hook nach Backup |
+| `UPDATE_CRON` | string | `null` | Cron für Update-Job |
+| `BACKUP_CRON` | string | `null` | Cron für Backup-Job |
+| `RESTART_CRON` | string | `null` | Cron für Restart-Job |
+| `BOOTSTRAP_HOOK` | string | `null` | Hook im Bootstrap |
+| `UPDATE_PRE_HOOK` | string | `null` | Hook vor Update |
+| `UPDATE_POST_HOOK` | string | `null` | Hook nach Update |
+| `RESTART_PRE_HOOK` | string | `null` | Hook vor Restart |
+| `RESTART_POST_HOOK` | string | `null` | Hook nach Restart |
 
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **EN_PROFILE** | Profile used on first creation of `enshrouded_server.json` | "default" | Only applied when the file is created for the first time; ignored afterwards (see `docs/enshrouded_profiles.md`) |
+## Enshrouded-Server Variablen
 
----
+Diese Variablen landen in `enshrouded_server.json`.
 
-## Server Manager Core (ENSHROUDED_)
+| Variable | Typ | Default |
+|---|---:|---|
+| `ENSHROUDED_NAME` | string | `Enshrouded Server` |
+| `ENSHROUDED_SAVE_DIR` | string | `./savegame` |
+| `ENSHROUDED_LOG_DIR` | string | `./logs` |
+| `ENSHROUDED_IP` | string | `0.0.0.0` |
+| `ENSHROUDED_QUERY_PORT` | int | `15637` |
+| `ENSHROUDED_SLOT_COUNT` | int | `16` |
+| `ENSHROUDED_TAGS` | string | leer |
+| `ENSHROUDED_VOICE_CHAT_MODE` | enum | `Proximity` |
+| `ENSHROUDED_ENABLE_VOICE_CHAT` | bool | `false` |
+| `ENSHROUDED_ENABLE_TEXT_CHAT` | bool | `false` |
 
-These map directly to fields in `enshrouded_server.json`.
+## Rollen-Variablen
 
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **ENSHROUDED_NAME** | Server name | "Enshrouded Server" | Any string |
-| **ENSHROUDED_SAVE_DIR** | Savegame directory (relative to `INSTALL_PATH` if not absolute) | "./savegame" | Path |
-| **ENSHROUDED_LOG_DIR** | Log directory (relative to `INSTALL_PATH` if not absolute) | "./logs" | Path |
-| **ENSHROUDED_IP** | Bind IP | "0.0.0.0" | IPv4 address |
-| **ENSHROUDED_QUERY_PORT** | Query port | 15637 | 1-65535 |
-| **ENSHROUDED_SLOT_COUNT** | Max players | 16 | 1-16 |
-| **ENSHROUDED_TAGS** | Server browser tags | "" (unset) | Comma-separated; characters `[A-Za-z0-9._-]` |
-| **ENSHROUDED_VOICE_CHAT_MODE** | Voice chat mode | "Proximity" | Proximity / Global |
-| **ENSHROUDED_ENABLE_VOICE_CHAT** | Enable voice chat | false | true / false |
-| **ENSHROUDED_ENABLE_TEXT_CHAT** | Enable text chat | false | true / false |
+Schema: `ENSHROUDED_ROLE_<index>_<FIELD>`
 
----
+| Feld | Typ |
+|---|---:|
+| `NAME` | string |
+| `PASSWORD` | string |
+| `CAN_KICK_BAN` | bool |
+| `CAN_ACCESS_INVENTORIES` | bool |
+| `CAN_EDIT_WORLD` | bool |
+| `CAN_EDIT_BASE` | bool |
+| `CAN_EXTEND_BASE` | bool |
+| `RESERVED_SLOTS` | int |
 
-## Server Manager User Groups (ENSHROUDED_ROLE_<index>_*)
+## Gameplay-Variablen
 
-Use `<index>` starting at `0` (e.g., `ENSHROUDED_ROLE_0_NAME`). When set, these override or create user groups in the JSON.
+Schema: `ENSHROUDED_GS_*` (vollständig validiert in `server_manager/shared/env`).
 
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **ENSHROUDED_ROLE_<index>_NAME** | Group name | "Admin" | Any string |
-| **ENSHROUDED_ROLE_<index>_PASSWORD** | Group password | "AdminXXXXXXXX" | Any string |
-| **ENSHROUDED_ROLE_<index>_CAN_KICK_BAN** | Can kick/ban | true | true / false |
-| **ENSHROUDED_ROLE_<index>_CAN_ACCESS_INVENTORIES** | Access other inventories | true | true / false |
-| **ENSHROUDED_ROLE_<index>_CAN_EDIT_WORLD** | Edit world outside bases | true | true / false |
-| **ENSHROUDED_ROLE_<index>_CAN_EDIT_BASE** | Edit any base | true | true / false |
-| **ENSHROUDED_ROLE_<index>_CAN_EXTEND_BASE** | Extend base territory | true | true / false |
-| **ENSHROUDED_ROLE_<index>_RESERVED_SLOTS** | Reserved slots for group | 0 | Integer |
+- `ENSHROUDED_GS_PRESET`
+- `ENSHROUDED_GS_PLAYER_HEALTH_FACTOR`
+- `ENSHROUDED_GS_PLAYER_MANA_FACTOR`
+- `ENSHROUDED_GS_PLAYER_STAMINA_FACTOR`
+- `ENSHROUDED_GS_PLAYER_BODY_HEAT_FACTOR`
+- `ENSHROUDED_GS_PLAYER_DIVING_TIME_FACTOR`
+- `ENSHROUDED_GS_ENABLE_DURABILITY`
+- `ENSHROUDED_GS_ENABLE_STARVING_DEBUFF`
+- `ENSHROUDED_GS_FOOD_BUFF_DURATION_FACTOR`
+- `ENSHROUDED_GS_FROM_HUNGER_TO_STARVING`
+- `ENSHROUDED_GS_SHROUD_TIME_FACTOR`
+- `ENSHROUDED_GS_TOMBSTONE_MODE`
+- `ENSHROUDED_GS_ENABLE_GLIDER_TURBULENCES`
+- `ENSHROUDED_GS_WEATHER_FREQUENCY`
+- `ENSHROUDED_GS_FISHING_DIFFICULTY`
+- `ENSHROUDED_GS_MINING_DAMAGE_FACTOR`
+- `ENSHROUDED_GS_PLANT_GROWTH_SPEED_FACTOR`
+- `ENSHROUDED_GS_RESOURCE_DROP_STACK_AMOUNT_FACTOR`
+- `ENSHROUDED_GS_FACTORY_PRODUCTION_SPEED_FACTOR`
+- `ENSHROUDED_GS_PERK_UPGRADE_RECYCLING_FACTOR`
+- `ENSHROUDED_GS_PERK_COST_FACTOR`
+- `ENSHROUDED_GS_EXPERIENCE_COMBAT_FACTOR`
+- `ENSHROUDED_GS_EXPERIENCE_MINING_FACTOR`
+- `ENSHROUDED_GS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR`
+- `ENSHROUDED_GS_RANDOM_SPAWNER_AMOUNT`
+- `ENSHROUDED_GS_AGGRO_POOL_AMOUNT`
+- `ENSHROUDED_GS_ENEMY_DAMAGE_FACTOR`
+- `ENSHROUDED_GS_ENEMY_HEALTH_FACTOR`
+- `ENSHROUDED_GS_ENEMY_STAMINA_FACTOR`
+- `ENSHROUDED_GS_ENEMY_PERCEPTION_RANGE_FACTOR`
+- `ENSHROUDED_GS_BOSS_DAMAGE_FACTOR`
+- `ENSHROUDED_GS_BOSS_HEALTH_FACTOR`
+- `ENSHROUDED_GS_THREAT_BONUS`
+- `ENSHROUDED_GS_PACIFY_ALL_ENEMIES`
+- `ENSHROUDED_GS_TAMING_STARTLE_REPERCUSSION`
+- `ENSHROUDED_GS_DAY_TIME_DURATION`
+- `ENSHROUDED_GS_NIGHT_TIME_DURATION`
+- `ENSHROUDED_GS_CURSE_MODIFIER`
 
----
+## Zusätzliche CLI-Variable
 
-## Server Manager Gameplay Settings (ENSHROUDED_GS_)
-
-These map to `gameSettings` and `gameSettingsPreset` in the JSON. Values are only applied if the env var is set.
-
-| Variable | Description | Default Value | Min | Max | Options / Notes |
-|---------|-------------|---------------|-----|-----|----------------|
-| **ENSHROUDED_GS_PRESET** | Preset for gameplay settings | Default | - | - | Default / Relaxed / Hard / Survival / Custom |
-| **ENSHROUDED_GS_PLAYER_HEALTH_FACTOR** | Player max health factor | 1 | 0.25 | 4 | Numeric |
-| **ENSHROUDED_GS_PLAYER_MANA_FACTOR** | Player max mana factor | 1 | 0.25 | 4 | Numeric |
-| **ENSHROUDED_GS_PLAYER_STAMINA_FACTOR** | Player max stamina factor | 1 | 0.25 | 4 | Numeric |
-| **ENSHROUDED_GS_PLAYER_BODY_HEAT_FACTOR** | Body heat pool factor | 1 | 0.5 | 2 | 0.5 / 1 / 1.5 / 2 |
-| **ENSHROUDED_GS_PLAYER_DIVING_TIME_FACTOR** | Diving time factor | 1 | 0.5 | 2 | Numeric |
-| **ENSHROUDED_GS_ENABLE_DURABILITY** | Weapon/tool durability | true | - | - | true / false |
-| **ENSHROUDED_GS_ENABLE_STARVING_DEBUFF** | Starving debuff | false | - | - | true / false |
-| **ENSHROUDED_GS_FOOD_BUFF_DURATION_FACTOR** | Food buff duration factor | 1 | 0.5 | 2 | Numeric |
-| **ENSHROUDED_GS_FROM_HUNGER_TO_STARVING** | Hungry to starving (ns) | 600000000000 | 300000000000 | 1200000000000 | Nanoseconds |
-| **ENSHROUDED_GS_SHROUD_TIME_FACTOR** | Shroud time factor | 1 | 0.5 | 2 | Numeric |
-| **ENSHROUDED_GS_TOMBSTONE_MODE** | Items lost on death | AddBackpackMaterials | - | - | AddBackpackMaterials / Everything / NoTombstone |
-| **ENSHROUDED_GS_ENABLE_GLIDER_TURBULENCES** | Glider turbulences | true | - | - | true / false |
-| **ENSHROUDED_GS_WEATHER_FREQUENCY** | Weather frequency | Normal | - | - | Disabled / Rare / Normal / Often |
-| **ENSHROUDED_GS_FISHING_DIFFICULTY** | Fishing difficulty | Normal | - | - | VeryEasy / Easy / Normal / Hard / VeryHard |
-| **ENSHROUDED_GS_MINING_DAMAGE_FACTOR** | Mining damage factor | 1 | 0.5 | 2 | Numeric |
-| **ENSHROUDED_GS_PLANT_GROWTH_SPEED_FACTOR** | Plant growth speed | 1 | 0.25 | 2 | Numeric |
-| **ENSHROUDED_GS_RESOURCE_DROP_STACK_AMOUNT_FACTOR** | Resource drop stack factor | 1 | 0.25 | 2 | Numeric |
-| **ENSHROUDED_GS_FACTORY_PRODUCTION_SPEED_FACTOR** | Factory production speed | 1 | 0.25 | 2 | Numeric |
-| **ENSHROUDED_GS_PERK_UPGRADE_RECYCLING_FACTOR** | Perk upgrade recycling | 0.5 | 0 | 1 | Numeric |
-| **ENSHROUDED_GS_PERK_COST_FACTOR** | Perk cost factor | 1 | 0.25 | 2 | Numeric |
-| **ENSHROUDED_GS_EXPERIENCE_COMBAT_FACTOR** | Combat XP factor | 1 | 0.25 | 2 | Numeric |
-| **ENSHROUDED_GS_EXPERIENCE_MINING_FACTOR** | Mining XP factor | 1 | 0 | 2 | Numeric |
-| **ENSHROUDED_GS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR** | Exploration/quests XP factor | 1 | 0.25 | 2 | Numeric |
-| **ENSHROUDED_GS_RANDOM_SPAWNER_AMOUNT** | Ambient enemy density | Normal | - | - | Few / Normal / Many / Extreme |
-| **ENSHROUDED_GS_AGGRO_POOL_AMOUNT** | Simultaneous attackers | Normal | - | - | Few / Normal / Many / Extreme |
-| **ENSHROUDED_GS_ENEMY_DAMAGE_FACTOR** | Enemy damage factor | 1 | 0.25 | 5 | Numeric |
-| **ENSHROUDED_GS_ENEMY_HEALTH_FACTOR** | Enemy health factor | 1 | 0.25 | 4 | Numeric |
-| **ENSHROUDED_GS_ENEMY_STAMINA_FACTOR** | Enemy stamina factor | 1 | 0.5 | 2 | Numeric |
-| **ENSHROUDED_GS_ENEMY_PERCEPTION_RANGE_FACTOR** | Enemy perception range | 1 | 0.5 | 2 | Numeric |
-| **ENSHROUDED_GS_BOSS_DAMAGE_FACTOR** | Boss damage factor | 1 | 0.2 | 5 | Numeric |
-| **ENSHROUDED_GS_BOSS_HEALTH_FACTOR** | Boss health factor | 1 | 0.2 | 5 | Numeric |
-| **ENSHROUDED_GS_THREAT_BONUS** | Enemy attack frequency | 1 | 0.25 | 4 | Numeric |
-| **ENSHROUDED_GS_PACIFY_ALL_ENEMIES** | Enemies attack only when provoked | false | - | - | true / false |
-| **ENSHROUDED_GS_TAMING_STARTLE_REPERCUSSION** | Taming startle penalty | LoseSomeProgress | - | - | KeepProgress / LoseSomeProgress / LoseAllProgress |
-| **ENSHROUDED_GS_DAY_TIME_DURATION** | Daytime length (ns) | 1800000000000 | 120000000000 | 3600000000000 | Nanoseconds |
-| **ENSHROUDED_GS_NIGHT_TIME_DURATION** | Nighttime length (ns) | 720000000000 | 120000000000 | 3600000000000 | Nanoseconds |
-| **ENSHROUDED_GS_CURSE_MODIFIER** | Shroud curse chance | Normal | - | - | Easy / Normal / Hard |
-
-*Time-based values are stored in nanoseconds. Divide by 60,000,000,000 to convert to minutes.*
-
----
-
-## Server Manager Runtime
-
-The manager reads (and creates if missing) `/server_manager/server_manager.json`. This file is the single source of truth and is always editable. On startup, the selected profile file from `/profile/<name>/server_manager.json` is copied to `/server_manager/server_manager.json` if the config is missing or a stub. Values are applied in this order: ENV > `/server_manager/server_manager.json` > defaults. Invalid manager ENV values are warned and ignored. `PUID`/`PGID` can be set in `/server_manager/server_manager.json`; if they are missing, the manager tries to detect them from `INSTALL_PATH`, the config directory, or `HOME`.
-
-Server Manager data is stored under `/server_manager/` in the mounted volume:
-- `/server_manager/server_manager.json` (effective config, always edit this file)
-- `/server_manager/manager-bootstrap.log` (early bootstrap log)
-- `/server_manager/run/` (runtime files, PID files, supervisor socket/logs)
-
-Profile files are stored at `/profile/<name>/server_manager.json`.
-
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------| 
-| **MANAGER_PROFILE** | Profile used to seed `/server_manager/server_manager.json` | "default" | The full profile file is copied when the config is missing or a stub; afterwards the config remains the source of truth (see `docs/server_manager_profiles.md`) |
-| **PUID** | User ID for `steam` user mapping | (required) | Must be numeric and not 0 |
-| **PGID** | Group ID for `steam` user mapping | (required) | Must be numeric and not 0 |
-| **NO_COLOR** | Disable ANSI colors | unset | Set to any value to disable |
-| **LOG_LEVEL** | Log verbosity | "info" | debug / info / warn / error |
-| **LOG_CONTEXT** | Log context label | "server_manager" | Internal |
-| **UMASK** | Default umask | "027" | Octal string |
-| **AUTO_FIX_PERMS** | Auto-fix ownership/permissions on key dirs | true | Default-on even when unset; set to `false` to disable (and it will be logged) |
-| **AUTO_FIX_DIR_MODE** | chmod mode for directories when auto-fix runs | "775" | Octal string |
-| **AUTO_FIX_FILE_MODE** | chmod mode for files when auto-fix runs | "664" | Octal string |
-| **SAVEFILE_NAME** | Savefile base name | "3ad85aea" | Used for backups |
-| **STOP_TIMEOUT** | Shutdown timeout (seconds) | 60 | Integer seconds |
-
----
-
-## Steam / Proton
-
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **STEAM_APP_ID** | Steam app id | "2278520" | Must match Enshrouded server |
-| **GAME_BRANCH** | Steam branch | "public" | e.g., `public`, `experimental` |
-| **STEAMCMD_ARGS** | SteamCMD args | "validate" | Passed to `app_update` |
-| **WINEDEBUG** | Wine debug flags | "-all" | Optional; set to adjust output |
-
----
-
-## Updates and Safe Checks
-
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **AUTO_UPDATE** | Enable periodic update checks | true | true / false |
-| **AUTO_UPDATE_INTERVAL** | Update interval (seconds) | 1800 | Integer seconds |
-| **AUTO_UPDATE_ON_BOOT** | Update on manager start | true | true / false |
-| **AUTO_RESTART_ON_UPDATE** | Restart after update | true | true / false |
-| **SAFE_MODE** | Skip update/restart if player count unknown | true | true / false |
-| **UPDATE_CHECK_PLAYERS** | Require 0 players before update | false | true / false |
-| **RESTART_CHECK_PLAYERS** | Require 0 players before restart | false | true / false |
-| **A2S_TIMEOUT** | A2S query timeout (seconds) | 2 | Float |
-| **A2S_RETRIES** | A2S query retries | 2 | Integer |
-| **A2S_RETRY_DELAY** | Delay between A2S retries (seconds) | 1 | Float |
-
----
-
-Supervisor handles server process restarts; there is no manager-side auto-restart setting.
-
-## Logging
-
-Server log output is always streamed to stdout from the latest log file in `<INSTALL_PATH>/logs`.
-
----
-
-## Backups
-
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **BACKUP_DIR** | Backup directory | "backups" | Relative to `INSTALL_PATH` if not absolute |
-| **BACKUP_MAX_COUNT** | Max backups to keep | 7 | 0 = keep all |
-| **BACKUP_PRE_HOOK** | Command before backup | unset | Executed with `eval` |
-| **BACKUP_POST_HOOK** | Command after backup | unset | Executed with `eval` |
-
----
-
-## Scheduling (Cron)
-
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **ENABLE_CRON** | Enable cron support | true | true / false |
-| **UPDATE_CRON** | Cron schedule for update | "0 4 * * *" | Standard cron format |
-| **BACKUP_CRON** | Cron schedule for backup | "0 0 * * *" | Standard cron format |
-| **RESTART_CRON** | Cron schedule for restart | "0 3 * * *" | Standard cron format |
-
----
-
-## Hooks
-
-| Variable | Description | Example / Default Value | Options / Notes |
-|---------|-------------|--------------------------|-----------------|
-| **BOOTSTRAP_HOOK** | Command after setup/bootstrapping | unset | Executed with `eval` |
-| **UPDATE_PRE_HOOK** | Command before update | unset | Executed with `eval` |
-| **UPDATE_POST_HOOK** | Command after update | unset | Executed with `eval` |
-| **RESTART_PRE_HOOK** | Command before restart | unset | Executed with `eval` |
-| **RESTART_POST_HOOK** | Command after restart | unset | Executed with `eval` |
-| **PRINT_GROUP_PASSWORDS** | Print generated user group passwords on first config creation | true | true / false |
-
----
-
+| Variable | Beschreibung | Default |
+|---|---|---|
+| `SUPERVISORCTL_BIN` | Binary für `ctl` Wrapper | `supervisorctl` |

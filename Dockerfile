@@ -57,26 +57,29 @@ RUN mkdir -p /usr/local/etc /var/log/supervisor /var/run/enshrouded /usr/local/e
 COPY --from=builder /tmp/proton /usr/local/bin
 COPY --from=builder /etc/machine-id /etc/machine-id
 
-COPY ./server_manager/supervisord.conf /etc/supervisor/supervisord.conf
-COPY --chmod=755 ./server_manager/default/* ./server_manager/proton/* /usr/local/etc/enshrouded/
-COPY ./server_manager/profiles /usr/local/etc/enshrouded/profiles
-COPY ./server_manager/profiles_enshrouded /usr/local/etc/enshrouded/profiles_enshrouded
-RUN ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/ctl \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/status \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/start \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/stop \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/restart \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/update \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/backup \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/scheduled-restart \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/force-update \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/reset-roles \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/bootstrap \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/cron-start \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/cron-stop \
-    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/cron-restart
+COPY ./server_manager/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
+COPY --chmod=755 ./server_manager/entrypoints/ /usr/local/etc/enshrouded/entrypoints/
+COPY --chmod=755 ./server_manager/jobs/ /usr/local/etc/enshrouded/jobs/
+COPY --chmod=755 ./server_manager/shared/ /usr/local/etc/enshrouded/shared/
+COPY --chmod=755 ./server_manager/runtimes/ /usr/local/etc/enshrouded/runtimes/
+COPY ./server_manager/profiles/ /usr/local/etc/enshrouded/profiles/
+RUN ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/ctl \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/status \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/start \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/stop \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/restart \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/update \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/backup \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/scheduled-restart \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/force-update \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/profile-reset \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/enshrouded-profile-reset \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/bootstrap \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/cron-start \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/cron-stop \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/cron-restart
 RUN find /usr/local/etc/enshrouded -type f -exec sed -i 's/\r$//' {} +
 
 WORKDIR /usr/local/etc/enshrouded
-CMD ["/usr/local/etc/enshrouded/bootstrap"]
+CMD ["/usr/local/etc/enshrouded/entrypoints/bootstrap"]
 ENTRYPOINT []
