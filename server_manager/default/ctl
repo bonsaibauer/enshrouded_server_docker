@@ -1,0 +1,98 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SUPERVISORCTL_BIN="${SUPERVISORCTL_BIN:-supervisorctl}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  docker exec <container> <command>
+  docker exec <container> ctl <command>
+
+Commands:
+  status         Show supervisor program status
+  start          Start enshrouded-server
+  stop           Stop enshrouded-server
+  restart        Restart enshrouded-server
+  update         Trigger enshrouded-updater
+  backup         Trigger enshrouded-backup
+  scheduled-restart
+                 Trigger enshrouded-restart job
+  force-update   Trigger enshrouded-force-update
+  reset-roles    Trigger enshrouded-reset-roles
+  bootstrap      Trigger enshrouded-bootstrap
+  cron-start     Start crond
+  cron-stop      Stop crond
+  cron-restart   Restart crond
+  help           Show this help
+EOF
+}
+
+run_supervisorctl() {
+  "$SUPERVISORCTL_BIN" "$@"
+}
+
+main() {
+  local invoked_name cmd
+  invoked_name="$(basename "$0")"
+
+  if [[ "$invoked_name" != "ctl" ]]; then
+    cmd="$invoked_name"
+  else
+    cmd="${1:-help}"
+    shift || true
+  fi
+
+  case "$cmd" in
+    status)
+      run_supervisorctl status
+      ;;
+    start)
+      run_supervisorctl start enshrouded-server
+      ;;
+    stop)
+      run_supervisorctl stop enshrouded-server
+      ;;
+    restart)
+      run_supervisorctl restart enshrouded-server
+      ;;
+    update)
+      run_supervisorctl start enshrouded-updater
+      ;;
+    backup)
+      run_supervisorctl start enshrouded-backup
+      ;;
+    scheduled-restart)
+      run_supervisorctl start enshrouded-restart
+      ;;
+    force-update)
+      run_supervisorctl start enshrouded-force-update
+      ;;
+    reset-roles)
+      run_supervisorctl start enshrouded-reset-roles
+      ;;
+    bootstrap)
+      run_supervisorctl start enshrouded-bootstrap
+      ;;
+    cron-start)
+      run_supervisorctl start crond
+      ;;
+    cron-stop)
+      run_supervisorctl stop crond
+      ;;
+    cron-restart)
+      run_supervisorctl restart crond
+      ;;
+    help|--help|-h)
+      usage
+      ;;
+    *)
+      echo "Unknown command: $cmd" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

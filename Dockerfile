@@ -61,6 +61,20 @@ COPY ./server_manager/supervisord.conf /etc/supervisor/supervisord.conf
 COPY --chmod=755 ./server_manager/default/* ./server_manager/proton/* /usr/local/etc/enshrouded/
 COPY ./server_manager/profiles /usr/local/etc/enshrouded/profiles
 COPY ./server_manager/profiles_enshrouded /usr/local/etc/enshrouded/profiles_enshrouded
+RUN ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/ctl \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/status \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/start \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/stop \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/restart \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/update \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/backup \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/scheduled-restart \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/force-update \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/reset-roles \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/bootstrap \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/cron-start \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/cron-stop \
+    && ln -sf /usr/local/etc/enshrouded/ctl /usr/local/bin/cron-restart
 RUN find /usr/local/etc/enshrouded -type f -exec sed -i 's/\r$//' {} +
 
 WORKDIR /usr/local/etc/enshrouded
