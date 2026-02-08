@@ -23,13 +23,11 @@ docker run \
   -e MANAGER_PROFILE="default" \
   -e ENSHROUDED_NAME="Enshrouded Server" \
   -e ENSHROUDED_ROLE_0_PASSWORD="ChangeMeAdminPassword" \
-  -e LOG_COLOR="true" \
   -v /home/enshrouded/server_1:/home/enshrouded/server \
-  -v /home/enshrouded/server_1/server_manager:/server_manager \
-  -v /home/enshrouded/server_1/profile:/profile \
   bonsaibauer/enshrouded_server_docker:dev_latest
 ```
 
 Hinweis:
-- Das aktuelle Server-Installziel im Container ist `/home/enshrouded/server`.
-- Für persistente Manager-/Profil-Daten sind die Volumes `/server_manager` und `/profile` relevant.
+- Das Server-Installziel im Container ist `/home/enshrouded/server`.
+- `LOG_COLOR` ist optional und muss nicht gesetzt werden.
+- `server_manager.json` und die Profile liegen standardmäßig ebenfalls unter `/home/enshrouded/server` und sind damit über dasselbe Volume persistent.

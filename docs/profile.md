@@ -12,9 +12,9 @@ Im Container:
 - Enshrouded-Templates: `/usr/local/etc/enshrouded/profiles/enshrouded/`
 
 Laufzeitkopien:
-- Manager-Konfig: `/server_manager/server_manager.json`
-- Manager-Profile-Store: `/profile/<name>/<name>_server_manager.json`
-- Enshrouded-Konfig: `/opt/enshrouded/server/enshrouded_server.json`
+- Manager-Konfig: `/home/enshrouded/server/server_manager/server_manager.json`
+- Manager-Profile-Store: `/home/enshrouded/server/profile/<name>/<name>_server_manager.json`
+- Enshrouded-Konfig: `/home/enshrouded/server/enshrouded_server.json`
 
 ## Auswahl
 
@@ -26,8 +26,8 @@ Wenn ein Profilname fehlt/ungültig ist, wird auf `default` zurückgefallen.
 ## Reset-Commands
 
 - `profile-reset`:
-  - setzt `/server_manager/server_manager.json` aus dem gewählten `MANAGER_PROFILE` zurück
+  - setzt `/home/enshrouded/server/server_manager/server_manager.json` aus dem gewählten `MANAGER_PROFILE` zurück
   - stoppt danach `supervisord` für sauberen Neustart
 - `enshrouded-profile-reset`:
-  - setzt `/opt/enshrouded/server/enshrouded_server.json` aus `EN_PROFILE` zurück
+  - setzt `/home/enshrouded/server/enshrouded_server.json` aus `EN_PROFILE` zurück
   - stoppt danach `supervisord` für sauberen Neustart

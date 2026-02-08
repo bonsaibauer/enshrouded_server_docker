@@ -19,12 +19,13 @@ docker run \
   -e PGID="$(id -g enshrouded)" \
   -e EN_PROFILE="default" \
   -e MANAGER_PROFILE="default" \
-  -e LOG_COLOR="true" \
   -v /home/enshrouded/server_1:/home/enshrouded/server \
-  -v /home/enshrouded/server_1/server_manager:/server_manager \
-  -v /home/enshrouded/server_1/profile:/profile \
   bonsaibauer/enshrouded_server_docker:latest
 ```
+
+Hinweis:
+- `LOG_COLOR` ist optional.
+- `server_manager.json` und Profile liegen standardmäßig unter `/home/enshrouded/server` und sind über dasselbe Volume persistent.
 
 ## Commands
 

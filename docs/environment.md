@@ -4,7 +4,7 @@ Diese Datei dokumentiert die aktuell verwendeten ENV-Variablen des heutigen `ser
 
 Reihenfolge der Werteauflösung:
 1. ENV
-2. Laufzeitdateien (`/server_manager/server_manager.json`, `/opt/enshrouded/server/enshrouded_server.json`)
+2. Laufzeitdateien (`/home/enshrouded/server/server_manager/server_manager.json`, `/home/enshrouded/server/enshrouded_server.json`)
 3. Profil-Templates (nur bei Initialisierung)
 
 ## Profilauswahl

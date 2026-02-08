@@ -49,7 +49,6 @@ applyPermissions() {
   sed -i -E "s/^(enshrouded:x):[0-9]+:[0-9]+:(.*)/\\1:$PUID:$PGID:\\2/" /etc/passwd
 
   chown -R enshrouded:enshrouded \
-    /opt/enshrouded \
     /home/enshrouded \
     /var/run/enshrouded
 

@@ -46,7 +46,7 @@ RUN curl -o /tmp/winetricks https://raw.githubusercontent.com/Winetricks/winetri
     && rm -rf /tmp/*
 
 # MISC
-RUN mkdir -p /usr/local/etc /var/log/supervisor /var/run/enshrouded /usr/local/etc/supervisor/conf.d/ /opt/enshrouded /home/enshrouded/.steam/sdk32 /home/enshrouded/.steam/sdk64 /home/enshrouded/.config/protonfixes /home/enshrouded/.cache/protonfixes \
+RUN mkdir -p /usr/local/etc /var/log/supervisor /var/run/enshrouded /usr/local/etc/supervisor/conf.d/ /home/enshrouded/.steam/sdk32 /home/enshrouded/.steam/sdk64 /home/enshrouded/.config/protonfixes /home/enshrouded/.cache/protonfixes \
     && groupadd -g "${PGID:-4711}" -o enshrouded \
     && useradd -g "${PGID:-4711}" -u "${PUID:-4711}" -o --create-home enshrouded \
     && ln -f /root/.steam/sdk32/steamclient.so /home/enshrouded/.steam/sdk32/steamclient.so \

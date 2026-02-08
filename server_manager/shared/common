@@ -1,6 +1,6 @@
 #!/bin/bash
-install_path=/opt/enshrouded/server
-version_file_path=/opt/enshrouded/current_version
+install_path=/home/enshrouded/server
+version_file_path=/home/enshrouded/current_version
 steamcmd_path=/usr/bin/steamcmd
 steam_app_id=""
 enshrouded_binary_path=enshrouded_server.exe
