@@ -70,6 +70,7 @@ RUN ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/ctl \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/restart \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/update \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/backup \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/password-view \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/scheduled-restart \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/force-update \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/profile-reset \

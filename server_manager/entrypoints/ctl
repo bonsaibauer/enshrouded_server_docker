@@ -17,6 +17,7 @@ Commands:
   restart        Restart enshrouded-server
   update         Trigger enshrouded-updater
   backup         Trigger enshrouded-backup
+  password-view  Show user group rights and passwords from enshrouded_server.json
   scheduled-restart
                  Trigger enshrouded-restart job
   force-update   Trigger enshrouded-force-update
@@ -64,6 +65,9 @@ main() {
       ;;
     backup)
       run_supervisorctl start enshrouded-backup
+      ;;
+    password-view)
+      "$(dirname "$0")/../jobs/enshrouded-password-view" "$@"
       ;;
     scheduled-restart)
       run_supervisorctl start enshrouded-restart

@@ -11,6 +11,7 @@ docker exec <container> stop
 docker exec <container> restart
 docker exec <container> update
 docker exec <container> backup
+docker exec <container> password-view
 docker exec <container> scheduled-restart
 docker exec <container> force-update
 docker exec <container> profile-reset
@@ -30,6 +31,7 @@ docker exec <container> ctl stop
 docker exec <container> ctl restart
 docker exec <container> ctl update
 docker exec <container> ctl backup
+docker exec <container> ctl password-view
 docker exec <container> ctl scheduled-restart
 docker exec <container> ctl force-update
 docker exec <container> ctl profile-reset
@@ -52,4 +54,12 @@ enshrouded-force-update
 profile-reset
 enshrouded-profile-reset
 crond
+```
+
+## password-view
+
+Zeigt `userGroups` (Rechte + Passwort) aus der aktiven `enshrouded_server.json`.
+
+```bash
+docker exec <container> password-view
 ```
