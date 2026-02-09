@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+menu_run_ctl() {
+  local cmd
+  cmd="$1"
+  ui_hr
+  ui_note "Running: ctl $cmd"
+  echo
+  # Use the canonical entrypoint path to avoid PATH issues.
+  /usr/local/etc/enshrouded/entrypoints/ctl "$cmd" || true
+  echo
+  ui_pause
+}
+
+menu_other_commands() {
+  local choice
+  while :; do
+    ui_header "Other ctl Commands"
+
+    echo "[1] status"
+    echo "[2] start"
+    echo "[3] stop"
+    echo "[4] restart"
+    echo "[5] update"
+    echo "[6] backup"
+    echo "[7] password-view"
+    echo "[8] scheduled-restart"
+    echo "[9] force-update"
+    echo "[10] bootstrap"
+    echo "[11] cron-start"
+    echo "[12] cron-stop"
+    echo "[13] cron-restart"
+    echo
+    echo "[0] Back"
+    echo
+
+    choice="$(ui_prompt_number "Choice")"
+    case "$choice" in
+      1) menu_run_ctl status ;;
+      2) menu_run_ctl start ;;
+      3) menu_run_ctl stop ;;
+      4) menu_run_ctl restart ;;
+      5) menu_run_ctl update ;;
+      6) menu_run_ctl backup ;;
+      7) menu_run_ctl password-view ;;
+      8) menu_run_ctl scheduled-restart ;;
+      9) menu_run_ctl force-update ;;
+      10) menu_run_ctl bootstrap ;;
+      11) menu_run_ctl cron-start ;;
+      12) menu_run_ctl cron-stop ;;
+      13) menu_run_ctl cron-restart ;;
+      0) return 0 ;;
+      *)
+        ui_warn_line "Invalid selection."
+        ui_pause
+        ;;
+    esac
+  done
+}

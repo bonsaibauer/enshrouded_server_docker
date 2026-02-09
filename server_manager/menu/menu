@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+MENU_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+. "$MENU_DIR/../shared/common"
+. "$MENU_DIR/../shared/profile"
+. "$MENU_DIR/../shared/env"
+init_runtime_env
+
+# Optional helpers we reuse when applying Enshrouded profiles (password generation, etc.)
+. "$MENU_DIR/../shared/enshrouded-bootstrap-shared"
+
+. "$MENU_DIR/ui"
+. "$MENU_DIR/backups"
+. "$MENU_DIR/profiles"
+. "$MENU_DIR/editor_manager_json"
+. "$MENU_DIR/editor_enshrouded_json"
+. "$MENU_DIR/commands"
+. "$MENU_DIR/enshrouded"
+. "$MENU_DIR/manager"
+. "$MENU_DIR/main"
+
+menu_main

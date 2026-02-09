@@ -1,0 +1,761 @@
+#!/usr/bin/env bash
+
+enshrouded_editor_cfg() {
+  printf "%s/enshrouded_server.json" "$install_path"
+}
+
+enshrouded_editor_jq_ok() {
+  local file
+  file="$1"
+  jq -e 'type == "object"' "$file" >/dev/null 2>&1
+}
+
+enshrouded_editor_get_compact() {
+  local file path
+  file="$1"
+  path="$2"
+  jq -c "$path" "$file" 2>/dev/null || echo "null"
+}
+
+enshrouded_editor_get_raw() {
+  local file path
+  file="$1"
+  path="$2"
+  jq -r "$path // empty" "$file" 2>/dev/null || echo ""
+}
+
+enshrouded_editor_set_jq() {
+  local file tmp
+  file="$1"
+  shift
+  tmp="$(mktemp)"
+  if jq "$@" "$file" >"$tmp"; then
+    mv "$tmp" "$file"
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+enshrouded_validate_ipv4_soft() {
+  local value
+  value="$1"
+  if [[ -z "$value" ]]; then
+    ui_warn_line "IP must not be empty."
+    return 1
+  fi
+  if ! [[ "$value" =~ ^([0-9]{1,3}\\.){3}[0-9]{1,3}$ ]]; then
+    ui_warn_line "Invalid IPv4: $value"
+    return 1
+  fi
+  return 0
+}
+
+enshrouded_validate_int_range_soft() {
+  local name value min max
+  name="$1"
+  value="$2"
+  min="$3"
+  max="$4"
+  if [[ -z "$value" ]] || ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    ui_warn_line "$name must be a number (actual: $value)"
+    return 1
+  fi
+  if [[ "$value" -lt "$min" || "$value" -gt "$max" ]]; then
+    ui_warn_line "$name must be between $min and $max (actual: $value)"
+    return 1
+  fi
+  return 0
+}
+
+enshrouded_validate_bool_soft_local() {
+  local name value normalized
+  name="$1"
+  value="$2"
+  normalized="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$normalized" != "true" && "$normalized" != "false" ]]; then
+    ui_warn_line "$name must be true or false (actual: $value)"
+    return 1
+  fi
+  return 0
+}
+
+enshrouded_prompt_scalar() {
+  local label current hint value normalized
+  label="$1"
+  current="$2"
+  hint="$3"
+
+  echo
+  ui_kv "Field" "$label"
+  ui_kv "Current" "${current:-<empty>}"
+  if [[ -n "$hint" ]]; then
+    ui_note "$hint"
+  fi
+  echo
+
+  value="$(ui_read "New value (empty = cancel): ")"
+  value="$(echo "$value" | xargs)"
+  normalized="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
+  case "$normalized" in
+    1|ja|j|y|yes) value="true" ;;
+    0|nein|n|no) value="false" ;;
+  esac
+  printf "%s" "$value"
+}
+
+enshrouded_editor_set_string() {
+  local file path value
+  file="$1"
+  path="$2"
+  value="$3"
+  enshrouded_editor_set_jq "$file" --arg val "$value" "$path = \$val"
+}
+
+enshrouded_editor_set_number() {
+  local file path value
+  file="$1"
+  path="$2"
+  value="$3"
+  enshrouded_editor_set_jq "$file" --argjson val "$value" "$path = \$val"
+}
+
+enshrouded_editor_set_bool() {
+  local file path value
+  file="$1"
+  path="$2"
+  value="$3"
+  enshrouded_editor_set_jq "$file" --argjson val "$value" "$path = \$val"
+}
+
+enshrouded_editor_set_tags() {
+  local file tags_csv
+  file="$1"
+  tags_csv="$2"
+  if [[ -z "$tags_csv" ]]; then
+    enshrouded_editor_set_jq "$file" '.tags = []'
+    return $?
+  fi
+  if ! validate_tags "$tags_csv"; then
+    return 1
+  fi
+  enshrouded_editor_set_jq "$file" --arg tags "$tags_csv" '.tags = ($tags | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)))'
+}
+
+enshrouded_editor_game_settings_definitions() {
+  # Format: jsonKey:type:suffixForValidation
+  cat <<'EOF'
+playerHealthFactor:number:PLAYER_HEALTH_FACTOR
+playerManaFactor:number:PLAYER_MANA_FACTOR
+playerStaminaFactor:number:PLAYER_STAMINA_FACTOR
+playerBodyHeatFactor:number:PLAYER_BODY_HEAT_FACTOR
+playerDivingTimeFactor:number:PLAYER_DIVING_TIME_FACTOR
+enableDurability:bool:ENABLE_DURABILITY
+enableStarvingDebuff:bool:ENABLE_STARVING_DEBUFF
+foodBuffDurationFactor:number:FOOD_BUFF_DURATION_FACTOR
+fromHungerToStarving:number:FROM_HUNGER_TO_STARVING
+shroudTimeFactor:number:SHROUD_TIME_FACTOR
+tombstoneMode:string:TOMBSTONE_MODE
+enableGliderTurbulences:bool:ENABLE_GLIDER_TURBULENCES
+weatherFrequency:string:WEATHER_FREQUENCY
+fishingDifficulty:string:FISHING_DIFFICULTY
+miningDamageFactor:number:MINING_DAMAGE_FACTOR
+plantGrowthSpeedFactor:number:PLANT_GROWTH_SPEED_FACTOR
+resourceDropStackAmountFactor:number:RESOURCE_DROP_STACK_AMOUNT_FACTOR
+factoryProductionSpeedFactor:number:FACTORY_PRODUCTION_SPEED_FACTOR
+perkUpgradeRecyclingFactor:number:PERK_UPGRADE_RECYCLING_FACTOR
+perkCostFactor:number:PERK_COST_FACTOR
+experienceCombatFactor:number:EXPERIENCE_COMBAT_FACTOR
+experienceMiningFactor:number:EXPERIENCE_MINING_FACTOR
+experienceExplorationQuestsFactor:number:EXPERIENCE_EXPLORATION_QUESTS_FACTOR
+randomSpawnerAmount:string:RANDOM_SPAWNER_AMOUNT
+aggroPoolAmount:string:AGGRO_POOL_AMOUNT
+enemyDamageFactor:number:ENEMY_DAMAGE_FACTOR
+enemyHealthFactor:number:ENEMY_HEALTH_FACTOR
+enemyStaminaFactor:number:ENEMY_STAMINA_FACTOR
+enemyPerceptionRangeFactor:number:ENEMY_PERCEPTION_RANGE_FACTOR
+bossDamageFactor:number:BOSS_DAMAGE_FACTOR
+bossHealthFactor:number:BOSS_HEALTH_FACTOR
+threatBonus:number:THREAT_BONUS
+pacifyAllEnemies:bool:PACIFY_ALL_ENEMIES
+tamingStartleRepercussion:string:TAMING_STARTLE_REPERCUSSION
+dayTimeDuration:number:DAY_TIME_DURATION
+nightTimeDuration:number:NIGHT_TIME_DURATION
+curseModifier:string:CURSE_MODIFIER
+EOF
+}
+
+enshrouded_editor_game_settings_menu() {
+  local file choice
+  file="$1"
+
+  local -a defs keys types suffixes
+  mapfile -t defs < <(enshrouded_editor_game_settings_definitions)
+  keys=()
+  types=()
+  suffixes=()
+
+  local d k t s
+  for d in "${defs[@]}"; do
+    k="${d%%:*}"
+    t="${d#*:}"; t="${t%%:*}"
+    s="${d##*:}"
+    keys+=("$k")
+    types+=("$t")
+    suffixes+=("$s")
+  done
+
+  while :; do
+    ui_header "Edit Game Settings"
+    ui_note "Note: empty input cancels editing (no null writes)."
+    echo
+
+    local i idx current
+    idx=1
+
+    echo "${C_DIM}== Player ==${C_RESET}"
+    for i in 0 1 2 3 4; do
+      current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
+      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      idx=$((idx + 1))
+    done
+    echo
+
+    echo "${C_DIM}== Survival / World ==${C_RESET}"
+    for i in 5 6 7 8 9 10 11 12 13; do
+      current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
+      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      idx=$((idx + 1))
+    done
+    echo
+
+    echo "${C_DIM}== Economy / Progress ==${C_RESET}"
+    for i in 14 15 16 17 18 19 20 21 22; do
+      current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
+      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      idx=$((idx + 1))
+    done
+    echo
+
+    echo "${C_DIM}== Enemies ==${C_RESET}"
+    for i in 23 24 25 26 27 28 29 30 31 32 33; do
+      current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
+      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      idx=$((idx + 1))
+    done
+    echo
+
+    echo "${C_DIM}== Time ==${C_RESET}"
+    for i in 34 35; do
+      current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
+      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      idx=$((idx + 1))
+    done
+    echo
+
+    echo "[0] Back"
+    echo
+
+    choice="$(ui_prompt_number "Choice")"
+    if [[ "$choice" -eq 0 ]]; then
+      return 0
+    fi
+
+    local key_index new_value key type suffix path current_raw
+    key_index=$((choice - 1))
+    if [[ "$key_index" -lt 0 || "$key_index" -ge "${#keys[@]}" ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    key="${keys[$key_index]}"
+    type="${types[$key_index]}"
+    suffix="${suffixes[$key_index]}"
+    path=".gameSettings.${key}"
+    current_raw="$(enshrouded_editor_get_raw "$file" "$path")"
+    new_value="$(enshrouded_prompt_scalar "$key" "$current_raw" "")"
+    if [[ -z "$new_value" ]]; then
+      ui_note "Cancelled."
+      ui_pause
+      continue
+    fi
+
+    if ! validate_game_setting "$suffix" "$new_value"; then
+      ui_warn_line "Invalid value, not saved."
+      ui_pause
+      continue
+    fi
+
+    case "$type" in
+      bool)
+        new_value="$(echo "$new_value" | tr '[:upper:]' '[:lower:]')"
+        if ! enshrouded_validate_bool_soft_local "$key" "$new_value"; then
+          ui_pause
+          continue
+        fi
+        enshrouded_editor_set_bool "$file" "$path" "$new_value" || true
+        ;;
+      number)
+        if ! is_number "$new_value"; then
+          ui_warn_line "Muss numerisch sein (actual: $new_value)"
+          ui_pause
+          continue
+        fi
+        enshrouded_editor_set_number "$file" "$path" "$new_value" || true
+        ;;
+      *)
+        enshrouded_editor_set_string "$file" "$path" "$new_value" || true
+        ;;
+    esac
+
+    changed="true"
+  done
+}
+
+enshrouded_editor_user_groups_menu() {
+  local file choice count idx name
+  file="$1"
+
+  while :; do
+    ui_header "Edit User Groups"
+    count="$(jq -r '.userGroups | length' "$file" 2>/dev/null || echo 0)"
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+      count=0
+    fi
+
+    if [[ "$count" -le 0 ]]; then
+      ui_warn_line "No userGroups found."
+      echo
+      echo "[0] Back"
+      echo
+      choice="$(ui_prompt_number "Choice")"
+      if [[ "$choice" -eq 0 ]]; then
+        return 0
+      fi
+      continue
+    fi
+
+    for idx in $(seq 0 $((count - 1))); do
+      name="$(jq -r ".userGroups[$idx].name // \"Group $idx\"" "$file" 2>/dev/null || echo "Group $idx")"
+      printf "[%s] %s\n" "$((idx + 1))" "$name"
+    done
+    echo
+    echo "[0] Back"
+    echo
+
+    choice="$(ui_prompt_number "Group")"
+    if [[ "$choice" -eq 0 ]]; then
+      return 0
+    fi
+
+    local g
+    g=$((choice - 1))
+    if [[ "$g" -lt 0 || "$g" -ge "$count" ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    # Group editor
+    while :; do
+      local base current_name current_pw reserved ck ci cw cb ce
+      base=".userGroups[$g]"
+      current_name="$(enshrouded_editor_get_raw "$file" "$base.name")"
+      current_pw="$(enshrouded_editor_get_compact "$file" "$base.password")"
+      reserved="$(enshrouded_editor_get_raw "$file" "$base.reservedSlots")"
+      ck="$(enshrouded_editor_get_raw "$file" "$base.canKickBan")"
+      ci="$(enshrouded_editor_get_raw "$file" "$base.canAccessInventories")"
+      cw="$(enshrouded_editor_get_raw "$file" "$base.canEditWorld")"
+      cb="$(enshrouded_editor_get_raw "$file" "$base.canEditBase")"
+      ce="$(enshrouded_editor_get_raw "$file" "$base.canExtendBase")"
+
+      ui_header "User Group: ${current_name:-Group $g}"
+      printf "[1] %-22s %s\n" "name" "${current_name:-<empty>}"
+      printf "[2] %-22s %s\n" "password" "$current_pw"
+      printf "[3] %-22s %s\n" "reservedSlots" "${reserved:-0}"
+      printf "[4] %-22s %s\n" "canKickBan" "${ck:-false}"
+      printf "[5] %-22s %s\n" "canAccessInventories" "${ci:-false}"
+      printf "[6] %-22s %s\n" "canEditWorld" "${cw:-false}"
+      printf "[7] %-22s %s\n" "canEditBase" "${cb:-false}"
+      printf "[8] %-22s %s\n" "canExtendBase" "${ce:-false}"
+      echo
+      echo "[0] Back"
+      echo
+
+      local c
+      c="$(ui_prompt_number "Choice")"
+      case "$c" in
+        1)
+          local v
+          v="$(enshrouded_prompt_scalar "name" "$current_name" "")"
+          if [[ -z "$v" ]]; then
+            ui_note "Cancelled."
+            ui_pause
+          else
+            enshrouded_editor_set_string "$file" "$base.name" "$v" || true
+            changed="true"
+          fi
+          ;;
+        2)
+          local v
+          echo
+          ui_note "Empty = password will be set to null (may be auto-generated after saving)."
+          v="$(ui_read "New password: ")"
+          v="$(echo "$v" | xargs)"
+          if [[ -z "$v" ]]; then
+            enshrouded_editor_set_jq "$file" "$base.password = null" || true
+            changed="true"
+          else
+            enshrouded_editor_set_string "$file" "$base.password" "$v" || true
+            changed="true"
+          fi
+          ;;
+        3)
+          local v
+          v="$(enshrouded_prompt_scalar "reservedSlots" "$reserved" "Allowed: integer >= 0")"
+          if [[ -z "$v" ]]; then
+            ui_note "Cancelled."
+            ui_pause
+          elif ! [[ "$v" =~ ^[0-9]+$ ]]; then
+            ui_warn_line "reservedSlots must be numeric."
+            ui_pause
+          else
+            enshrouded_editor_set_number "$file" "$base.reservedSlots" "$v" || true
+            changed="true"
+          fi
+          ;;
+        4|5|6|7|8)
+          local field cur next
+          case "$c" in
+            4) field="canKickBan" ;;
+            5) field="canAccessInventories" ;;
+            6) field="canEditWorld" ;;
+            7) field="canEditBase" ;;
+            8) field="canExtendBase" ;;
+          esac
+          cur="$(enshrouded_editor_get_raw "$file" "$base.$field")"
+          if [[ "$cur" == "true" ]]; then
+            next="false"
+          else
+            next="true"
+          fi
+          enshrouded_editor_set_bool "$file" "$base.$field" "$next" || true
+          changed="true"
+          ;;
+        0)
+          break
+          ;;
+        *)
+          ui_warn_line "Invalid selection."
+          ui_pause
+          ;;
+      esac
+    done
+  done
+}
+
+editor_enshrouded_json() {
+  local config_file tmp changed choice field_count save_choice save_restart_choice save_bootstrap_choice
+  config_file="$(enshrouded_editor_cfg)"
+  changed="false"
+
+  if [[ ! -f "$config_file" ]]; then
+    ui_warn_line "enshrouded_server.json is missing. Creating from profile..."
+    ensure_enshrouded_config_from_profile || true
+  fi
+
+  if [[ ! -f "$config_file" ]] || ! enshrouded_editor_jq_ok "$config_file"; then
+    ui_error "Invalid or missing config: $config_file"
+    ui_pause
+    return 1
+  fi
+
+  tmp="$(mktemp)"
+  cp "$config_file" "$tmp"
+  chmod 600 "$tmp" 2>/dev/null || true
+  trap 'rm -f "$tmp" 2>/dev/null || true' RETURN
+
+  while :; do
+    ui_header "Edit Enshrouded JSON"
+    ui_kv "File" "$config_file"
+    if [[ "$changed" == "true" ]]; then
+      ui_warn_line "Unsaved changes."
+    fi
+    echo
+
+    field_count=0
+
+    echo "${C_DIM}== Server ==${C_RESET}"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "name" "$(enshrouded_editor_get_compact "$tmp" '.name')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "ip" "$(enshrouded_editor_get_compact "$tmp" '.ip')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "queryPort" "$(enshrouded_editor_get_compact "$tmp" '.queryPort')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "slotCount" "$(enshrouded_editor_get_compact "$tmp" '.slotCount')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "saveDirectory" "$(enshrouded_editor_get_compact "$tmp" '.saveDirectory')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "logDirectory" "$(enshrouded_editor_get_compact "$tmp" '.logDirectory')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "tags" "$(jq -r '.tags // [] | join(\",\")' "$tmp" 2>/dev/null || echo "")"
+    echo
+
+    echo "${C_DIM}== Voice / Text ==${C_RESET}"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "voiceChatMode" "$(enshrouded_editor_get_compact "$tmp" '.voiceChatMode')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "enableVoiceChat" "$(enshrouded_editor_get_compact "$tmp" '.enableVoiceChat')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "enableTextChat" "$(enshrouded_editor_get_compact "$tmp" '.enableTextChat')"
+    echo
+
+    echo "${C_DIM}== Game ==${C_RESET}"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "gameSettingsPreset" "$(enshrouded_editor_get_compact "$tmp" '.gameSettingsPreset')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "gameSettings (submenu)" "${C_DIM}<enter>${C_RESET}"
+    echo
+
+    echo "${C_DIM}== Access ==${C_RESET}"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "userGroups (submenu)" "${C_DIM}<enter>${C_RESET}"
+    echo
+
+    save_choice=$((field_count + 1))
+    save_restart_choice=$((field_count + 2))
+    save_bootstrap_choice=$((field_count + 3))
+    echo "[${save_choice}] Save"
+    echo "[${save_restart_choice}] Save and restart server"
+    echo "[${save_bootstrap_choice}] Save and run bootstrap"
+    echo
+    echo "[0] Back"
+    echo
+
+    choice="$(ui_prompt_number "Choice")"
+    if [[ "$choice" -eq 0 ]]; then
+      if [[ "$changed" != "true" ]]; then
+        return 0
+      fi
+      ui_warn_line "Discard unsaved changes?"
+      echo "[1] Save"
+      echo "[2] Discard"
+      echo "[0] Cancel"
+      echo
+      case "$(ui_prompt_number "Action")" in
+        1)
+          if ! menu_stop_server_for_config_change "save Enshrouded settings"; then
+            ui_pause
+            continue
+          fi
+          local config_dir save_tmp
+          config_dir="$(dirname "$config_file")"
+          mkdir -p "$config_dir" 2>/dev/null || true
+          save_tmp="$(mktemp "${config_dir}/.enshrouded_server.json.save.XXXXXX")"
+          if ! cp "$tmp" "$save_tmp"; then
+            rm -f "$save_tmp" 2>/dev/null || true
+            ui_error "Failed to save file."
+            ui_pause
+            continue
+          fi
+          backup_config_file "$config_file" "enshrouded_server" || true
+          mv -f "$save_tmp" "$config_file"
+          chmod 600 "$config_file" 2>/dev/null || true
+          ensureUserGroupPasswords || true
+          chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
+          ui_success "Saved: $config_file"
+          echo
+          menu_prompt_start_server "Start enshrouded-server now to apply changes?"
+          ui_pause
+          return 0
+          ;;
+        2)
+          ui_note "Discarded."
+          ui_pause
+          return 0
+          ;;
+        0)
+          continue
+          ;;
+        *)
+          continue
+          ;;
+      esac
+    fi
+
+    if [[ "$choice" -eq "$save_choice" || "$choice" -eq "$save_restart_choice" || "$choice" -eq "$save_bootstrap_choice" ]]; then
+      if ! menu_stop_server_for_config_change "save Enshrouded settings"; then
+        ui_pause
+        continue
+      fi
+      local config_dir save_tmp
+      config_dir="$(dirname "$config_file")"
+      mkdir -p "$config_dir" 2>/dev/null || true
+      save_tmp="$(mktemp "${config_dir}/.enshrouded_server.json.save.XXXXXX")"
+      if ! cp "$tmp" "$save_tmp"; then
+        rm -f "$save_tmp" 2>/dev/null || true
+        ui_error "Failed to save file."
+        ui_pause
+        continue
+      fi
+      backup_config_file "$config_file" "enshrouded_server" || true
+      mv -f "$save_tmp" "$config_file"
+      chmod 600 "$config_file" 2>/dev/null || true
+      ensureUserGroupPasswords || true
+      chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
+      ui_success "Saved: $config_file"
+      if [[ "$choice" -eq "$save_restart_choice" ]]; then
+        supervisorctl restart enshrouded-server || true
+        ui_success "Restart requested."
+      elif [[ "$choice" -eq "$save_bootstrap_choice" ]]; then
+        supervisorctl start enshrouded-bootstrap || true
+        ui_success "Bootstrap started."
+        ui_note "Note: bootstrap does not start the server."
+        if menu_wait_for_program_exit "enshrouded-bootstrap" 600; then
+          echo
+          menu_prompt_start_server "Start enshrouded-server now?"
+        else
+          ui_note "Start the server later once bootstrap has finished."
+        fi
+      else
+        echo
+        menu_prompt_start_server "Start enshrouded-server now to apply changes?"
+      fi
+      ui_pause
+      return 0
+    fi
+
+    case "$choice" in
+      1)
+        local v
+        v="$(enshrouded_prompt_scalar "name" "$(enshrouded_editor_get_raw "$tmp" '.name')" "")"
+        if [[ -n "$v" ]]; then
+          enshrouded_editor_set_string "$tmp" ".name" "$v" || true
+          changed="true"
+        fi
+        ;;
+      2)
+        local v
+        v="$(enshrouded_prompt_scalar "ip" "$(enshrouded_editor_get_raw "$tmp" '.ip')" "IPv4 e.g. 0.0.0.0")"
+        if [[ -n "$v" ]]; then
+          if enshrouded_validate_ipv4_soft "$v"; then
+            enshrouded_editor_set_string "$tmp" ".ip" "$v" || true
+            changed="true"
+          else
+            ui_pause
+          fi
+        fi
+        ;;
+      3)
+        local v
+        v="$(enshrouded_prompt_scalar "queryPort" "$(enshrouded_editor_get_raw "$tmp" '.queryPort')" "1..65535")"
+        if [[ -n "$v" ]]; then
+          if enshrouded_validate_int_range_soft "queryPort" "$v" 1 65535; then
+            enshrouded_editor_set_number "$tmp" ".queryPort" "$v" || true
+            changed="true"
+          else
+            ui_pause
+          fi
+        fi
+        ;;
+      4)
+        local v
+        v="$(enshrouded_prompt_scalar "slotCount" "$(enshrouded_editor_get_raw "$tmp" '.slotCount')" "1..16")"
+        if [[ -n "$v" ]]; then
+          if enshrouded_validate_int_range_soft "slotCount" "$v" 1 16; then
+            enshrouded_editor_set_number "$tmp" ".slotCount" "$v" || true
+            changed="true"
+          else
+            ui_pause
+          fi
+        fi
+        ;;
+      5)
+        local v
+        v="$(enshrouded_prompt_scalar "saveDirectory" "$(enshrouded_editor_get_raw "$tmp" '.saveDirectory')" "")"
+        if [[ -n "$v" ]]; then
+          enshrouded_editor_set_string "$tmp" ".saveDirectory" "$v" || true
+          changed="true"
+        fi
+        ;;
+      6)
+        local v
+        v="$(enshrouded_prompt_scalar "logDirectory" "$(enshrouded_editor_get_raw "$tmp" '.logDirectory')" "")"
+        if [[ -n "$v" ]]; then
+          enshrouded_editor_set_string "$tmp" ".logDirectory" "$v" || true
+          changed="true"
+        fi
+        ;;
+      7)
+        local v
+        echo
+        ui_note "Comma-separated, allowed: A-Z a-z 0-9 . _ -"
+        ui_note "Empty = [] (clears all tags)"
+        v="$(ui_read "Tags: ")"
+        v="$(echo "$v" | xargs)"
+        if enshrouded_editor_set_tags "$tmp" "$v"; then
+          changed="true"
+        else
+          ui_pause
+        fi
+        ;;
+      8)
+        local v
+        v="$(enshrouded_prompt_scalar "voiceChatMode" "$(enshrouded_editor_get_raw "$tmp" '.voiceChatMode')" "Proximity | Global")"
+        if [[ -n "$v" ]]; then
+          if validate_enum_soft "voiceChatMode" "$v" Proximity Global; then
+            enshrouded_editor_set_string "$tmp" ".voiceChatMode" "$v" || true
+            changed="true"
+          else
+            ui_pause
+          fi
+        fi
+        ;;
+      9)
+        local v cur
+        cur="$(enshrouded_editor_get_raw "$tmp" '.enableVoiceChat')"
+        ui_note "Enter = toggle (current: ${cur:-false})"
+        v="$(ui_read "New value (true/false or empty): ")"
+        v="$(echo "$v" | xargs)"
+        if [[ -z "$v" ]]; then
+          if [[ "$cur" == "true" ]]; then v="false"; else v="true"; fi
+        fi
+        v="$(echo "$v" | tr '[:upper:]' '[:lower:]')"
+        if enshrouded_validate_bool_soft_local "enableVoiceChat" "$v"; then
+          enshrouded_editor_set_bool "$tmp" ".enableVoiceChat" "$v" || true
+          changed="true"
+        else
+          ui_pause
+        fi
+        ;;
+      10)
+        local v cur
+        cur="$(enshrouded_editor_get_raw "$tmp" '.enableTextChat')"
+        ui_note "Enter = toggle (current: ${cur:-false})"
+        v="$(ui_read "New value (true/false or empty): ")"
+        v="$(echo "$v" | xargs)"
+        if [[ -z "$v" ]]; then
+          if [[ "$cur" == "true" ]]; then v="false"; else v="true"; fi
+        fi
+        v="$(echo "$v" | tr '[:upper:]' '[:lower:]')"
+        if enshrouded_validate_bool_soft_local "enableTextChat" "$v"; then
+          enshrouded_editor_set_bool "$tmp" ".enableTextChat" "$v" || true
+          changed="true"
+        else
+          ui_pause
+        fi
+        ;;
+      11)
+        local v
+        v="$(enshrouded_prompt_scalar "gameSettingsPreset" "$(enshrouded_editor_get_raw "$tmp" '.gameSettingsPreset')" "Default | Relaxed | Hard | Survival | Custom")"
+        if [[ -n "$v" ]]; then
+          if validate_game_setting "PRESET" "$v"; then
+            enshrouded_editor_set_string "$tmp" ".gameSettingsPreset" "$v" || true
+            changed="true"
+          else
+            ui_pause
+          fi
+        fi
+        ;;
+      12)
+        enshrouded_editor_game_settings_menu "$tmp"
+        ;;
+      13)
+        enshrouded_editor_user_groups_menu "$tmp"
+        ;;
+      *)
+        ui_warn_line "Invalid selection."
+        ui_pause
+        ;;
+    esac
+  done
+}

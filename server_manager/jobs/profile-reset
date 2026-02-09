@@ -21,6 +21,7 @@ main() {
     fatal "Invalid JSON in server manager profile: $source_profile"
   fi
 
+  backup_config_file "$config_file" "server_manager" || true
   cp "$source_profile" "$config_file"
   chmod 600 "$config_file" 2>/dev/null || true
   info "Server Manager config reset from profile: $profile"

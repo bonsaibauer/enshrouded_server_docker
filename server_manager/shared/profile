@@ -15,6 +15,60 @@ MANAGER_PROFILE_DIR="$MANAGER_PROFILE_ROOT"
 MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT}/profiles/manager}"
 EN_PROFILE_DIR="${EN_PROFILE_DIR:-${MANAGER_ROOT}/profiles/enshrouded}"
 
+# Persisted profile selection (written by ctl menu).
+# This enables switching profiles without changing container env vars.
+PROFILE_SELECTION_FILE_DEFAULT="${MANAGER_DATA_DIR}/profile_selection.json"
+PROFILE_SELECTION_FILE="${PROFILE_SELECTION_FILE:-$PROFILE_SELECTION_FILE_DEFAULT}"
+
+profile_selection_path() {
+  printf "%s" "$PROFILE_SELECTION_FILE"
+}
+
+profile_selection_get() {
+  local key file value
+  key="$1"
+  file="$(profile_selection_path)"
+  if ! command -v jq >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+  if [[ ! -f "$file" ]]; then
+    echo ""
+    return 0
+  fi
+  value="$(jq -r --arg key "$key" '.[$key] // empty' "$file" 2>/dev/null || true)"
+  if [[ "$value" == "null" ]]; then
+    value=""
+  fi
+  echo "$value"
+}
+
+profile_selection_set() {
+  local key value file tmp
+  key="$1"
+  value="$2"
+  file="$(profile_selection_path)"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    warn "jq not found: cannot persist profile selection"
+    return 1
+  fi
+
+  ensure_manager_paths
+  chown -R enshrouded:enshrouded "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_ROOT" 2>/dev/null || true
+  tmp="$(mktemp)"
+
+  if [[ -f "$file" ]] && jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    jq --arg key "$key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp"
+  else
+    jq -n --arg key "$key" --arg value "$value" '{($key): $value}' >"$tmp"
+  fi
+
+  mv "$tmp" "$file"
+  chmod 644 "$file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$file" 2>/dev/null || true
+}
+
 declare -a MANAGER_VARS=(
   PUID
   PGID
@@ -79,6 +133,68 @@ manager_config_path() {
   printf "%s/server_manager.json" "$MANAGER_DATA_DIR"
 }
 
+backup_dir_resolve() {
+  # Resolve BACKUP_DIR to an absolute path (same behavior as enshrouded-backup job).
+  local dir
+  dir="${BACKUP_DIR:-backups}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
+
+config_backups_dir() {
+  # Store config backups under BACKUP_DIR/profiles (default: /home/enshrouded/server/backups/profiles).
+  printf "%s/profiles" "$(backup_dir_resolve)"
+}
+
+backup_config_file() {
+  # Create a timestamped backup of a config JSON file.
+  # Usage: backup_config_file <src_file> <label>
+  local src label backup_root ts dest n
+  src="$1"
+  label="$2"
+
+  if [[ -z "$src" || -z "$label" ]]; then
+    warn "backup_config_file: missing arguments"
+    return 1
+  fi
+
+  if [[ ! -f "$src" ]]; then
+    return 0
+  fi
+
+  backup_root="$(config_backups_dir)"
+  mkdir -p "$backup_root" 2>/dev/null || true
+  chmod 700 "$backup_root" 2>/dev/null || true
+  chown enshrouded:enshrouded "$backup_root" 2>/dev/null || true
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  dest="${backup_root}/${ts}_${label}.json"
+  if [[ -e "$dest" ]]; then
+    n=1
+    while [[ -e "${backup_root}/${ts}_${label}_${n}.json" ]]; do
+      n=$((n + 1))
+    done
+    dest="${backup_root}/${ts}_${label}_${n}.json"
+  fi
+
+  if cp "$src" "$dest" 2>/dev/null; then
+    chmod 600 "$dest" 2>/dev/null || true
+    chown enshrouded:enshrouded "$dest" 2>/dev/null || true
+    if declare -F ui_success >/dev/null 2>&1; then
+      ui_success "Backup created: $dest"
+    elif declare -F info >/dev/null 2>&1; then
+      info "Backup created: $dest"
+    fi
+    return 0
+  fi
+
+  warn "Failed to create backup: $dest"
+  return 1
+}
+
 manager_profile_path() {
   local name
   name="${1:-$MANAGER_PROFILE_DEFAULT}"
@@ -99,7 +215,14 @@ enshrouded_profile_path() {
 
 manager_profile_resolve() {
   local name
-  name="${MANAGER_PROFILE:-}"
+  name="$(profile_selection_get "manager")"
+  if [[ -z "$name" ]]; then
+    name="${MANAGER_PROFILE:-}"
+  fi
+  if [[ -n "$name" ]] && ! [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    warn "Invalid manager profile selector: $name (fallback: $MANAGER_PROFILE_DEFAULT)"
+    name=""
+  fi
   if [[ -z "$name" ]]; then
     echo "$MANAGER_PROFILE_DEFAULT"
     return 0
@@ -114,7 +237,14 @@ manager_profile_resolve() {
 
 enshrouded_profile_resolve() {
   local name
-  name="${EN_PROFILE:-}"
+  name="$(profile_selection_get "enshrouded")"
+  if [[ -z "$name" ]]; then
+    name="${EN_PROFILE:-}"
+  fi
+  if [[ -n "$name" ]] && ! [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    warn "Invalid enshrouded profile selector: $name (fallback: $EN_PROFILE_DEFAULT)"
+    name=""
+  fi
   if [[ -z "$name" ]]; then
     echo "$EN_PROFILE_DEFAULT"
     return 0
@@ -282,7 +412,41 @@ update_or_create_manager_config() {
 }
 
 load_enshrouded_env_from_profile() {
-  local profile profile_file
+  local profile profile_file config_file
+  config_file="${install_path}/enshrouded_server.json"
+
+  # Prefer existing runtime config as the source of truth for runtime defaults.
+  # This keeps manual edits (e.g. via ctl menu) consistent across restarts.
+  if command -v jq >/dev/null 2>&1 && [[ -f "$config_file" ]] && jq -e '.' "$config_file" >/dev/null 2>&1; then
+    if [[ -z "${ENSHROUDED_NAME:-}" ]]; then
+      ENSHROUDED_NAME="$(jq -r '.name // empty' "$config_file")"
+    fi
+    if [[ -z "${ENSHROUDED_SAVE_DIR:-}" ]]; then
+      ENSHROUDED_SAVE_DIR="$(jq -r '.saveDirectory // empty' "$config_file")"
+    fi
+    if [[ -z "${ENSHROUDED_LOG_DIR:-}" ]]; then
+      ENSHROUDED_LOG_DIR="$(jq -r '.logDirectory // empty' "$config_file")"
+    fi
+    if [[ -z "${ENSHROUDED_IP:-}" ]]; then
+      ENSHROUDED_IP="$(jq -r '.ip // empty' "$config_file")"
+    fi
+    if [[ -z "${ENSHROUDED_QUERY_PORT:-}" ]]; then
+      ENSHROUDED_QUERY_PORT="$(jq -r '.queryPort // empty' "$config_file")"
+    fi
+    if [[ -z "${ENSHROUDED_SLOT_COUNT:-}" ]]; then
+      ENSHROUDED_SLOT_COUNT="$(jq -r '.slotCount // empty' "$config_file")"
+    fi
+    if [[ -z "${ENSHROUDED_VOICE_CHAT_MODE:-}" ]]; then
+      ENSHROUDED_VOICE_CHAT_MODE="$(jq -r '.voiceChatMode // empty' "$config_file")"
+    fi
+    if [[ -z "${ENSHROUDED_ENABLE_VOICE_CHAT:-}" ]]; then
+      ENSHROUDED_ENABLE_VOICE_CHAT="$(jq -r '.enableVoiceChat // empty' "$config_file")"
+    fi
+    if [[ -z "${ENSHROUDED_ENABLE_TEXT_CHAT:-}" ]]; then
+      ENSHROUDED_ENABLE_TEXT_CHAT="$(jq -r '.enableTextChat // empty' "$config_file")"
+    fi
+  fi
+
   profile="$(enshrouded_profile_resolve)"
   profile_file="$(enshrouded_profile_path "$profile")"
 

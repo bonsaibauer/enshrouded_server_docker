@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+
+manager_select_profile_flow() {
+  local mode config_file profiles profile_count idx selected profile
+  mode="${1:-select}"
+  config_file="$(manager_config_path)"
+
+  mapfile -t profiles < <(profiles_list_manager | sort)
+  profile_count="${#profiles[@]}"
+  if [[ "$profile_count" -eq 0 ]]; then
+    ui_error "No Server Manager profiles found in: $MANAGER_PROFILE_TEMPLATE_DIR"
+    ui_pause
+    return 1
+  fi
+
+  while :; do
+    ui_header "Select Server Manager Profile"
+    ui_kv "Profiles Folder" "$MANAGER_PROFILE_TEMPLATE_DIR"
+    echo
+    idx=1
+    for p in "${profiles[@]}"; do
+      printf "[%s] %s\n" "$idx" "$p"
+      idx=$((idx + 1))
+    done
+    echo
+    echo "[0] Back"
+    echo
+
+    selected="$(ui_prompt_number "Profile")"
+    if [[ "$selected" -eq 0 ]]; then
+      return 0
+    fi
+    if [[ "$selected" -lt 1 || "$selected" -gt "$profile_count" ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    profile="${profiles[$((selected - 1))]}"
+
+    # Only ask for confirmation when we'd impact a running server or replace an existing config.
+    if checkRunning "enshrouded-server" || [[ -f "$config_file" ]]; then
+      ui_warn_line "This will replace the active Server Manager config with the selected profile."
+      if [[ "$mode" == "delete" ]]; then
+        ui_warn_line "Your current config will be deleted (replaced)."
+      fi
+      ui_warn_line "All players will be disconnected."
+      echo
+      ui_kv "Selected Profile" "$profile"
+      ui_kv "Target File" "$config_file"
+      echo
+      if ! ui_confirm_yes_no "Stop server (if running) and apply this profile now?"; then
+        ui_note "Cancelled."
+        ui_pause
+        continue
+      fi
+      if ! menu_stop_server_now; then
+        ui_pause
+        continue
+      fi
+    fi
+
+    if ! profiles_apply_manager "$profile"; then
+      ui_pause
+      continue
+    fi
+
+    echo
+    ui_note "Apply changes:"
+    echo "[1] Start/restart Enshrouded server"
+    echo "[2] Run bootstrap (recommended; updates cron, does not start server)"
+    echo "[0] Back to menu"
+    echo
+    case "$(ui_prompt_number "Action")" in
+      1)
+        supervisorctl restart enshrouded-server || true
+        ui_success "Restart requested."
+        ui_pause
+        ;;
+      2)
+        supervisorctl start enshrouded-bootstrap || true
+        ui_success "Bootstrap started."
+        ui_note "Note: bootstrap does not start the server."
+        if menu_wait_for_program_exit "enshrouded-bootstrap" 600; then
+          echo
+          menu_prompt_start_server "Start enshrouded-server now?"
+        else
+          ui_note "Start the server later once bootstrap has finished."
+        fi
+        ui_pause
+        ;;
+      0)
+        ;;
+      *)
+        ;;
+    esac
+
+    return 0
+  done
+}
+
+menu_manager_settings() {
+  local choice
+  while :; do
+    ui_header "Server Manager Settings"
+
+    echo "[1] Edit current settings"
+    echo "[2] Delete current profile"
+    echo "[3] Select new profile"
+    echo "[4] Restore from backup"
+    echo
+    echo "[0] Back"
+    echo
+
+    choice="$(ui_prompt_number "Choice")"
+    case "$choice" in
+      1)
+        editor_manager_json
+        ;;
+      2)
+        manager_select_profile_flow "delete" || true
+        ;;
+      3)
+        manager_select_profile_flow "select" || true
+        ;;
+      4)
+        menu_restore_manager_backup || true
+        ;;
+      0)
+        return 0
+        ;;
+      *)
+        ui_warn_line "Invalid selection."
+        ui_pause
+        ;;
+    esac
+  done
+}

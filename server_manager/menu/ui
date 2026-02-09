@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+
+# UI helpers for the interactive shell menu.
+# Expected to be sourced after server_manager/shared/common so log helpers and colors exist.
+
+ui_has_tty() {
+  [[ -t 0 && -t 1 ]]
+}
+
+ui_clear() {
+  if command -v clear >/dev/null 2>&1; then
+    clear
+  else
+    printf "\n\n\n\n\n\n\n"
+  fi
+}
+
+ui_hr() {
+  printf "%s\n" "--------------------------------------------------------------------------------"
+}
+
+ui_banner() {
+  printf "%s" "${C_MAGENTA}"
+  cat <<'EOF'
+>>=============================================================<<
+|| __  __    _    _   _    _    ____ _____ ____    _           ||
+|||  \/  |  / \  | \ | |  / \  / ___| ____|  _ \  | |__  _   _ ||
+||| |\/| | / _ \ |  \| | / _ \| |  _|  _| | |_) | | '_ \| | | |||
+||| |  | |/ ___ \| |\  |/ ___ \ |_| | |___|  _ <  | |_) | |_| |||
+|||_|  |_/_/   \_\_| \_/_/   \_\____|_____|_| \_\ |_.__/ \__, |||
+||| |__   ___  _ __  ___  __ _(_) |__   __ _ _   _  ___ _|___/ ||
+||| '_ \ / _ \| '_ \/ __|/ _` | | '_ \ / _` | | | |/ _ \ '__|  ||
+||| |_) | (_) | | | \__ \ (_| | | |_) | (_| | |_| |  __/ |     ||
+|||_.__/ \___/|_| |_|___/\__,_|_|_.__/ \__,_|\__,_|\___|_|     ||
+>>=============================================================<<
+EOF
+  printf "%s" "${C_RESET}"
+  printf "%s\n" "${C_GREEN}                 Server Manager${C_RESET}"
+  printf "%s\n" "${C_DIM}        Enshrouded Control Layer${C_RESET}"
+  ui_hr
+}
+
+ui_kv() {
+  local k v
+  k="$1"
+  v="$2"
+  printf "%s: %s\n" "${C_DIM}${k}${C_RESET}" "$v"
+}
+
+ui_note() {
+  printf "%s%s%s\n" "${C_DIM}" "$*" "${C_RESET}"
+}
+
+ui_error() {
+  printf "%s%s%s\n" "${C_RED}" "$*" "${C_RESET}" >&2
+}
+
+ui_warn_line() {
+  printf "%s%s%s\n" "${C_YELLOW}" "$*" "${C_RESET}"
+}
+
+ui_success() {
+  printf "%s%s%s\n" "${C_GREEN}" "$*" "${C_RESET}"
+}
+
+ui_read() {
+  local prompt value
+  prompt="$1"
+  if [[ -r /dev/tty ]]; then
+    read -r -p "$prompt" value </dev/tty || true
+  else
+    read -r -p "$prompt" value || true
+  fi
+  printf "%s" "$value"
+}
+
+ui_pause() {
+  local _unused
+  if [[ -r /dev/tty ]]; then
+    read -r -p "Press Enter to continue..." _unused </dev/tty || true
+  else
+    read -r -p "Press Enter to continue..." _unused || true
+  fi
+}
+
+ui_confirm_yes_no() {
+  local prompt ans normalized
+  prompt="$1"
+  while :; do
+    ans="$(ui_read "$prompt [yes/no]: ")"
+    normalized="$(echo "$ans" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$normalized" in
+      y|yes|j|ja)
+        return 0
+        ;;
+      n|no|nein|"")
+        return 1
+        ;;
+      *)
+        ui_warn_line "Please answer yes or no."
+        ;;
+    esac
+  done
+}
+
+# Backwards-compatible alias (older call sites).
+ui_confirm_ja_nein() {
+  ui_confirm_yes_no "$@"
+}
+
+ui_prompt_number() {
+  local prompt ans
+  prompt="$1"
+  while :; do
+    ans="$(ui_read "$prompt: ")"
+    ans="$(echo "$ans" | xargs)"
+    if [[ "$ans" =~ ^[0-9]+$ ]]; then
+      printf "%s" "$ans"
+      return 0
+    fi
+    ui_warn_line "Please enter a number."
+  done
+}
+
+ui_header() {
+  local subtitle
+  subtitle="${1:-}"
+
+  ui_clear
+  ui_banner
+  if [[ -n "$subtitle" ]]; then
+    printf "\n%s%s%s\n" "${C_DIM}" "$subtitle" "${C_RESET}"
+  fi
+
+  # Status block (non-fatal if supervisorctl fails)
+  local en_profile manager_profile server_status
+  en_profile="$(enshrouded_profile_resolve 2>/dev/null || echo "default")"
+  manager_profile="$(manager_profile_resolve 2>/dev/null || echo "default")"
+
+  if checkRunning "enshrouded-server"; then
+    server_status="${C_GREEN}RUNNING${C_RESET}"
+  else
+    server_status="${C_RED}STOPPED${C_RESET}"
+  fi
+
+  ui_kv "EN_PROFILE" "$en_profile"
+  ui_kv "MANAGER_PROFILE" "$manager_profile"
+  ui_kv "Server" "$server_status"
+  ui_kv "Enshrouded Config" "${install_path}/enshrouded_server.json"
+  ui_kv "Manager Config" "$(manager_config_path)"
+  ui_hr
+
+  if ui_has_tty; then
+    ui_note "Navigation: enter a number and press Enter. [0] is always Back/Exit."
+  else
+    ui_warn_line "Hint: no TTY detected. Start with: docker exec -it <container> ctl menu"
+  fi
+  echo
+}
+
+menu_stop_server_now() {
+  # Stop the Enshrouded server without asking (callers must confirm before invoking).
+  if ! checkRunning "enshrouded-server"; then
+    return 0
+  fi
+
+  supervisorctl stop enshrouded-server >/dev/null 2>&1 || true
+
+  # Best-effort wait until supervisor reports it stopped.
+  local deadline now
+  deadline=$(( $(date +%s) + 30 ))
+  while checkRunning "enshrouded-server"; do
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      ui_error "Timeout while stopping enshrouded-server. Aborting."
+      return 1
+    fi
+    sleep 1
+  done
+
+  return 0
+}
+
+menu_stop_server_for_config_change() {
+  local reason
+  reason="$1"
+
+  if ! checkRunning "enshrouded-server"; then
+    return 0
+  fi
+
+  ui_warn_line "The Enshrouded server is currently RUNNING."
+  ui_warn_line "To $reason, the server must be stopped first to avoid conflicts."
+  ui_warn_line "All players will be disconnected."
+  echo
+
+  if ! ui_confirm_yes_no "Stop enshrouded-server now?"; then
+    ui_note "Cancelled."
+    return 1
+  fi
+
+  if ! menu_stop_server_now; then
+    return 1
+  fi
+
+  ui_success "enshrouded-server stopped."
+  return 0
+}
+
+menu_prompt_start_server() {
+  local prompt
+  prompt="${1:-Start enshrouded-server now?}"
+
+  if ui_confirm_yes_no "$prompt"; then
+    supervisorctl start enshrouded-server >/dev/null 2>&1 || true
+    ui_success "Server start requested."
+  else
+    ui_note "Server remains stopped."
+  fi
+}
+
+menu_wait_for_program_exit() {
+  local proc timeout deadline now
+  proc="$1"
+  timeout="${2:-600}"
+
+  if ! checkRunning "$proc"; then
+    return 0
+  fi
+
+  ui_note "Waiting for $proc to finish..."
+  deadline=$(( $(date +%s) + timeout ))
+  while checkRunning "$proc"; do
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      ui_warn_line "Timeout while waiting for $proc."
+      return 1
+    fi
+    sleep 1
+  done
+
+  return 0
+}

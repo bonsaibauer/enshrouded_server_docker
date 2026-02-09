@@ -12,6 +12,7 @@ Usage:
 
 Commands:
   status         Show supervisor program status
+  menu           Start interactive Server Manager menu
   start          Start enshrouded-server
   stop           Stop enshrouded-server
   restart        Restart enshrouded-server
@@ -50,6 +51,9 @@ main() {
   case "$cmd" in
     status)
       run_supervisorctl status
+      ;;
+    menu)
+      "$(dirname "$0")/../menu/menu" "$@"
       ;;
     start)
       run_supervisorctl start enshrouded-server

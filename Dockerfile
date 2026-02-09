@@ -61,9 +61,11 @@ COPY ./server_manager/supervisor/supervisord.conf /etc/supervisor/supervisord.co
 COPY --chmod=755 ./server_manager/entrypoints/ /usr/local/etc/enshrouded/entrypoints/
 COPY --chmod=755 ./server_manager/jobs/ /usr/local/etc/enshrouded/jobs/
 COPY --chmod=755 ./server_manager/shared/ /usr/local/etc/enshrouded/shared/
+COPY --chmod=755 ./server_manager/menu/ /usr/local/etc/enshrouded/menu/
 COPY --chmod=755 ./server_manager/runtimes/ /usr/local/etc/enshrouded/runtimes/
 COPY ./server_manager/profiles/ /usr/local/etc/enshrouded/profiles/
 RUN ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/ctl \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/menu \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/status \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/start \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/stop \

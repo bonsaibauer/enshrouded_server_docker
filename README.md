@@ -5,6 +5,7 @@
 - Environment variables: [`docs/environment.md`](docs/environment.md)
 - Profile system (Manager + Enshrouded): [`docs/profile.md`](docs/profile.md)
 - Commands: [`docs/server_manager_commands.md`](docs/server_manager_commands.md)
+- Interactive menu: [`docs/menu.md`](docs/menu.md)
 - Logging behavior: [`docs/log.md`](docs/log.md)
 - Current init changelog: [`docs/changelog/v3.0.0.md`](docs/changelog/v3.0.0.md)
 
@@ -31,3 +32,9 @@ Hinweis:
 - Das Server-Installziel im Container ist `/home/enshrouded/server`.
 - `LOG_COLOR` ist optional und muss nicht gesetzt werden.
 - `server_manager.json` und die Profile liegen standardmäßig ebenfalls unter `/home/enshrouded/server` und sind damit über dasselbe Volume persistent.
+
+### Interactive Menu
+
+```bash
+docker exec -it <container> ctl menu
+```

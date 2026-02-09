@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+menu_main() {
+  local choice
+
+  while :; do
+    ui_header "Main Menu"
+
+    echo "[1] Enshrouded Server Settings"
+    echo "[2] Server Manager Settings"
+    echo "[3] Other ctl Commands"
+    echo
+    echo "[0] Exit"
+    echo
+
+    choice="$(ui_prompt_number "Choice")"
+    case "$choice" in
+      1)
+        menu_enshrouded_settings
+        ;;
+      2)
+        menu_manager_settings
+        ;;
+      3)
+        menu_other_commands
+        ;;
+      0)
+        ui_clear
+        return 0
+        ;;
+      *)
+        ui_warn_line "Invalid selection."
+        ui_pause
+        ;;
+    esac
+  done
+}

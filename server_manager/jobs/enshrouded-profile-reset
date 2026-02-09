@@ -23,6 +23,7 @@ main() {
 
   temp_file="$(mktemp)"
   if jq 'if has("bans") then . else . + {bans: []} end' "$source_profile" >"$temp_file"; then
+    backup_config_file "$config_file" "enshrouded_server" || true
     mv "$temp_file" "$config_file"
     chmod 600 "$config_file" 2>/dev/null || true
     info "Enshrouded profile reset applied: $profile"

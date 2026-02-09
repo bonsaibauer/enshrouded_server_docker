@@ -6,6 +6,7 @@ Current commands according to `server_manager/entrypoints/ctl`.
 
 ```bash
 docker exec <container> status
+docker exec -it <container> menu
 docker exec <container> start
 docker exec <container> stop
 docker exec <container> restart
@@ -26,6 +27,7 @@ docker exec <container> cron-restart
 
 ```bash
 docker exec <container> ctl status
+docker exec -it <container> ctl menu
 docker exec <container> ctl start
 docker exec <container> ctl stop
 docker exec <container> ctl restart
