@@ -144,7 +144,6 @@ Backups are created when you:
 
 - `Save` in the JSON editors
 - apply a profile template (`Select new profile`)
-- use the restore menu (`Restore from backup`)
 - run the existing reset commands (`ctl profile-reset`, `ctl enshrouded-profile-reset`)
 
 ## Settings Precedence (Important)

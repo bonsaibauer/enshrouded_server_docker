@@ -86,9 +86,6 @@ menu_restore_from_backup_generic() {
       continue
     fi
 
-    # Backup the current config before restoring (best-effort safety net).
-    backup_config_file "$config_file" "$label" || true
-
     config_dir="$(dirname "$config_file")"
     mkdir -p "$config_dir" 2>/dev/null || true
     tmp="$(mktemp "${config_dir}/.${label}.restore.XXXXXX")"
@@ -146,4 +143,3 @@ menu_restore_enshrouded_backup() {
 menu_restore_manager_backup() {
   menu_restore_from_backup_generic "Server Manager" "server_manager" "$(manager_config_path)"
 }
-
