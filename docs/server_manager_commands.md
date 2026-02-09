@@ -1,8 +1,8 @@
 # Server Manager Commands
 
-Aktuelle Commands laut `server_manager/entrypoints/ctl`.
+Current commands according to `server_manager/entrypoints/ctl`.
 
-## Direkt via docker exec
+## Direct via docker exec
 
 ```bash
 docker exec <container> status
@@ -22,7 +22,7 @@ docker exec <container> cron-stop
 docker exec <container> cron-restart
 ```
 
-## Alternativ über ctl
+## Alternative via ctl
 
 ```bash
 docker exec <container> ctl status
@@ -42,7 +42,7 @@ docker exec <container> ctl cron-stop
 docker exec <container> ctl cron-restart
 ```
 
-## Supervisor-Programmnamen
+## Supervisor Program Names
 
 ```text
 enshrouded-bootstrap
@@ -58,7 +58,7 @@ crond
 
 ## password-view
 
-Zeigt `userGroups` (Rechte + Passwort) aus der aktiven `enshrouded_server.json`.
+Shows `userGroups` (permissions + password) from the active `enshrouded_server.json`.
 
 ```bash
 docker exec <container> password-view

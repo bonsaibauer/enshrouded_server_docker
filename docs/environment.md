@@ -1,51 +1,51 @@
 # Environment Variables
 
-Diese Datei dokumentiert die aktuell verwendeten ENV-Variablen des heutigen `server_manager`-Setups.
+This file documents the environment variables used by the current `server_manager` setup.
 
-Reihenfolge der Werteauflösung:
+Value resolution order:
 1. ENV
-2. Laufzeitdateien (`/home/enshrouded/server/server_manager/server_manager.json`, `/home/enshrouded/server/enshrouded_server.json`)
-3. Profil-Templates (nur bei Initialisierung)
+2. Runtime files (`/home/enshrouded/server/server_manager/server_manager.json`, `/home/enshrouded/server/enshrouded_server.json`)
+3. Profile templates (only during initialization)
 
-## Profilauswahl
+## Profile Selection
 
-| Variable | Beschreibung | Default |
+| Variable | Description | Default |
 |---|---|---|
-| `MANAGER_PROFILE` | Wählt das Manager-Profil (Template) | `default` |
-| `EN_PROFILE` | Wählt das Enshrouded-Profil (Template) | `default` |
+| `MANAGER_PROFILE` | Selects the manager profile (template) | `default` |
+| `EN_PROFILE` | Selects the Enshrouded profile (template) | `default` |
 
-## Manager-Variablen
+## Manager Variables
 
-Diese Variablen werden aktiv über `server_manager/shared/profile` geladen.
+These variables are actively loaded via `server_manager/shared/profile`.
 
-| Variable | Typ | Default | Zweck |
+| Variable | Type | Default | Purpose |
 |---|---:|---|---|
-| `PUID` | int | `4711` | UID für `enshrouded` |
-| `PGID` | int | `4711` | GID für `enshrouded` |
-| `LOG_COLOR` | bool | `true` | Farbige Log-Level (nur bei TTY) |
-| `SAVEFILE_NAME` | string | `3ad85aea` | Basisname für Save/Backup |
+| `PUID` | int | `4711` | UID for `enshrouded` |
+| `PGID` | int | `4711` | GID for `enshrouded` |
+| `LOG_COLOR` | bool | `true` | Colored log levels (TTY only) |
+| `SAVEFILE_NAME` | string | `3ad85aea` | Base name for save/backup |
 | `STEAM_APP_ID` | int | `2278520` | Steam App ID |
 | `GAME_BRANCH` | string | `public` | Steam Branch |
-| `STEAMCMD_ARGS` | string | `validate` | Zusätzliche SteamCMD-Args |
-| `WINEDEBUG` | string | `-all` | Wine Debug-Level |
-| `UPDATE_CHECK_PLAYERS` | bool | `false` | Update nur bei 0 Spielern |
-| `RESTART_CHECK_PLAYERS` | bool | `false` | Restart nur bei 0 Spielern |
-| `BACKUP_DIR` | string | `backups` | Backup-Zielordner |
-| `BACKUP_MAX_COUNT` | int | `0` | Anzahl Backups (`0` = unbegrenzt) |
-| `BACKUP_PRE_HOOK` | string | `null` | Hook vor Backup |
-| `BACKUP_POST_HOOK` | string | `null` | Hook nach Backup |
-| `UPDATE_CRON` | string | `null` | Cron für Update-Job |
-| `BACKUP_CRON` | string | `null` | Cron für Backup-Job |
-| `RESTART_CRON` | string | `null` | Cron für Restart-Job |
-| `BOOTSTRAP_HOOK` | string | `null` | Hook im Bootstrap |
-| `UPDATE_PRE_HOOK` | string | `null` | Hook vor Update |
-| `UPDATE_POST_HOOK` | string | `null` | Hook nach Update |
-| `RESTART_PRE_HOOK` | string | `null` | Hook vor Restart |
-| `RESTART_POST_HOOK` | string | `null` | Hook nach Restart |
+| `STEAMCMD_ARGS` | string | `validate` | Additional SteamCMD args |
+| `WINEDEBUG` | string | `-all` | Wine debug level |
+| `UPDATE_CHECK_PLAYERS` | bool | `false` | Only update when 0 players are connected |
+| `RESTART_CHECK_PLAYERS` | bool | `false` | Only restart when 0 players are connected |
+| `BACKUP_DIR` | string | `backups` | Backup target directory |
+| `BACKUP_MAX_COUNT` | int | `0` | Number of backups (`0` = unlimited) |
+| `BACKUP_PRE_HOOK` | string | `null` | Hook before backup |
+| `BACKUP_POST_HOOK` | string | `null` | Hook after backup |
+| `UPDATE_CRON` | string | `null` | Cron schedule for update job |
+| `BACKUP_CRON` | string | `null` | Cron schedule for backup job |
+| `RESTART_CRON` | string | `null` | Cron schedule for restart job |
+| `BOOTSTRAP_HOOK` | string | `null` | Hook executed during bootstrap |
+| `UPDATE_PRE_HOOK` | string | `null` | Hook before update |
+| `UPDATE_POST_HOOK` | string | `null` | Hook after update |
+| `RESTART_PRE_HOOK` | string | `null` | Hook before restart |
+| `RESTART_POST_HOOK` | string | `null` | Hook after restart |
 
-## Enshrouded-Server Variablen
+## Enshrouded Server Variables
 
-Diese Variablen landen in `enshrouded_server.json`.
+These variables are written to `enshrouded_server.json`.
 
 | Variable | Typ | Default |
 |---|---:|---|
@@ -55,16 +55,16 @@ Diese Variablen landen in `enshrouded_server.json`.
 | `ENSHROUDED_IP` | string | `0.0.0.0` |
 | `ENSHROUDED_QUERY_PORT` | int | `15637` |
 | `ENSHROUDED_SLOT_COUNT` | int | `16` |
-| `ENSHROUDED_TAGS` | string | leer |
+| `ENSHROUDED_TAGS` | string | empty |
 | `ENSHROUDED_VOICE_CHAT_MODE` | enum | `Proximity` |
 | `ENSHROUDED_ENABLE_VOICE_CHAT` | bool | `false` |
 | `ENSHROUDED_ENABLE_TEXT_CHAT` | bool | `false` |
 
-## Rollen-Variablen
+## Role Variables
 
 Schema: `ENSHROUDED_ROLE_<index>_<FIELD>`
 
-| Feld | Typ |
+| Field | Type |
 |---|---:|
 | `NAME` | string |
 | `PASSWORD` | string |
@@ -75,9 +75,9 @@ Schema: `ENSHROUDED_ROLE_<index>_<FIELD>`
 | `CAN_EXTEND_BASE` | bool |
 | `RESERVED_SLOTS` | int |
 
-## Gameplay-Variablen
+## Gameplay Variables
 
-Schema: `ENSHROUDED_GS_*` (vollständig validiert in `server_manager/shared/env`).
+Schema: `ENSHROUDED_GS_*` (fully validated in `server_manager/shared/env`).
 
 - `ENSHROUDED_GS_PRESET`
 - `ENSHROUDED_GS_PLAYER_HEALTH_FACTOR`
@@ -118,8 +118,8 @@ Schema: `ENSHROUDED_GS_*` (vollständig validiert in `server_manager/shared/env`
 - `ENSHROUDED_GS_NIGHT_TIME_DURATION`
 - `ENSHROUDED_GS_CURSE_MODIFIER`
 
-## Zusätzliche CLI-Variable
+## Additional CLI Variable
 
-| Variable | Beschreibung | Default |
+| Variable | Description | Default |
 |---|---|---|
-| `SUPERVISORCTL_BIN` | Binary für `ctl` Wrapper | `supervisorctl` |
+| `SUPERVISORCTL_BIN` | Binary for the `ctl` wrapper | `supervisorctl` |

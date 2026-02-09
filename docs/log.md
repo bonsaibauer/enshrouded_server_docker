@@ -1,10 +1,10 @@
 # Logging
 
-Aktuelles Logverhalten im `server_manager`:
+Current logging behavior in `server_manager`:
 
 ## Format
 
-Logs kommen aus `server_manager/shared/common`:
+Logs are implemented in `server_manager/shared/common`:
 - `DEBUG - [pid] - ...`
 - `INFO - ...`
 - `WARN - ...`
@@ -12,20 +12,20 @@ Logs kommen aus `server_manager/shared/common`:
 - `CRITIAL - ...`
 - `FATAL - ...`
 
-Hinweise:
-- Keine Manager-Timestamps im Prefix.
-- Filterung über numerisches `log_level` (intern).
-- Farbe nur bei:
+Notes:
+- No server_manager timestamps in the prefix.
+- Filtering via numeric `log_level` (internal).
+- Color only when:
   - `LOG_COLOR=true`
-  - und TTY (`-t 1`)
+  - and TTY (`-t 1`)
 
-## Quellen
+## Sources
 
-- Prozesslogs gehen über `stdout_syslog=true` in Supervisor (`/etc/supervisor/supervisord.conf`).
-- `rsyslog` wird im Bootstrap für stdout konfiguriert.
-- Enshrouded schreibt zusätzlich in `logDirectory` aus `enshrouded_server.json` (default `./logs`).
+- Process logs are routed into Supervisor via `stdout_syslog=true` (`/etc/supervisor/supervisord.conf`).
+- `rsyslog` is configured for stdout during bootstrap.
+- Enshrouded also writes to `logDirectory` from `enshrouded_server.json` (default `./logs`).
 
-## Relevante Settings
+## Relevant Settings
 
 - `LOG_COLOR` (`true|false`)
 - `ENSHROUDED_LOG_DIR`

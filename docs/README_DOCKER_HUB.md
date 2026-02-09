@@ -1,12 +1,12 @@
 # Enshrouded Dedicated Server – Docker Hub Notes
 
-## Dokumentation
+## Documentation
 
-- ENV-Variablen: `docs/environment.md`
-- Profile: `docs/profile.md`
+- Environment variables: `docs/environment.md`
+- Profiles: `docs/profile.md`
 - Commands: `docs/server_manager_commands.md`
 - Logs: `docs/log.md`
-- Changelog (Init): `docs/changelog/v3.0.0.md`
+- Changelog (init): `docs/changelog/v3.0.0.md`
 
 ## Quickstart
 
@@ -23,9 +23,9 @@ docker run \
   bonsaibauer/enshrouded_server_docker:latest
 ```
 
-Hinweis:
-- `LOG_COLOR` ist optional.
-- `server_manager.json` und Profile liegen standardmäßig unter `/home/enshrouded/server` und sind über dasselbe Volume persistent.
+Note:
+- `LOG_COLOR` is optional.
+- `server_manager.json` and profiles are stored under `/home/enshrouded/server` by default and are persistent via the same volume.
 
 ## Commands
 

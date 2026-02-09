@@ -1,33 +1,33 @@
 # Profiles
 
-Diese Datei beschreibt beide Profilarten im aktuellen Layout.
+This file describes both profile types in the current layout.
 
-## Dateistruktur
+## File Structure
 
 - Manager-Profile: `server_manager/profiles/manager/<name>_server_manager.json`
 - Enshrouded-Profile: `server_manager/profiles/enshrouded/<name>_enshrouded_server.json`
 
-Im Container:
+In the container:
 - Manager-Templates: `/usr/local/etc/enshrouded/profiles/manager/`
 - Enshrouded-Templates: `/usr/local/etc/enshrouded/profiles/enshrouded/`
 
-Laufzeitkopien:
+Runtime copies:
 - Manager-Konfig: `/home/enshrouded/server/server_manager/server_manager.json`
 - Manager-Profile-Store: `/home/enshrouded/server/profile/<name>/<name>_server_manager.json`
 - Enshrouded-Konfig: `/home/enshrouded/server/enshrouded_server.json`
 
-## Auswahl
+## Selection
 
 - `MANAGER_PROFILE=<name>`
 - `EN_PROFILE=<name>`
 
-Wenn ein Profilname fehlt/ungültig ist, wird auf `default` zurückgefallen.
+If a profile name is missing/invalid, it falls back to `default`.
 
-## Reset-Commands
+## Reset Commands
 
 - `profile-reset`:
-  - setzt `/home/enshrouded/server/server_manager/server_manager.json` aus dem gewählten `MANAGER_PROFILE` zurück
-  - stoppt danach `supervisord` für sauberen Neustart
+  - resets `/home/enshrouded/server/server_manager/server_manager.json` from the selected `MANAGER_PROFILE`
+  - stops `supervisord` afterwards for a clean restart
 - `enshrouded-profile-reset`:
-  - setzt `/home/enshrouded/server/enshrouded_server.json` aus `EN_PROFILE` zurück
-  - stoppt danach `supervisord` für sauberen Neustart
+  - resets `/home/enshrouded/server/enshrouded_server.json` from `EN_PROFILE`
+  - stops `supervisord` afterwards for a clean restart
