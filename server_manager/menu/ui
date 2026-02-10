@@ -241,3 +241,118 @@ menu_wait_for_program_exit() {
 
   return 0
 }
+
+menu_env_override_is_set() {
+  local name
+  name="$1"
+  [[ -n "${MENU_EXTERNAL_ENV[$name]+x}" ]]
+}
+
+menu_env_override_value() {
+  local name
+  name="$1"
+  printf "%s" "${MENU_EXTERNAL_ENV[$name]-}"
+}
+
+menu_env_override_pretty_value() {
+  local name value max
+  name="$1"
+  value="$2"
+  max=80
+
+  if [[ "$name" == *_HOOK || "$name" == *HOOK* ]]; then
+    if [[ -n "$value" ]]; then
+      printf "%s" "<set>"
+    fi
+    return 0
+  fi
+
+  if [[ "${#value}" -gt "$max" ]]; then
+    printf "%s..." "${value:0:$max}"
+  else
+    printf "%s" "$value"
+  fi
+}
+
+menu_env_locked_badge() {
+  local env_var
+  env_var="$1"
+  if menu_env_override_is_set "$env_var"; then
+    printf " %s" "${C_YELLOW}[ENV]${C_RESET}"
+  fi
+}
+
+menu_warn_env_overrides_before_manager_profile_selection() {
+  local any v value
+  any="false"
+  for v in "${MANAGER_VARS[@]}"; do
+    if menu_env_override_is_set "$v"; then
+      any="true"
+      break
+    fi
+  done
+
+  if [[ "$any" != "true" ]]; then
+    return 0
+  fi
+
+  ui_header "Environment Overrides Detected"
+  ui_warn_line "Some Server Manager settings are controlled by environment variables."
+  ui_warn_line "They will overwrite profile/template values on bootstrap or next container start."
+  echo
+  ui_note "Active overrides:"
+  for v in "${MANAGER_VARS[@]}"; do
+    if menu_env_override_is_set "$v"; then
+      value="$(menu_env_override_value "$v")"
+      printf "%s=%s\n" "$v" "$(menu_env_override_pretty_value "$v" "$value")"
+    fi
+  done
+  echo
+
+  if ! ui_confirm_yes_no "Continue anyway?"; then
+    ui_note "Cancelled."
+    ui_pause
+    return 1
+  fi
+
+  return 0
+}
+
+menu_warn_env_overrides_before_enshrouded_profile_selection() {
+  local -a keys
+  local k value
+
+  keys=()
+  for k in "${!MENU_EXTERNAL_ENV[@]}"; do
+    case "$k" in
+      ENSHROUDED_*)
+        keys+=("$k")
+        ;;
+    esac
+  done
+
+  if [[ "${#keys[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  mapfile -t keys < <(printf "%s\n" "${keys[@]}" | sort)
+
+  ui_header "Environment Overrides Detected"
+  ui_warn_line "Some Enshrouded settings are controlled by environment variables."
+  ui_warn_line "They will overwrite profile/template values on bootstrap or next container start."
+  echo
+  ui_note "Active overrides:"
+  for k in "${keys[@]}"; do
+    value="$(menu_env_override_value "$k")"
+    printf "%s=%s\n" "$k" "$(menu_env_override_pretty_value "$k" "$value")"
+  done
+  echo
+
+  if ! ui_confirm_yes_no "Continue anyway?"; then
+    ui_note "Cancelled."
+    ui_pause
+    return 1
+  fi
+
+  return 0
+}

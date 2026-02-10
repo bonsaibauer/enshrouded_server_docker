@@ -5,6 +5,10 @@ manager_select_profile_flow() {
   mode="${1:-select}"
   config_file="$(manager_config_path)"
 
+  if ! menu_warn_env_overrides_before_manager_profile_selection; then
+    return 1
+  fi
+
   mapfile -t profiles < <(profiles_list_manager | sort)
   profile_count="${#profiles[@]}"
   if [[ "$profile_count" -eq 0 ]]; then

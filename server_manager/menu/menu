@@ -7,6 +7,55 @@ MENU_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$MENU_DIR/../shared/common"
 . "$MENU_DIR/../shared/profile"
 . "$MENU_DIR/../shared/env"
+
+# Snapshot externally provided env vars (Docker/container env) BEFORE init_runtime_env exports config-derived vars.
+# Used to disable editing of settings that are controlled by ENV and would be overwritten on bootstrap/container start.
+declare -A MENU_EXTERNAL_ENV=()
+
+menu_capture_external_env() {
+  local var value line name
+
+  # Manager vars (server_manager.json)
+  for var in "${MANAGER_VARS[@]}"; do
+    value="$(printenv "$var" 2>/dev/null || true)"
+    if [[ -n "$value" ]]; then
+      MENU_EXTERNAL_ENV["$var"]="$value"
+    fi
+  done
+
+  # Enshrouded top-level vars (enshrouded_server.json)
+	  for var in \
+	    ENSHROUDED_NAME \
+	    ENSHROUDED_SAVE_DIR \
+	    ENSHROUDED_LOG_DIR \
+	    ENSHROUDED_IP \
+	    ENSHROUDED_QUERY_PORT \
+	    ENSHROUDED_SLOT_COUNT \
+	    ENSHROUDED_TAGS \
+	    ENSHROUDED_VOICE_CHAT_MODE \
+	    ENSHROUDED_ENABLE_VOICE_CHAT \
+	    ENSHROUDED_ENABLE_TEXT_CHAT; do
+	    value="$(printenv "$var" 2>/dev/null || true)"
+	    if [[ -n "$value" ]]; then
+      MENU_EXTERNAL_ENV["$var"]="$value"
+    fi
+  done
+
+  # Pattern-based overrides (game settings + roles)
+  while IFS= read -r line; do
+    name="${line%%=*}"
+    value="${line#*=}"
+    case "$name" in
+      ENSHROUDED_GS_*|ENSHROUDED_ROLE_*)
+        if [[ -n "$value" ]]; then
+          MENU_EXTERNAL_ENV["$name"]="$value"
+        fi
+        ;;
+    esac
+  done < <(env)
+}
+
+menu_capture_external_env
 init_runtime_env
 
 # Optional helpers we reuse when applying Enshrouded profiles (password generation, etc.)

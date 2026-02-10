@@ -2,17 +2,21 @@
 
 This file documents the environment variables used by the current `server_manager` setup.
 
-Value resolution order:
+Value resolution order (most settings):
 1. ENV
 2. Runtime files (`/home/enshrouded/server/server_manager/server_manager.json`, `/home/enshrouded/server/enshrouded_server.json`)
 3. Profile templates (only during initialization)
+
+Profile selection is special:
+- The menu persists profile selection in `server_manager.json` under `actualProfilManager` / `actualProfilEnshrouded`.
+- `EN_PROFILE` / `MANAGER_PROFILE` ENV vars are mainly used for the first bootstrap (fresh volume / deleted config).
 
 ## Profile Selection
 
 | Variable | Description | Default |
 |---|---|---|
-| `MANAGER_PROFILE` | Selects the manager profile (template) | `default` |
-| `EN_PROFILE` | Selects the Enshrouded profile (template) | `default` |
+| `MANAGER_PROFILE` | Selects the manager profile (template) on first bootstrap | `default` |
+| `EN_PROFILE` | Selects the Enshrouded profile (template) on first bootstrap | `default` |
 
 ## Manager Variables
 

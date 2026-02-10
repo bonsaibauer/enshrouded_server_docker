@@ -21,6 +21,7 @@ docker exec -it <container> menu
 - Enter a number and press Enter
 - `[0]` is always `Back` (or `Exit` in the main menu)
 - Prompts use `yes/no` (also accepts `y/n`)
+- `[ENV]` marks settings controlled by container environment variables (locked in the editors)
 
 ## Main Menu
 
@@ -117,18 +118,21 @@ Note: reset commands (`profile-reset`, `enshrouded-profile-reset`) are intention
 
 ## Profile Selection Persistence
 
-The menu stores the selected profiles in:
+The menu stores the selected profiles in the Server Manager config file:
 
-- `/home/enshrouded/server/server_manager/profile_selection.json`
+- `/home/enshrouded/server/server_manager/server_manager.json`
 
-Keys:
+Keys (single source of truth):
 
-- `enshrouded`
-- `manager`
+- `actualProfilManager`
+- `actualProfilEnshrouded`
 
-If this file exists, it overrides `EN_PROFILE` and `MANAGER_PROFILE` (so you can switch profiles without changing container env vars).
+The initial ENV selectors are captured once for transparency:
 
-To go back to pure env-var selection, delete the file.
+- `MANAGER_PROFILE`
+- `EN_PROFILE`
+
+`EN_PROFILE` / `MANAGER_PROFILE` are only used when no persisted selectors exist yet (fresh volume / deleted config).
 
 ## Config Backups (Automatic)
 
@@ -153,6 +157,11 @@ Some settings can be provided via container environment variables (see `docs/env
 Practical rule:
 
 - If you want the menu-edited JSON to stay in control, avoid setting the same option via container env vars.
+
+Behavior in the menu:
+
+- The JSON editors show `[ENV]` next to locked fields and will block editing them.
+- Before selecting a profile template, the menu shows a warning listing active env overrides and asks for confirmation.
 
 ## Troubleshooting
 

@@ -110,6 +110,7 @@ editor_manager_json() {
     if [[ "$changed" == "true" ]]; then
       ui_warn_line "Unsaved changes."
     fi
+    ui_note "[ENV] = controlled by container environment (locked)"
     echo
 
     field_count=0
@@ -118,7 +119,7 @@ editor_manager_json() {
     for v in PUID PGID; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -126,7 +127,7 @@ editor_manager_json() {
     for v in STEAM_APP_ID GAME_BRANCH STEAMCMD_ARGS; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -134,7 +135,7 @@ editor_manager_json() {
     for v in LOG_COLOR WINEDEBUG; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -142,7 +143,7 @@ editor_manager_json() {
     for v in SAVEFILE_NAME; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -150,7 +151,7 @@ editor_manager_json() {
     for v in UPDATE_CHECK_PLAYERS RESTART_CHECK_PLAYERS UPDATE_CRON RESTART_CRON UPDATE_PRE_HOOK UPDATE_POST_HOOK RESTART_PRE_HOOK RESTART_POST_HOOK; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -158,7 +159,7 @@ editor_manager_json() {
     for v in BACKUP_DIR BACKUP_MAX_COUNT BACKUP_CRON BACKUP_PRE_HOOK BACKUP_POST_HOOK; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -166,7 +167,7 @@ editor_manager_json() {
     for v in BOOTSTRAP_HOOK; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -290,6 +291,17 @@ editor_manager_json() {
     if [[ "$choice" -ge 1 && "$choice" -le "$field_count" ]]; then
       local var current new_value
       var="${options_vars[$((choice - 1))]}"
+
+      if menu_env_override_is_set "$var"; then
+        local env_value
+        env_value="$(menu_env_override_value "$var")"
+        ui_warn_line "This setting is controlled by an environment variable and cannot be edited here."
+        ui_kv "ENV" "$var=$(menu_env_override_pretty_value "$var" "$env_value")"
+        ui_note "Remove it from your docker-compose/container environment to edit this value."
+        ui_pause
+        continue
+      fi
+
       current="$(manager_json_get "$tmp" "$var")"
 
       new_value="$(manager_editor_prompt_value "$var" "$current")"

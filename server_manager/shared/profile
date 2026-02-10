@@ -15,24 +15,93 @@ MANAGER_PROFILE_DIR="$MANAGER_PROFILE_ROOT"
 MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT}/profiles/manager}"
 EN_PROFILE_DIR="${EN_PROFILE_DIR:-${MANAGER_ROOT}/profiles/enshrouded}"
 
-# Persisted profile selection (written by ctl menu).
-# This enables switching profiles without changing container env vars.
-PROFILE_SELECTION_FILE_DEFAULT="${MANAGER_DATA_DIR}/profile_selection.json"
-PROFILE_SELECTION_FILE="${PROFILE_SELECTION_FILE:-$PROFILE_SELECTION_FILE_DEFAULT}"
+# Profile selection persistence (single source of truth):
+# Stored in server_manager.json as top-level keys:
+#   actualProfilManager       (selected Server Manager profile name)
+#   actualProfilEnshrouded    (selected Enshrouded profile name)
+#
+# Additionally, the initial ENV selectors are captured once for transparency:
+#   MANAGER_PROFILE
+#   EN_PROFILE
 
-profile_selection_path() {
-  printf "%s" "$PROFILE_SELECTION_FILE"
+profiles_config_json_key() {
+  # Map internal selector names to JSON keys.
+  # Usage: profiles_config_json_key manager|enshrouded
+  case "$1" in
+    manager) echo "actualProfilManager" ;;
+    enshrouded) echo "actualProfilEnshrouded" ;;
+    *) echo "" ;;
+  esac
 }
 
-profile_selection_get() {
-  local key file value
+profiles_ensure_schema() {
+  # Ensure the 4 profile selection keys exist (always strings, never null).
+  local file tmp mdef edef
+  file="$(manager_config_path)"
+  mdef="$MANAGER_PROFILE_DEFAULT"
+  edef="$EN_PROFILE_DEFAULT"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  tmp="$(mktemp)"
+  jq --arg mdef "$mdef" --arg edef "$edef" '
+    .MANAGER_PROFILE = (if (.MANAGER_PROFILE == null or .MANAGER_PROFILE == "") then $mdef else .MANAGER_PROFILE end)
+    | .EN_PROFILE = (if (.EN_PROFILE == null or .EN_PROFILE == "") then $edef else .EN_PROFILE end)
+    | .actualProfilManager = (if (.actualProfilManager == null or .actualProfilManager == "") then $mdef else .actualProfilManager end)
+    | .actualProfilEnshrouded = (if (.actualProfilEnshrouded == null or .actualProfilEnshrouded == "") then $edef else .actualProfilEnshrouded end)
+  ' "$file" >"$tmp" || {
+    rm -f "$tmp"
+    return 0
+  }
+  mv "$tmp" "$file"
+  chmod 600 "$file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$file" 2>/dev/null || true
+  return 0
+}
+
+profiles_config_get() {
+  # Get a profile selector value from server_manager.json (top-level keys).
+  # Usage: profiles_config_get manager|enshrouded
+  local key json_key file value
   key="$1"
-  file="$(profile_selection_path)"
+  json_key="$(profiles_config_json_key "$key")"
+  if [[ -z "$json_key" ]]; then
+    echo ""
+    return 0
+  fi
+  file="$(manager_config_path)"
   if ! command -v jq >/dev/null 2>&1; then
     echo ""
     return 0
   fi
-  if [[ ! -f "$file" ]]; then
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+  value="$(jq -r --arg key "$json_key" '.[$key] // empty' "$file" 2>/dev/null || true)"
+  if [[ "$value" == "null" ]]; then
+    value=""
+  fi
+
+  echo "$value"
+}
+
+profiles_env_get() {
+  # Get a captured ENV selector value from server_manager.json (top-level keys).
+  # Usage: profiles_env_get EN_PROFILE|MANAGER_PROFILE
+  local key file value
+  key="$1"
+  file="$(manager_config_path)"
+  if ! command -v jq >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
     echo ""
     return 0
   fi
@@ -40,33 +109,105 @@ profile_selection_get() {
   if [[ "$value" == "null" ]]; then
     value=""
   fi
+
   echo "$value"
 }
 
-profile_selection_set() {
-  local key value file tmp
+profiles_env_has_key() {
+  # Check if a captured ENV selector key exists in server_manager.json.
+  # Usage: profiles_env_has_key EN_PROFILE|MANAGER_PROFILE
+  local key file
   key="$1"
-  value="$2"
-  file="$(profile_selection_path)"
+  file="$(manager_config_path)"
+  if ! command -v jq >/dev/null 2>&1; then
+    return 1
+  fi
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    return 1
+  fi
+  jq -e --arg key "$key" 'has($key)' "$file" >/dev/null 2>&1
+}
+
+profiles_config_set() {
+  # Set a profile selector value in server_manager.json (top-level keys).
+  # Usage: profiles_config_set manager|enshrouded <value>
+  local key json_key value file tmp def
+  key="$1"
+  value="${2-}"
+  json_key="$(profiles_config_json_key "$key")"
+  if [[ -z "$json_key" ]]; then
+    return 0
+  fi
+  file="$(manager_config_path)"
+  case "$key" in
+    enshrouded) def="$EN_PROFILE_DEFAULT" ;;
+    *) def="$MANAGER_PROFILE_DEFAULT" ;;
+  esac
 
   if ! command -v jq >/dev/null 2>&1; then
     warn "jq not found: cannot persist profile selection"
     return 1
   fi
-
-  ensure_manager_paths
-  chown -R enshrouded:enshrouded "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_ROOT" 2>/dev/null || true
-  tmp="$(mktemp)"
-
-  if [[ -f "$file" ]] && jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
-    jq --arg key "$key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp"
-  else
-    jq -n --arg key "$key" --arg value "$value" '{($key): $value}' >"$tmp"
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    warn "server_manager.json missing/invalid: cannot persist profile selection"
+    return 1
   fi
 
+  tmp="$(mktemp)"
+  if [[ -z "$value" ]]; then
+    value="$def"
+  fi
+
+  jq --arg key "$json_key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp" || {
+    rm -f "$tmp"
+    return 1
+  }
+
   mv "$tmp" "$file"
-  chmod 644 "$file" 2>/dev/null || true
+  chmod 600 "$file" 2>/dev/null || true
   chown enshrouded:enshrouded "$file" 2>/dev/null || true
+  return 0
+}
+
+profiles_env_set_if_missing() {
+  # Capture ENV selector values once (do not overwrite a non-empty existing value).
+  #
+  # If the key exists but is "default"/null/empty (e.g., seeded by a template),
+  # this will set it if the provided value is non-empty.
+  # Usage: profiles_env_set_if_missing EN_PROFILE|MANAGER_PROFILE <value>
+  local key value file tmp current def
+  key="$1"
+  value="${2-}"
+  case "$key" in
+    EN_PROFILE) def="$EN_PROFILE_DEFAULT" ;;
+    *) def="$MANAGER_PROFILE_DEFAULT" ;;
+  esac
+
+  current="$(profiles_env_get "$key")"
+  if [[ -n "$current" && "$current" != "$def" ]]; then
+    return 0
+  fi
+  if [[ -z "$value" ]]; then
+    return 0
+  fi
+
+  file="$(manager_config_path)"
+  if ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  tmp="$(mktemp)"
+  jq --arg key "$key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp" || {
+    rm -f "$tmp"
+    return 0
+  }
+  mv "$tmp" "$file"
+  chmod 600 "$file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$file" 2>/dev/null || true
+  return 0
 }
 
 declare -a MANAGER_VARS=(
@@ -215,8 +356,9 @@ enshrouded_profile_path() {
 
 manager_profile_resolve() {
   local name
-  name="$(profile_selection_get "manager")"
+  name="$(profiles_config_get "manager")"
   if [[ -z "$name" ]]; then
+    # Only used when server_manager.json does not have a persisted selector (bootstrap/new volume).
     name="${MANAGER_PROFILE:-}"
   fi
   if [[ -n "$name" ]] && ! [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -237,10 +379,32 @@ manager_profile_resolve() {
 
 enshrouded_profile_resolve() {
   local name
-  name="$(profile_selection_get "enshrouded")"
+  name="$(profiles_config_get "enshrouded")"
   if [[ -z "$name" ]]; then
+    # Only used when server_manager.json does not have a persisted selector (bootstrap/new volume).
     name="${EN_PROFILE:-}"
   fi
+  if [[ -n "$name" ]] && ! [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    warn "Invalid enshrouded profile selector: $name (fallback: $EN_PROFILE_DEFAULT)"
+    name=""
+  fi
+  if [[ -z "$name" ]]; then
+    echo "$EN_PROFILE_DEFAULT"
+    return 0
+  fi
+  if [[ -f "$(enshrouded_profile_path "$name")" ]]; then
+    echo "$name"
+    return 0
+  fi
+  warn "Enshrouded profile not found: $name (fallback: $EN_PROFILE_DEFAULT)"
+  echo "$EN_PROFILE_DEFAULT"
+}
+
+enshrouded_profile_resolve_from_value() {
+  # Resolve an Enshrouded profile name without reading persisted selectors.
+  # Usage: enshrouded_profile_resolve_from_value <name>
+  local name
+  name="${1-}"
   if [[ -n "$name" ]] && ! [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
     warn "Invalid enshrouded profile selector: $name (fallback: $EN_PROFILE_DEFAULT)"
     name=""
@@ -364,7 +528,8 @@ manager_profile_value_for_var() {
 }
 
 update_or_create_manager_config() {
-  local config_file profile value env_value var
+  local config_file profile value env_value var created_config
+  created_config="false"
 
   if ! command -v jq >/dev/null 2>&1; then
     warn "jq not found: skipping server_manager.json initialization"
@@ -385,7 +550,11 @@ update_or_create_manager_config() {
   if [[ ! -f "$config_file" ]] || ! jq -e 'type == "object"' "$config_file" >/dev/null 2>&1; then
     cp "$(manager_profile_path "$profile")" "$config_file"
     info "server_manager.json initialized from profile: $profile"
+    created_config="true"
   fi
+
+  # Ensure profile selection keys exist (and migrate legacy schema if needed).
+  profiles_ensure_schema || true
 
   for var in "${MANAGER_VARS[@]}"; do
     env_value="$(printenv "$var" 2>/dev/null || true)"
@@ -409,6 +578,19 @@ update_or_create_manager_config() {
     fi
     manager_config_set_value "$config_file" "$var" "$value"
   done
+
+  # Persist profile selection in server_manager.json (single source of truth).
+  profiles_env_set_if_missing "MANAGER_PROFILE" "${MANAGER_PROFILE:-}" || true
+  profiles_env_set_if_missing "EN_PROFILE" "${EN_PROFILE:-}" || true
+
+  # Keep persisted selectors in sync with resolved profiles.
+  profiles_config_set "manager" "$profile" || true
+  if [[ "$created_config" == "true" ]]; then
+    # On first init, allow EN_PROFILE to seed the persisted Enshrouded profile selection.
+    profiles_config_set "enshrouded" "$(enshrouded_profile_resolve_from_value "${EN_PROFILE:-}")" || true
+  else
+    profiles_config_set "enshrouded" "$(enshrouded_profile_resolve)" || true
+  fi
 }
 
 load_enshrouded_env_from_profile() {

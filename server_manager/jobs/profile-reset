@@ -6,6 +6,7 @@ init_runtime_env
 
 main() {
   local profile source_profile config_file
+  local old_enshrouded old_env_manager old_env_enshrouded
 
   info "Stopping enshrouded server"
   supervisorctl stop enshrouded-server || true
@@ -13,6 +14,11 @@ main() {
   profile="$(manager_profile_resolve)"
   source_profile="$(manager_profile_path "$profile")"
   config_file="$(manager_config_path)"
+
+  # Preserve persisted profile selectors across a full config replacement.
+  old_enshrouded="$(profiles_config_get "enshrouded")"
+  old_env_manager="$(profiles_env_get "MANAGER_PROFILE")"
+  old_env_enshrouded="$(profiles_env_get "EN_PROFILE")"
 
   if [[ ! -f "$source_profile" ]]; then
     fatal "Server Manager profile not found: $source_profile"
@@ -25,6 +31,19 @@ main() {
   cp "$source_profile" "$config_file"
   chmod 600 "$config_file" 2>/dev/null || true
   info "Server Manager config reset from profile: $profile"
+
+  # Ensure profile selection keys exist (and migrate legacy schema if needed).
+  profiles_ensure_schema || true
+
+  # Restore selectors into the new config file (single source of truth: server_manager.json).
+  profiles_config_set "manager" "$profile" || true
+  if [[ -n "$old_enshrouded" ]]; then
+    profiles_config_set "enshrouded" "$old_enshrouded" || true
+  else
+    profiles_config_set "enshrouded" "$(enshrouded_profile_resolve)" || true
+  fi
+  profiles_env_set_if_missing "MANAGER_PROFILE" "$old_env_manager" || true
+  profiles_env_set_if_missing "EN_PROFILE" "$old_env_enshrouded" || true
 
   info "Stop container for a clean start"
   kill -INT "$(cat /var/run/supervisord.pid)"

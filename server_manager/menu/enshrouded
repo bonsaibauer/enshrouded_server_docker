@@ -9,6 +9,10 @@ enshrouded_select_profile_flow() {
   mode="${1:-select}"
   config_file="$(enshrouded_config_path)"
 
+  if ! menu_warn_env_overrides_before_enshrouded_profile_selection; then
+    return 1
+  fi
+
   mapfile -t profiles < <(profiles_list_enshrouded | sort)
   profile_count="${#profiles[@]}"
   if [[ "$profile_count" -eq 0 ]]; then

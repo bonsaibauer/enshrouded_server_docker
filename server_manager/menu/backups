@@ -99,6 +99,12 @@ menu_restore_from_backup_generic() {
     mv -f "$tmp" "$config_file"
     chmod 600 "$config_file" 2>/dev/null || true
     chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
+
+    # Normalize manager config profile selector keys after restore.
+    if [[ "$label" == "server_manager" ]]; then
+      profiles_ensure_schema || true
+    fi
+
     ui_success "Restored: $config_file"
 
     echo

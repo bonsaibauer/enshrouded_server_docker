@@ -57,9 +57,11 @@ profiles_apply_enshrouded() {
   # Ensure group passwords exist (same behavior as bootstrap).
   ensureUserGroupPasswords || true
 
-  if declare -F profile_selection_set >/dev/null 2>&1; then
-    profile_selection_set "enshrouded" "$profile" || true
-  fi
+  # Ensure profile selection keys exist (and migrate legacy schema if needed).
+  profiles_ensure_schema || true
+
+  # Persist selection in server_manager.json (single source of truth).
+  profiles_config_set "enshrouded" "$profile" || true
 
   ui_success "Enshrouded profile applied: $profile"
   return 0
@@ -67,6 +69,7 @@ profiles_apply_enshrouded() {
 
 profiles_apply_manager() {
   local profile config_file config_dir temp_file
+  local old_enshrouded old_env_manager old_env_enshrouded
   profile="$1"
   config_file="$(manager_config_path)"
   config_dir="$(dirname "$config_file")"
@@ -75,6 +78,11 @@ profiles_apply_manager() {
     ui_error "jq not found"
     return 1
   fi
+
+  # Preserve persisted profile selectors across a full config replacement.
+  old_enshrouded="$(profiles_config_get "enshrouded")"
+  old_env_manager="$(profiles_env_get "MANAGER_PROFILE")"
+  old_env_enshrouded="$(profiles_env_get "EN_PROFILE")"
 
   ensure_manager_paths
   if ! ensure_manager_profile_file "$profile"; then
@@ -98,9 +106,18 @@ profiles_apply_manager() {
   chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
   chown enshrouded:enshrouded "$(manager_profile_path "$profile")" 2>/dev/null || true
 
-  if declare -F profile_selection_set >/dev/null 2>&1; then
-    profile_selection_set "manager" "$profile" || true
+  # Ensure profile selection keys exist (and migrate legacy schema if needed).
+  profiles_ensure_schema || true
+
+  # Restore selection fields and set the new manager profile selection.
+  profiles_config_set "manager" "$profile" || true
+  if [[ -n "$old_enshrouded" ]]; then
+    profiles_config_set "enshrouded" "$old_enshrouded" || true
+  else
+    profiles_config_set "enshrouded" "$(enshrouded_profile_resolve)" || true
   fi
+  profiles_env_set_if_missing "MANAGER_PROFILE" "$old_env_manager" || true
+  profiles_env_set_if_missing "EN_PROFILE" "$old_env_enshrouded" || true
 
   ui_success "Server Manager profile applied: $profile"
   return 0

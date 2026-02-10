@@ -12,9 +12,9 @@ In the container:
 - Enshrouded-Templates: `/usr/local/etc/enshrouded/profiles/enshrouded/`
 
 Runtime copies:
-- Manager-Konfig: `/home/enshrouded/server/server_manager/server_manager.json`
+- Manager config: `/home/enshrouded/server/server_manager/server_manager.json`
 - Manager-Profile-Store: `/home/enshrouded/server/profile/<name>/<name>_server_manager.json`
-- Enshrouded-Konfig: `/home/enshrouded/server/enshrouded_server.json`
+- Enshrouded config: `/home/enshrouded/server/enshrouded_server.json`
 
 ## Creating New Profiles
 
@@ -54,21 +54,25 @@ If a profile name is missing/invalid, it falls back to `default`.
 
 ### Persisted Selection (via `ctl menu`)
 
-If the file below exists, it is used as the preferred profile selector (allows switching profiles without changing container env vars):
+Profile selection is stored directly in the Server Manager config file:
 
-- `/home/enshrouded/server/server_manager/profile_selection.json`
+- `/home/enshrouded/server/server_manager/server_manager.json`
 
 Keys:
-- `manager`: profile name for `server_manager.json`
-- `enshrouded`: profile name for `enshrouded_server.json`
+- `actualProfilManager`: profile name for `server_manager.json`
+- `actualProfilEnshrouded`: profile name for `enshrouded_server.json`
+
+The initial ENV selectors are captured once for transparency:
+- `MANAGER_PROFILE`
+- `EN_PROFILE`
 
 ## Reset Commands
 
 - `profile-reset`:
-  - resets `/home/enshrouded/server/server_manager/server_manager.json` from the selected `MANAGER_PROFILE`
+  - resets `/home/enshrouded/server/server_manager/server_manager.json` from the selected manager profile (`actualProfilManager`)
   - creates a timestamped backup in `BACKUP_DIR/profiles` before replacing the config
   - stops `supervisord` afterwards for a clean restart
 - `enshrouded-profile-reset`:
-  - resets `/home/enshrouded/server/enshrouded_server.json` from `EN_PROFILE`
+  - resets `/home/enshrouded/server/enshrouded_server.json` from the selected Enshrouded profile (`actualProfilEnshrouded`)
   - creates a timestamped backup in `BACKUP_DIR/profiles` before replacing the config
   - stops `supervisord` afterwards for a clean restart

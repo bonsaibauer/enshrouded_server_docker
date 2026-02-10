@@ -76,6 +76,11 @@ updateOrCreateEnshroudedServerConfig() {
     echo "$(jq --argjson slotCount "$ENSHROUDED_SLOT_COUNT" '.slotCount = $slotCount' ${install_path}/enshrouded_server.json)" > ${install_path}/enshrouded_server.json
   fi
 
+  if [[ -n "$ENSHROUDED_TAGS" ]]; then
+    debug "updating tags to $ENSHROUDED_TAGS"
+    echo "$(jq --arg tags "$ENSHROUDED_TAGS" '.tags = ($tags | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))' ${install_path}/enshrouded_server.json)" > ${install_path}/enshrouded_server.json
+  fi
+
   if [[ -n "$ENSHROUDED_VOICE_CHAT_MODE" ]]; then
     debug "updating voiceChatMode to $ENSHROUDED_VOICE_CHAT_MODE"
     echo "$(jq --arg voiceChatMode "$ENSHROUDED_VOICE_CHAT_MODE" '.voiceChatMode = $voiceChatMode' ${install_path}/enshrouded_server.json)" > ${install_path}/enshrouded_server.json

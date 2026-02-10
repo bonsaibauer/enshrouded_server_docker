@@ -104,6 +104,52 @@ enshrouded_prompt_scalar() {
   printf "%s" "$value"
 }
 
+enshrouded_editor_block_if_env_locked() {
+  # Returns 0 if editable, 1 if locked by external env override.
+  local env_var env_value
+  env_var="$1"
+
+  if ! declare -F menu_env_override_is_set >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! menu_env_override_is_set "$env_var"; then
+    return 0
+  fi
+
+  env_value="$(menu_env_override_value "$env_var")"
+  ui_warn_line "This setting is controlled by an environment variable and cannot be edited here."
+  ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
+  ui_note "Remove it from your docker-compose/container environment to edit this value."
+  ui_pause
+  return 1
+}
+
+enshrouded_editor_role_locked_badge() {
+  local g env_var
+  g="$1"
+
+  if ! declare -F menu_env_override_is_set >/dev/null 2>&1; then
+    return 0
+  fi
+
+  for env_var in \
+    "ENSHROUDED_ROLE_${g}_NAME" \
+    "ENSHROUDED_ROLE_${g}_PASSWORD" \
+    "ENSHROUDED_ROLE_${g}_RESERVED_SLOTS" \
+    "ENSHROUDED_ROLE_${g}_CAN_KICK_BAN" \
+    "ENSHROUDED_ROLE_${g}_CAN_ACCESS_INVENTORIES" \
+    "ENSHROUDED_ROLE_${g}_CAN_EDIT_WORLD" \
+    "ENSHROUDED_ROLE_${g}_CAN_EDIT_BASE" \
+    "ENSHROUDED_ROLE_${g}_CAN_EXTEND_BASE"; do
+    if menu_env_override_is_set "$env_var"; then
+      printf " %s" "${C_YELLOW}[ENV]${C_RESET}"
+      return 0
+    fi
+  done
+
+  return 0
+}
+
 enshrouded_editor_set_string() {
   local file path value
   file="$1"
@@ -208,15 +254,17 @@ enshrouded_editor_game_settings_menu() {
   while :; do
     ui_header "Edit Game Settings"
     ui_note "Note: empty input cancels editing (no null writes)."
+    ui_note "[ENV] = controlled by container environment (locked)"
     echo
 
-    local i idx current
+    local i idx current env_var
     idx=1
 
     echo "${C_DIM}== Player ==${C_RESET}"
     for i in 0 1 2 3 4; do
       current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
-      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      env_var="ENSHROUDED_GS_${suffixes[$i]}"
+      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
@@ -224,7 +272,8 @@ enshrouded_editor_game_settings_menu() {
     echo "${C_DIM}== Survival / World ==${C_RESET}"
     for i in 5 6 7 8 9 10 11 12 13; do
       current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
-      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      env_var="ENSHROUDED_GS_${suffixes[$i]}"
+      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
@@ -232,7 +281,8 @@ enshrouded_editor_game_settings_menu() {
     echo "${C_DIM}== Economy / Progress ==${C_RESET}"
     for i in 14 15 16 17 18 19 20 21 22; do
       current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
-      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      env_var="ENSHROUDED_GS_${suffixes[$i]}"
+      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
@@ -240,7 +290,8 @@ enshrouded_editor_game_settings_menu() {
     echo "${C_DIM}== Enemies ==${C_RESET}"
     for i in 23 24 25 26 27 28 29 30 31 32 33; do
       current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
-      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      env_var="ENSHROUDED_GS_${suffixes[$i]}"
+      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
@@ -248,7 +299,8 @@ enshrouded_editor_game_settings_menu() {
     echo "${C_DIM}== Time ==${C_RESET}"
     for i in 34 35; do
       current="$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")"
-      printf "[%s] %-36s %s\n" "$idx" "${keys[$i]}" "$current"
+      env_var="ENSHROUDED_GS_${suffixes[$i]}"
+      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
@@ -274,6 +326,11 @@ enshrouded_editor_game_settings_menu() {
     suffix="${suffixes[$key_index]}"
     path=".gameSettings.${key}"
     current_raw="$(enshrouded_editor_get_raw "$file" "$path")"
+
+    if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_GS_${suffix}"; then
+      continue
+    fi
+
     new_value="$(enshrouded_prompt_scalar "$key" "$current_raw" "")"
     if [[ -z "$new_value" ]]; then
       ui_note "Cancelled."
@@ -298,7 +355,7 @@ enshrouded_editor_game_settings_menu() {
         ;;
       number)
         if ! is_number "$new_value"; then
-          ui_warn_line "Muss numerisch sein (actual: $new_value)"
+          ui_warn_line "Must be numeric (actual: $new_value)"
           ui_pause
           continue
         fi
@@ -319,6 +376,7 @@ enshrouded_editor_user_groups_menu() {
 
   while :; do
     ui_header "Edit User Groups"
+    ui_note "[ENV] = controlled by container environment (locked)"
     count="$(jq -r '.userGroups | length' "$file" 2>/dev/null || echo 0)"
     if ! [[ "$count" =~ ^[0-9]+$ ]]; then
       count=0
@@ -338,7 +396,7 @@ enshrouded_editor_user_groups_menu() {
 
     for idx in $(seq 0 $((count - 1))); do
       name="$(jq -r ".userGroups[$idx].name // \"Group $idx\"" "$file" 2>/dev/null || echo "Group $idx")"
-      printf "[%s] %s\n" "$((idx + 1))" "$name"
+      printf "[%s] %s%s\n" "$((idx + 1))" "$name" "$(enshrouded_editor_role_locked_badge "$idx")"
     done
     echo
     echo "[0] Back"
@@ -371,36 +429,43 @@ enshrouded_editor_user_groups_menu() {
       ce="$(enshrouded_editor_get_raw "$file" "$base.canExtendBase")"
 
       ui_header "User Group: ${current_name:-Group $g}"
-      printf "[1] %-22s %s\n" "name" "${current_name:-<empty>}"
-      printf "[2] %-22s %s\n" "password" "$current_pw"
-      printf "[3] %-22s %s\n" "reservedSlots" "${reserved:-0}"
-      printf "[4] %-22s %s\n" "canKickBan" "${ck:-false}"
-      printf "[5] %-22s %s\n" "canAccessInventories" "${ci:-false}"
-      printf "[6] %-22s %s\n" "canEditWorld" "${cw:-false}"
-      printf "[7] %-22s %s\n" "canEditBase" "${cb:-false}"
-      printf "[8] %-22s %s\n" "canExtendBase" "${ce:-false}"
+      ui_note "[ENV] = controlled by container environment (locked)"
+      printf "[1] %-22s %s%s\n" "name" "${current_name:-<empty>}" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_NAME")"
+      printf "[2] %-22s %s%s\n" "password" "$current_pw" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_PASSWORD")"
+      printf "[3] %-22s %s%s\n" "reservedSlots" "${reserved:-0}" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_RESERVED_SLOTS")"
+      printf "[4] %-22s %s%s\n" "canKickBan" "${ck:-false}" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_KICK_BAN")"
+      printf "[5] %-22s %s%s\n" "canAccessInventories" "${ci:-false}" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_ACCESS_INVENTORIES")"
+      printf "[6] %-22s %s%s\n" "canEditWorld" "${cw:-false}" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_EDIT_WORLD")"
+      printf "[7] %-22s %s%s\n" "canEditBase" "${cb:-false}" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_EDIT_BASE")"
+      printf "[8] %-22s %s%s\n" "canExtendBase" "${ce:-false}" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_EXTEND_BASE")"
       echo
       echo "[0] Back"
       echo
 
       local c
       c="$(ui_prompt_number "Choice")"
-      case "$c" in
-        1)
-          local v
-          v="$(enshrouded_prompt_scalar "name" "$current_name" "")"
-          if [[ -z "$v" ]]; then
-            ui_note "Cancelled."
+	    case "$c" in
+	        1)
+	          if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_ROLE_${g}_NAME"; then
+	            continue
+	          fi
+	          local v
+	          v="$(enshrouded_prompt_scalar "name" "$current_name" "")"
+	          if [[ -z "$v" ]]; then
+	            ui_note "Cancelled."
             ui_pause
           else
             enshrouded_editor_set_string "$file" "$base.name" "$v" || true
             changed="true"
-          fi
-          ;;
-        2)
-          local v
-          echo
-          ui_note "Empty = password will be set to null (may be auto-generated after saving)."
+	          fi
+	          ;;
+	        2)
+	          if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_ROLE_${g}_PASSWORD"; then
+	            continue
+	          fi
+	          local v
+	          echo
+	          ui_note "Empty = password will be set to null (may be auto-generated after saving)."
           v="$(ui_read "New password: ")"
           v="$(echo "$v" | xargs)"
           if [[ -z "$v" ]]; then
@@ -409,12 +474,15 @@ enshrouded_editor_user_groups_menu() {
           else
             enshrouded_editor_set_string "$file" "$base.password" "$v" || true
             changed="true"
-          fi
-          ;;
-        3)
-          local v
-          v="$(enshrouded_prompt_scalar "reservedSlots" "$reserved" "Allowed: integer >= 0")"
-          if [[ -z "$v" ]]; then
+	          fi
+	          ;;
+	        3)
+	          if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_ROLE_${g}_RESERVED_SLOTS"; then
+	            continue
+	          fi
+	          local v
+	          v="$(enshrouded_prompt_scalar "reservedSlots" "$reserved" "Allowed: integer >= 0")"
+	          if [[ -z "$v" ]]; then
             ui_note "Cancelled."
             ui_pause
           elif ! [[ "$v" =~ ^[0-9]+$ ]]; then
@@ -425,19 +493,33 @@ enshrouded_editor_user_groups_menu() {
             changed="true"
           fi
           ;;
-        4|5|6|7|8)
-          local field cur next
-          case "$c" in
-            4) field="canKickBan" ;;
-            5) field="canAccessInventories" ;;
-            6) field="canEditWorld" ;;
-            7) field="canEditBase" ;;
-            8) field="canExtendBase" ;;
-          esac
-          cur="$(enshrouded_editor_get_raw "$file" "$base.$field")"
-          if [[ "$cur" == "true" ]]; then
-            next="false"
-          else
+	        4|5|6|7|8)
+	          local field cur next
+	          local env_var
+	          case "$c" in
+	            4) field="canKickBan" ;;
+	            5) field="canAccessInventories" ;;
+	            6) field="canEditWorld" ;;
+	            7) field="canEditBase" ;;
+	            8) field="canExtendBase" ;;
+	          esac
+	          case "$field" in
+	            canKickBan) env_var="ENSHROUDED_ROLE_${g}_CAN_KICK_BAN" ;;
+	            canAccessInventories) env_var="ENSHROUDED_ROLE_${g}_CAN_ACCESS_INVENTORIES" ;;
+	            canEditWorld) env_var="ENSHROUDED_ROLE_${g}_CAN_EDIT_WORLD" ;;
+	            canEditBase) env_var="ENSHROUDED_ROLE_${g}_CAN_EDIT_BASE" ;;
+	            canExtendBase) env_var="ENSHROUDED_ROLE_${g}_CAN_EXTEND_BASE" ;;
+	            *) env_var="" ;;
+	          esac
+	          if [[ -n "$env_var" ]]; then
+	            if ! enshrouded_editor_block_if_env_locked "$env_var"; then
+	              continue
+	            fi
+	          fi
+	          cur="$(enshrouded_editor_get_raw "$file" "$base.$field")"
+	          if [[ "$cur" == "true" ]]; then
+	            next="false"
+	          else
             next="true"
           fi
           enshrouded_editor_set_bool "$file" "$base.$field" "$next" || true
@@ -482,28 +564,29 @@ editor_enshrouded_json() {
     if [[ "$changed" == "true" ]]; then
       ui_warn_line "Unsaved changes."
     fi
+    ui_note "[ENV] = controlled by container environment (locked)"
     echo
 
     field_count=0
 
     echo "${C_DIM}== Server ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "name" "$(enshrouded_editor_get_compact "$tmp" '.name')"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "ip" "$(enshrouded_editor_get_compact "$tmp" '.ip')"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "queryPort" "$(enshrouded_editor_get_compact "$tmp" '.queryPort')"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "slotCount" "$(enshrouded_editor_get_compact "$tmp" '.slotCount')"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "saveDirectory" "$(enshrouded_editor_get_compact "$tmp" '.saveDirectory')"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "logDirectory" "$(enshrouded_editor_get_compact "$tmp" '.logDirectory')"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "tags" "$(jq -r '.tags // [] | join(\",\")' "$tmp" 2>/dev/null || echo "")"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "name" "$(enshrouded_editor_get_compact "$tmp" '.name')" "$(menu_env_locked_badge "ENSHROUDED_NAME")"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "ip" "$(enshrouded_editor_get_compact "$tmp" '.ip')" "$(menu_env_locked_badge "ENSHROUDED_IP")"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "queryPort" "$(enshrouded_editor_get_compact "$tmp" '.queryPort')" "$(menu_env_locked_badge "ENSHROUDED_QUERY_PORT")"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "slotCount" "$(enshrouded_editor_get_compact "$tmp" '.slotCount')" "$(menu_env_locked_badge "ENSHROUDED_SLOT_COUNT")"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "saveDirectory" "$(enshrouded_editor_get_compact "$tmp" '.saveDirectory')" "$(menu_env_locked_badge "ENSHROUDED_SAVE_DIR")"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "logDirectory" "$(enshrouded_editor_get_compact "$tmp" '.logDirectory')" "$(menu_env_locked_badge "ENSHROUDED_LOG_DIR")"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "tags" "$(jq -r '.tags // [] | join(\",\")' "$tmp" 2>/dev/null || echo "")" "$(menu_env_locked_badge "ENSHROUDED_TAGS")"
     echo
 
     echo "${C_DIM}== Voice / Text ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "voiceChatMode" "$(enshrouded_editor_get_compact "$tmp" '.voiceChatMode')"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "enableVoiceChat" "$(enshrouded_editor_get_compact "$tmp" '.enableVoiceChat')"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "enableTextChat" "$(enshrouded_editor_get_compact "$tmp" '.enableTextChat')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "voiceChatMode" "$(enshrouded_editor_get_compact "$tmp" '.voiceChatMode')" "$(menu_env_locked_badge "ENSHROUDED_VOICE_CHAT_MODE")"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "enableVoiceChat" "$(enshrouded_editor_get_compact "$tmp" '.enableVoiceChat')" "$(menu_env_locked_badge "ENSHROUDED_ENABLE_VOICE_CHAT")"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "enableTextChat" "$(enshrouded_editor_get_compact "$tmp" '.enableTextChat')" "$(menu_env_locked_badge "ENSHROUDED_ENABLE_TEXT_CHAT")"
     echo
 
     echo "${C_DIM}== Game ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "gameSettingsPreset" "$(enshrouded_editor_get_compact "$tmp" '.gameSettingsPreset')"
+    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "gameSettingsPreset" "$(enshrouded_editor_get_compact "$tmp" '.gameSettingsPreset')" "$(menu_env_locked_badge "ENSHROUDED_GS_PRESET")"
     field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "gameSettings (submenu)" "${C_DIM}<enter>${C_RESET}"
     echo
 
@@ -616,6 +699,9 @@ editor_enshrouded_json() {
 
     case "$choice" in
       1)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_NAME"; then
+          continue
+        fi
         local v
         v="$(enshrouded_prompt_scalar "name" "$(enshrouded_editor_get_raw "$tmp" '.name')" "")"
         if [[ -n "$v" ]]; then
@@ -624,6 +710,9 @@ editor_enshrouded_json() {
         fi
         ;;
       2)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_IP"; then
+          continue
+        fi
         local v
         v="$(enshrouded_prompt_scalar "ip" "$(enshrouded_editor_get_raw "$tmp" '.ip')" "IPv4 e.g. 0.0.0.0")"
         if [[ -n "$v" ]]; then
@@ -636,6 +725,9 @@ editor_enshrouded_json() {
         fi
         ;;
       3)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_QUERY_PORT"; then
+          continue
+        fi
         local v
         v="$(enshrouded_prompt_scalar "queryPort" "$(enshrouded_editor_get_raw "$tmp" '.queryPort')" "1..65535")"
         if [[ -n "$v" ]]; then
@@ -648,6 +740,9 @@ editor_enshrouded_json() {
         fi
         ;;
       4)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_SLOT_COUNT"; then
+          continue
+        fi
         local v
         v="$(enshrouded_prompt_scalar "slotCount" "$(enshrouded_editor_get_raw "$tmp" '.slotCount')" "1..16")"
         if [[ -n "$v" ]]; then
@@ -660,6 +755,9 @@ editor_enshrouded_json() {
         fi
         ;;
       5)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_SAVE_DIR"; then
+          continue
+        fi
         local v
         v="$(enshrouded_prompt_scalar "saveDirectory" "$(enshrouded_editor_get_raw "$tmp" '.saveDirectory')" "")"
         if [[ -n "$v" ]]; then
@@ -668,6 +766,9 @@ editor_enshrouded_json() {
         fi
         ;;
       6)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_LOG_DIR"; then
+          continue
+        fi
         local v
         v="$(enshrouded_prompt_scalar "logDirectory" "$(enshrouded_editor_get_raw "$tmp" '.logDirectory')" "")"
         if [[ -n "$v" ]]; then
@@ -676,6 +777,9 @@ editor_enshrouded_json() {
         fi
         ;;
       7)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_TAGS"; then
+          continue
+        fi
         local v
         echo
         ui_note "Comma-separated, allowed: A-Z a-z 0-9 . _ -"
@@ -689,6 +793,9 @@ editor_enshrouded_json() {
         fi
         ;;
       8)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_VOICE_CHAT_MODE"; then
+          continue
+        fi
         local v
         v="$(enshrouded_prompt_scalar "voiceChatMode" "$(enshrouded_editor_get_raw "$tmp" '.voiceChatMode')" "Proximity | Global")"
         if [[ -n "$v" ]]; then
@@ -701,6 +808,9 @@ editor_enshrouded_json() {
         fi
         ;;
       9)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_ENABLE_VOICE_CHAT"; then
+          continue
+        fi
         local v cur
         cur="$(enshrouded_editor_get_raw "$tmp" '.enableVoiceChat')"
         ui_note "Enter = toggle (current: ${cur:-false})"
@@ -718,6 +828,9 @@ editor_enshrouded_json() {
         fi
         ;;
       10)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_ENABLE_TEXT_CHAT"; then
+          continue
+        fi
         local v cur
         cur="$(enshrouded_editor_get_raw "$tmp" '.enableTextChat')"
         ui_note "Enter = toggle (current: ${cur:-false})"
@@ -735,6 +848,9 @@ editor_enshrouded_json() {
         fi
         ;;
       11)
+        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_GS_PRESET"; then
+          continue
+        fi
         local v
         v="$(enshrouded_prompt_scalar "gameSettingsPreset" "$(enshrouded_editor_get_raw "$tmp" '.gameSettingsPreset')" "Default | Relaxed | Hard | Survival | Custom")"
         if [[ -n "$v" ]]; then
