@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+menu_save_dir_resolve() {
+  local dir
+  dir="${ENSHROUDED_SAVE_DIR:-./savegame}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
+
 menu_backups_list_files() {
   local label backup_dir
   label="$1"
@@ -17,6 +27,181 @@ menu_backups_list_files() {
   fi
 
   printf "%s\n" "${files[@]}"
+}
+
+menu_savegame_backups_list_files() {
+  local backup_dir pattern
+  backup_dir="$(backup_dir_resolve)"
+  pattern="*-${savefile_name}.zip"
+
+  local -a files
+  shopt -s nullglob
+  files=( "$backup_dir"/$pattern )
+  shopt -u nullglob
+
+  # Sort newest first (timestamp prefix in filename).
+  if [[ "${#files[@]}" -gt 1 ]]; then
+    IFS=$'\n' files=( $(printf "%s\n" "${files[@]}" | sort -r) )
+    unset IFS
+  fi
+
+  printf "%s\n" "${files[@]}"
+}
+
+menu_run_savegame_backup() {
+  local backup_dir save_dir
+  backup_dir="$(backup_dir_resolve)"
+  save_dir="$(menu_save_dir_resolve)"
+
+  ui_header "Create Savegame Backup"
+  ui_note "This runs the existing supervisor job: enshrouded-backup (creates a .zip backup)."
+  echo
+  ui_kv "Save Directory" "$save_dir"
+  ui_kv "Backup Folder" "$backup_dir"
+  ui_kv "Savefile Name" "$savefile_name"
+  echo
+
+  if ! ui_confirm_yes_no "Run savegame backup now?"; then
+    ui_note "Cancelled."
+    ui_pause
+    return 0
+  fi
+
+  mkdir -p "$backup_dir" 2>/dev/null || true
+  chmod 700 "$backup_dir" 2>/dev/null || true
+  chown enshrouded:enshrouded "$backup_dir" 2>/dev/null || true
+
+  supervisorctl start enshrouded-backup >/dev/null 2>&1 || true
+  if menu_wait_for_program_exit "enshrouded-backup" 1200; then
+    ui_success "Backup finished. Check: $backup_dir"
+  else
+    ui_warn_line "Backup may still be running (timeout). Check supervisor status."
+  fi
+
+  ui_pause
+  return 0
+}
+
+menu_restore_savegame_backup() {
+  local backup_dir save_dir selected choice file
+  backup_dir="$(backup_dir_resolve)"
+  save_dir="$(menu_save_dir_resolve)"
+
+  if ! command -v unzip >/dev/null 2>&1; then
+    ui_error "unzip not found. Cannot restore savegame backups."
+    ui_pause
+    return 1
+  fi
+
+  while :; do
+    local -a files
+    mapfile -t files < <(menu_savegame_backups_list_files)
+
+    ui_header "Restore Savegame Backup"
+    ui_kv "Backup Folder" "$backup_dir"
+    ui_kv "Target Save Directory" "$save_dir"
+    ui_kv "Savefile Name" "$savefile_name"
+    echo
+
+    if [[ "${#files[@]}" -eq 0 ]]; then
+      ui_warn_line "No savegame backups found."
+      echo
+      if ui_confirm_yes_no "Create a new savegame backup now?"; then
+        menu_run_savegame_backup || true
+        continue
+      fi
+      return 0
+    fi
+
+    ui_note "Backups (newest first):"
+    echo
+    local idx base ts
+    idx=1
+    for file in "${files[@]}"; do
+      base="$(basename "$file")"
+      ts="${base:0:19}"
+      printf "[%s] %-19s  %s\n" "$idx" "$ts" "$base"
+      idx=$((idx + 1))
+    done
+    echo
+    echo "[0] Back"
+    echo
+
+    choice="$(ui_prompt_number "Backup")"
+    if [[ "$choice" -eq 0 ]]; then
+      return 0
+    fi
+    if [[ "$choice" -lt 1 || "$choice" -gt "${#files[@]}" ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    selected="${files[$((choice - 1))]}"
+
+    ui_header "Restore Savegame Backup"
+    ui_warn_line "WARNING: This will overwrite your current savegame with the selected backup."
+    ui_warn_line "All players will be disconnected (if the server is running)."
+    echo
+    ui_kv "Selected Backup" "$(basename "$selected")"
+    ui_kv "Target Save Directory" "$save_dir"
+    echo
+
+    if ! ui_confirm_yes_no "Stop server (if running) and continue?"; then
+      ui_note "Cancelled."
+      ui_pause
+      continue
+    fi
+
+    if ! menu_stop_server_now; then
+      ui_pause
+      continue
+    fi
+
+    echo
+    ui_note "Optional safety step:"
+    if ui_confirm_yes_no "Create a backup of the current savegame before restoring?"; then
+      supervisorctl start enshrouded-backup >/dev/null 2>&1 || true
+      if ! menu_wait_for_program_exit "enshrouded-backup" 1200; then
+        ui_error "Backup did not finish (timeout). Aborting restore to be safe."
+        ui_pause
+        continue
+      fi
+      ui_success "Current savegame backup created."
+    else
+      ui_note "Skipping backup."
+    fi
+
+    echo
+    ui_warn_line "This will delete the current save files for: $savefile_name"
+    if ! ui_confirm_yes_no "Delete current save data and restore this backup now?"; then
+      ui_note "Cancelled."
+      ui_pause
+      continue
+    fi
+
+    mkdir -p "$save_dir" 2>/dev/null || true
+
+    # Delete only files belonging to the current savefile prefix.
+    shopt -s nullglob
+    rm -f -- "$save_dir/$savefile_name" "$save_dir/$savefile_name-index" "$save_dir/$savefile_name-"* 2>/dev/null || true
+    shopt -u nullglob
+
+    if ! unzip -o "$selected" -d "$save_dir" >/dev/null 2>&1; then
+      ui_error "Failed to restore backup (unzip error)."
+      ui_pause
+      continue
+    fi
+
+    chmod 600 "$save_dir/$savefile_name" "$save_dir/$savefile_name-index" 2>/dev/null || true
+    chown enshrouded:enshrouded "$save_dir/$savefile_name" "$save_dir/$savefile_name-index" 2>/dev/null || true
+
+    ui_success "Savegame restored."
+    echo
+    menu_prompt_start_server "Start enshrouded-server now?"
+    ui_pause
+    return 0
+  done
 }
 
 menu_restore_from_backup_generic() {
@@ -37,6 +222,19 @@ menu_restore_from_backup_generic() {
 
     if [[ "${#files[@]}" -eq 0 ]]; then
       ui_warn_line "No backups found."
+      echo
+      ui_note "Backups are created when you save/apply settings in the menu (or via reset commands)."
+
+      if [[ -f "$config_file" ]]; then
+        echo
+        if ui_confirm_yes_no "Create a backup of the current config now?"; then
+          backup_config_file "$config_file" "$label" || true
+          ui_pause
+          continue
+        fi
+      else
+        ui_note "Current config file not found: $config_file"
+      fi
       ui_pause
       return 0
     fi
@@ -84,6 +282,14 @@ menu_restore_from_backup_generic() {
     if ! menu_stop_server_now; then
       ui_pause
       continue
+    fi
+
+    echo
+    ui_note "Optional safety step:"
+    if ui_confirm_yes_no "Create a backup of the current config before restoring?"; then
+      backup_config_file "$config_file" "$label" || true
+    else
+      ui_note "Skipping backup."
     fi
 
     config_dir="$(dirname "$config_file")"
@@ -148,4 +354,32 @@ menu_restore_enshrouded_backup() {
 
 menu_restore_manager_backup() {
   menu_restore_from_backup_generic "Server Manager" "server_manager" "$(manager_config_path)"
+}
+
+menu_backups_menu() {
+  local choice
+  while :; do
+    ui_header "Backups"
+
+    echo "[1] Restore Enshrouded settings (enshrouded_server.json)"
+    echo "[2] Restore Server Manager settings (server_manager.json)"
+    echo "[3] Create savegame backup now (.zip)"
+    echo "[4] Restore savegame from .zip backup"
+    echo
+    echo "[0] Back"
+    echo
+
+    choice="$(ui_prompt_number "Choice")"
+    case "$choice" in
+      1) menu_restore_enshrouded_backup || true ;;
+      2) menu_restore_manager_backup || true ;;
+      3) menu_run_savegame_backup || true ;;
+      4) menu_restore_savegame_backup || true ;;
+      0) return 0 ;;
+      *)
+        ui_warn_line "Invalid selection."
+        ui_pause
+        ;;
+    esac
+  done
 }

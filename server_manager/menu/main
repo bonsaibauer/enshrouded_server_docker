@@ -8,7 +8,9 @@ menu_main() {
 
     echo "[1] Enshrouded Server Settings"
     echo "[2] Server Manager Settings"
-    echo "[3] Other ctl Commands"
+    echo "[3] Backups"
+    echo "[4] Create Savegame Backup (.zip)"
+    echo "[5] Other ctl Commands"
     echo
     echo "[0] Exit"
     echo
@@ -22,6 +24,12 @@ menu_main() {
         menu_manager_settings
         ;;
       3)
+        menu_backups_menu
+        ;;
+      4)
+        menu_run_savegame_backup
+        ;;
+      5)
         menu_other_commands
         ;;
       0)

@@ -54,6 +54,7 @@ profiles_ensure_schema() {
     | .EN_PROFILE = (if (.EN_PROFILE == null or .EN_PROFILE == "") then $edef else .EN_PROFILE end)
     | .actualProfilManager = (if (.actualProfilManager == null or .actualProfilManager == "") then $mdef else .actualProfilManager end)
     | .actualProfilEnshrouded = (if (.actualProfilEnshrouded == null or .actualProfilEnshrouded == "") then $edef else .actualProfilEnshrouded end)
+    | del(.profiles)
   ' "$file" >"$tmp" || {
     rm -f "$tmp"
     return 0
@@ -158,7 +159,7 @@ profiles_config_set() {
     value="$def"
   fi
 
-  jq --arg key "$json_key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp" || {
+  jq --arg key "$json_key" --arg value "$value" '.[$key] = $value | del(.profiles)' "$file" >"$tmp" || {
     rm -f "$tmp"
     return 1
   }
@@ -200,7 +201,7 @@ profiles_env_set_if_missing() {
   fi
 
   tmp="$(mktemp)"
-  jq --arg key "$key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp" || {
+  jq --arg key "$key" --arg value "$value" '.[$key] = $value | del(.profiles)' "$file" >"$tmp" || {
     rm -f "$tmp"
     return 0
   }

@@ -34,18 +34,40 @@ These variables are actively loaded via `server_manager/shared/profile`.
 | `WINEDEBUG` | string | `-all` | Wine debug level |
 | `UPDATE_CHECK_PLAYERS` | bool | `false` | Only update when 0 players are connected |
 | `RESTART_CHECK_PLAYERS` | bool | `false` | Only restart when 0 players are connected |
-| `BACKUP_DIR` | string | `backups` | Backup target directory |
-| `BACKUP_MAX_COUNT` | int | `0` | Number of backups (`0` = unlimited) |
-| `BACKUP_PRE_HOOK` | string | `null` | Hook before backup |
-| `BACKUP_POST_HOOK` | string | `null` | Hook after backup |
+| `BACKUP_DIR` | string | `backups` | Base backup directory (savegames in `BACKUP_DIR`, config backups in `BACKUP_DIR/profiles`) |
+| `BACKUP_MAX_COUNT` | int | `0` | Number of savegame zip backups (`0` = unlimited) |
+| `BACKUP_PRE_HOOK` | string | `null` | Hook before savegame backup |
+| `BACKUP_POST_HOOK` | string | `null` | Hook after savegame backup |
 | `UPDATE_CRON` | string | `null` | Cron schedule for update job |
-| `BACKUP_CRON` | string | `null` | Cron schedule for backup job |
+| `BACKUP_CRON` | string | `null` | Cron schedule for savegame backup job |
 | `RESTART_CRON` | string | `null` | Cron schedule for restart job |
 | `BOOTSTRAP_HOOK` | string | `null` | Hook executed during bootstrap |
 | `UPDATE_PRE_HOOK` | string | `null` | Hook before update |
 | `UPDATE_POST_HOOK` | string | `null` | Hook after update |
 | `RESTART_PRE_HOOK` | string | `null` | Hook before restart |
 | `RESTART_POST_HOOK` | string | `null` | Hook after restart |
+
+## Backup Layout
+
+There are two backup types:
+
+1. Savegame backups (zip)
+   - Triggered by `ctl backup` / `supervisorctl start enshrouded-backup`
+   - The same Supervisor job is used for manual backups, cron backups (`BACKUP_CRON`), and safety backups before restore.
+   - Stored in `BACKUP_DIR` (default: `/home/enshrouded/server/backups`)
+   - Filename pattern: `YYYY-MM-DD_HH-MM-SS-$SAVEFILE_NAME.zip`
+   - Retention: controlled by `BACKUP_MAX_COUNT` (only affects zip backups)
+   - `BACKUP_MAX_COUNT` keeps the newest N zip backups and deletes older ones (nothing is overwritten)
+   - Manual/safety backups also count toward `BACKUP_MAX_COUNT`
+   - Example: `BACKUP_MAX_COUNT=7` keeps 7 total zip files even if you create additional manual backups between cron runs
+   - Note: retention currently matches `*-$SAVEFILE_NAME.zip`. If you change `SAVEFILE_NAME`, older zip backups with the previous name are not pruned automatically.
+
+2. Config backups (json)
+   - Created automatically when the menu replaces/saves config files (and by reset commands)
+   - Stored in `BACKUP_DIR/profiles` (default: `/home/enshrouded/server/backups/profiles`)
+   - Filename pattern: `YYYY-MM-DD_HH-MM-SS_<label>.json` (labels: `server_manager`, `enshrouded_server`)
+   - Retention: not automatically pruned
+   - Not affected by `BACKUP_MAX_COUNT`
 
 ## Enshrouded Server Variables
 

@@ -27,7 +27,11 @@ docker exec -it <container> menu
 
 1. `Enshrouded Server Settings`
 2. `Server Manager Settings`
-3. `Other ctl Commands`
+3. `Backups`
+4. `Create Savegame Backup (.zip)`
+5. `Other ctl Commands`
+
+Note: `Create Savegame Backup (.zip)` is a shortcut for `Backups -> Create savegame backup now (.zip)`.
 
 ## Enshrouded Server Settings
 
@@ -55,10 +59,6 @@ docker exec -it <container> menu
      - Ensures `.bans` exists and generates missing `userGroups[].password` values
      - Afterwards you should start/restart the server to apply changes.
      - Bootstrap is available as a convenience (note: bootstrap does not start the server).
-
-4. `Restore from backup`
-   - Lists timestamped config backups from `BACKUP_DIR/profiles`
-   - Restores a selected backup by replacing `/home/enshrouded/server/enshrouded_server.json`
 
 ### What Existing Commands Are Used?
 
@@ -92,10 +92,6 @@ When switching Enshrouded profiles the menu uses the existing Supervisor program
       - restart the server, or
       - run bootstrap (recommended)
 
-4. `Restore from backup`
-   - Lists timestamped config backups from `BACKUP_DIR/profiles`
-   - Restores a selected backup by replacing `/home/enshrouded/server/server_manager/server_manager.json`
-
 ### What Existing Commands Are Used?
 
 When switching Server Manager profiles the menu reuses existing profile/init helpers and Supervisor programs:
@@ -105,12 +101,46 @@ When switching Server Manager profiles the menu reuses existing profile/init hel
 - `supervisorctl start|restart enshrouded-server` (after saving/applying, to activate changes)
 - `supervisorctl start enshrouded-bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)
 
+## Backups
+
+This submenu provides restore operations for:
+
+- the persistent JSON configs (timestamped backups in `BACKUP_DIR/profiles`)
+- the savegame backups (zip files in `BACKUP_DIR`)
+
+Menu options:
+
+1. `Restore Enshrouded settings (enshrouded_server.json)`
+   - If no config backups exist yet, the menu can create a backup of the current config.
+   - Before restoring, the menu offers to create a safety backup of the current config.
+2. `Restore Server Manager settings (server_manager.json)`
+   - If no config backups exist yet, the menu can create a backup of the current config.
+   - Before restoring, the menu offers to create a safety backup of the current config.
+3. `Create savegame backup now (.zip)`
+   - Runs `supervisorctl start enshrouded-backup`
+4. `Restore savegame from .zip backup`
+   - Lists zip backups from `BACKUP_DIR` (pattern: `*-$SAVEFILE_NAME.zip`)
+   - If no zip backups exist yet, the menu can create one first.
+   - Stops `enshrouded-server` first (required)
+   - Optional: create a backup of the current savegame before restoring
+   - Confirms before deleting current save files and extracting the selected backup
+
+Notes:
+
+- Savegame zip backups are always created by the same Supervisor job (`enshrouded-backup`), no matter if you trigger it manually (menu / `ctl backup`), via cron (`BACKUP_CRON`), or as a safety backup before restore.
+- `BACKUP_MAX_COUNT` keeps the newest N zip backups and deletes older ones (nothing is overwritten). Manual/safety backups count toward the same limit.
+- Config JSON backups under `BACKUP_DIR/profiles` are not affected by `BACKUP_MAX_COUNT`.
+
+Example:
+
+If `BACKUP_MAX_COUNT=7` and cron creates one backup per day, you will keep the newest 7 zip files. Creating extra manual/safety backups will still keep only 7 total zip files and may prune older daily backups sooner.
+
 ## Other ctl Commands
 
 This submenu is a convenience wrapper around existing `ctl` commands:
 
 - `status`, `start`, `stop`, `restart`
-- `update`, `backup`, `password-view`, `scheduled-restart`, `force-update`
+- `update`, `password-view`, `scheduled-restart`, `force-update`
 - `bootstrap`
 - `cron-start`, `cron-stop`, `cron-restart`
 
@@ -149,6 +179,10 @@ Backups are created when you:
 - `Save` in the JSON editors
 - apply a profile template (`Select new profile`)
 - run the existing reset commands (`ctl profile-reset`, `ctl enshrouded-profile-reset`)
+
+Retention:
+
+- Config backups are not automatically pruned. If you want retention, delete old files manually in `BACKUP_DIR/profiles`.
 
 ## Settings Precedence (Important)
 

@@ -111,7 +111,6 @@ menu_manager_settings() {
     echo "[1] Edit current settings"
     echo "[2] Delete current profile"
     echo "[3] Select new profile"
-    echo "[4] Restore from backup"
     echo
     echo "[0] Back"
     echo
@@ -126,9 +125,6 @@ menu_manager_settings() {
         ;;
       3)
         manager_select_profile_flow "select" || true
-        ;;
-      4)
-        menu_restore_manager_backup || true
         ;;
       0)
         return 0

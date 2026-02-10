@@ -91,8 +91,18 @@ cleanup() {
     return
   fi
 
-  info "Removing old backups with number of backups set to $BACKUP_MAX_COUNT"
-  find "$backup_dir" -type f -printf '%T@ %p\n' | sort -n | cut -d' ' -f 2- | head -n -$BACKUP_MAX_COUNT | xargs rm -fv
+  info "Removing old savegame zip backups with number of backups set to $BACKUP_MAX_COUNT"
+  # Only prune savegame backups in the root of BACKUP_DIR.
+  # Do not touch config backups (stored in BACKUP_DIR/profiles).
+  local to_delete
+  to_delete="$(find "$backup_dir" -maxdepth 1 -type f -name "*-${savefile_name}.zip" -printf '%T@ %p\n' \
+    | sort -n \
+    | cut -d' ' -f 2- \
+    | head -n -$BACKUP_MAX_COUNT)"
+
+  if [[ -n "$to_delete" ]]; then
+    echo "$to_delete" | xargs rm -fv
+  fi
 }
 
 getSaveDir() {

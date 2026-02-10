@@ -58,6 +58,16 @@ enshrouded-profile-reset
 crond
 ```
 
+## backup
+
+`backup` triggers the Supervisor program `enshrouded-backup` and creates a zip backup of the latest savegame.
+
+- Output folder: `BACKUP_DIR` (default: `/home/enshrouded/server/backups`)
+- Filename pattern: `YYYY-MM-DD_HH-MM-SS-$SAVEFILE_NAME.zip`
+- Retention: `BACKUP_MAX_COUNT` keeps the newest N zip backups (manual, cron, and safety backups all count toward the same limit)
+
+Note: The interactive menu creates separate config backups (`enshrouded_server.json` / `server_manager.json`) under `BACKUP_DIR/profiles` when saving/applying settings.
+
 ## password-view
 
 Shows `userGroups` (permissions + password) from the active `enshrouded_server.json`.
