@@ -2,46 +2,48 @@
 
 Current commands according to `server_manager/entrypoints/ctl`.
 
+Replace `enshroudedserver` with your container name (see `docker ps`).
+
 ## Direct via docker exec
 
 ```bash
-docker exec <container> status
-docker exec -it <container> menu
-docker exec <container> start
-docker exec <container> stop
-docker exec <container> restart
-docker exec <container> update
-docker exec <container> backup
-docker exec <container> password-view
-docker exec <container> scheduled-restart
-docker exec <container> force-update
-docker exec <container> profile-reset
-docker exec <container> enshrouded-profile-reset
-docker exec <container> bootstrap
-docker exec <container> cron-start
-docker exec <container> cron-stop
-docker exec <container> cron-restart
+docker exec enshroudedserver status
+docker exec -it enshroudedserver menu
+docker exec enshroudedserver start
+docker exec enshroudedserver stop
+docker exec enshroudedserver restart
+docker exec enshroudedserver update
+docker exec enshroudedserver backup
+docker exec enshroudedserver password-view
+docker exec enshroudedserver scheduled-restart
+docker exec enshroudedserver force-update
+docker exec enshroudedserver profile-reset
+docker exec enshroudedserver enshrouded-profile-reset
+docker exec enshroudedserver bootstrap
+docker exec enshroudedserver cron-start
+docker exec enshroudedserver cron-stop
+docker exec enshroudedserver cron-restart
 ```
 
 ## Alternative via ctl
 
 ```bash
-docker exec <container> ctl status
-docker exec -it <container> ctl menu
-docker exec <container> ctl start
-docker exec <container> ctl stop
-docker exec <container> ctl restart
-docker exec <container> ctl update
-docker exec <container> ctl backup
-docker exec <container> ctl password-view
-docker exec <container> ctl scheduled-restart
-docker exec <container> ctl force-update
-docker exec <container> ctl profile-reset
-docker exec <container> ctl enshrouded-profile-reset
-docker exec <container> ctl bootstrap
-docker exec <container> ctl cron-start
-docker exec <container> ctl cron-stop
-docker exec <container> ctl cron-restart
+docker exec enshroudedserver ctl status
+docker exec -it enshroudedserver ctl menu
+docker exec enshroudedserver ctl start
+docker exec enshroudedserver ctl stop
+docker exec enshroudedserver ctl restart
+docker exec enshroudedserver ctl update
+docker exec enshroudedserver ctl backup
+docker exec enshroudedserver ctl password-view
+docker exec enshroudedserver ctl scheduled-restart
+docker exec enshroudedserver ctl force-update
+docker exec enshroudedserver ctl profile-reset
+docker exec enshroudedserver ctl enshrouded-profile-reset
+docker exec enshroudedserver ctl bootstrap
+docker exec enshroudedserver ctl cron-start
+docker exec enshroudedserver ctl cron-stop
+docker exec enshroudedserver ctl cron-restart
 ```
 
 ## Supervisor Program Names
@@ -73,5 +75,5 @@ Note: The interactive menu creates separate config backups (`enshrouded_server.j
 Shows `userGroups` (permissions + password) from the active `enshrouded_server.json`.
 
 ```bash
-docker exec <container> password-view
+docker exec enshroudedserver password-view
 ```

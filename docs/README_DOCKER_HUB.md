@@ -7,6 +7,7 @@
 - Commands: `docs/server_manager_commands.md`
 - Logs: `docs/log.md`
 - Changelog (init): `docs/changelog/v3.0.0.md`
+- Dev branch logs (unofficial): `docs/changelog/dev-logs.md`
 
 ## Quickstart
 

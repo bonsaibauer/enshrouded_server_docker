@@ -6,14 +6,16 @@ The Server Manager includes an interactive shell menu to manage profiles and edi
 
 The menu requires a TTY. Always use `-it`.
 
+Replace `enshroudedserver` with your container name (see `docker ps`).
+
 ```bash
-docker exec -it <container> ctl menu
+docker exec -it enshroudedserver ctl menu
 ```
 
 There is also a direct command alias:
 
 ```bash
-docker exec -it <container> menu
+docker exec -it enshroudedserver menu
 ```
 
 ## Navigation

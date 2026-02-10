@@ -153,7 +153,7 @@ ui_header() {
   if ui_has_tty; then
     ui_note "Navigation: enter a number and press Enter. [0] is always Back/Exit."
   else
-    ui_warn_line "Hint: no TTY detected. Start with: docker exec -it <container> ctl menu"
+    ui_warn_line "Hint: no TTY detected. Start with: docker exec -it CONTAINER_NAME ctl menu"
   fi
   echo
 }

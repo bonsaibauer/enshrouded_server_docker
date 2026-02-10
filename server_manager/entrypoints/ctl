@@ -4,11 +4,30 @@ set -euo pipefail
 
 SUPERVISORCTL_BIN="${SUPERVISORCTL_BIN:-supervisorctl}"
 
+# Resolve this script's directory even when invoked through a symlink under
+# /usr/local/bin (e.g. the `menu` alias). We need the real location so relative
+# paths to ../menu and ../jobs work reliably.
+resolve_script_dir() {
+  local src dir
+  src="${BASH_SOURCE[0]}"
+
+  # Follow symlinks (readlink without -f is available on busybox + coreutils).
+  while [[ -h "$src" ]]; do
+    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+
+  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
+}
+
+SCRIPT_DIR="$(resolve_script_dir)"
+
 usage() {
   cat <<'EOF'
 Usage:
-  docker exec <container> <command>
-  docker exec <container> ctl <command>
+  docker exec CONTAINER_NAME <command>
+  docker exec CONTAINER_NAME ctl <command>
 
 Commands:
   status         Show supervisor program status
@@ -53,7 +72,7 @@ main() {
       run_supervisorctl status
       ;;
     menu)
-      "$(dirname "$0")/../menu/menu" "$@"
+      "${SCRIPT_DIR}/../menu/menu" "$@"
       ;;
     start)
       run_supervisorctl start enshrouded-server
@@ -71,7 +90,7 @@ main() {
       run_supervisorctl start enshrouded-backup
       ;;
     password-view)
-      "$(dirname "$0")/../jobs/enshrouded-password-view" "$@"
+      "${SCRIPT_DIR}/../jobs/enshrouded-password-view" "$@"
       ;;
     scheduled-restart)
       run_supervisorctl start enshrouded-restart

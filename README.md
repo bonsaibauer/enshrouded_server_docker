@@ -8,6 +8,7 @@
 - Interactive menu: [`docs/menu.md`](docs/menu.md)
 - Logging behavior: [`docs/log.md`](docs/log.md)
 - Current init changelog: [`docs/changelog/v3.0.0.md`](docs/changelog/v3.0.0.md)
+- Dev branch logs (unofficial): [`docs/changelog/dev-logs.md`](docs/changelog/dev-logs.md)
 
 ---
 
@@ -31,5 +32,7 @@ docker run \
 ### Interactive Menu
 
 ```bash
-docker exec -it <container> menu
+docker exec -it enshroudedserver menu
 ```
+
+If your container has a different name, replace `enshroudedserver` (see `docker ps`).
