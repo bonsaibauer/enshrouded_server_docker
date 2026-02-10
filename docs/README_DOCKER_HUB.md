@@ -23,10 +23,6 @@ docker run \
   bonsaibauer/enshrouded_server_docker:latest
 ```
 
-Note:
-- `LOG_COLOR` is optional.
-- `server_manager.json` and profiles are stored under `/home/enshrouded/server` by default and are persistent via the same volume.
-
 ## Commands
 
 ```bash

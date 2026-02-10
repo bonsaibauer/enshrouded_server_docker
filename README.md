@@ -28,11 +28,6 @@ docker run \
   bonsaibauer/enshrouded_server_docker:dev_latest
 ```
 
-Hinweis:
-- Das Server-Installziel im Container ist `/home/enshrouded/server`.
-- `LOG_COLOR` ist optional und muss nicht gesetzt werden.
-- `server_manager.json` und die Profile liegen standardmäßig ebenfalls unter `/home/enshrouded/server` und sind damit über dasselbe Volume persistent.
-
 ### Interactive Menu
 
 ```bash
