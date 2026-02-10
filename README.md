@@ -31,5 +31,5 @@ docker run \
 ### Interactive Menu
 
 ```bash
-docker exec -it <container> ctl menu
+docker exec -it <container> menu
 ```

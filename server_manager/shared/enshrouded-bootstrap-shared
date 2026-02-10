@@ -164,7 +164,13 @@ updateUserGroupConfig() {
 
 generatePassword() {
   if [ -r /dev/urandom ]; then
-    LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12
+    # Avoid `tr | head` which can emit a noisy SIGPIPE warning when `head` exits early.
+    # Read bounded random bytes first, then filter and slice in bash.
+    local out=""
+    while [ "${#out}" -lt 12 ]; do
+      out="${out}$(dd if=/dev/urandom bs=64 count=1 2>/dev/null | LC_ALL=C tr -dc 'A-Za-z0-9')"
+    done
+    printf '%s' "${out:0:12}"
     return 0
   fi
   date +%s%N | sha256sum | cut -c1-12
