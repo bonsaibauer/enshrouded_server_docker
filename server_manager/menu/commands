@@ -18,17 +18,11 @@ menu_other_commands() {
     ui_header "Other ctl Commands"
 
     echo "[1] status"
-    echo "[2] start"
-    echo "[3] stop"
-    echo "[4] restart"
-    echo "[5] update"
-    echo "[6] password-view"
-    echo "[7] scheduled-restart"
-    echo "[8] force-update"
-    echo "[9] bootstrap"
-    echo "[10] cron-start"
-    echo "[11] cron-stop"
-    echo "[12] cron-restart"
+    echo "[2] scheduled-restart"
+    echo "[3] bootstrap"
+    echo "[4] cron-start"
+    echo "[5] cron-stop"
+    echo "[6] cron-restart"
     echo
     echo "[0] Back"
     echo
@@ -36,17 +30,11 @@ menu_other_commands() {
     choice="$(ui_prompt_number "Choice")"
     case "$choice" in
       1) menu_run_ctl status ;;
-      2) menu_run_ctl start ;;
-      3) menu_run_ctl stop ;;
-      4) menu_run_ctl restart ;;
-      5) menu_run_ctl update ;;
-      6) menu_run_ctl password-view ;;
-      7) menu_run_ctl scheduled-restart ;;
-      8) menu_run_ctl force-update ;;
-      9) menu_run_ctl bootstrap ;;
-      10) menu_run_ctl cron-start ;;
-      11) menu_run_ctl cron-stop ;;
-      12) menu_run_ctl cron-restart ;;
+      2) menu_run_ctl scheduled-restart ;;
+      3) menu_run_ctl bootstrap ;;
+      4) menu_run_ctl cron-start ;;
+      5) menu_run_ctl cron-stop ;;
+      6) menu_run_ctl cron-restart ;;
       0) return 0 ;;
       *)
         ui_warn_line "Invalid selection."

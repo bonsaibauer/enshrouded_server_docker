@@ -9,8 +9,14 @@ menu_main() {
     echo "[1] Enshrouded Server Settings"
     echo "[2] Server Manager Settings"
     echo "[3] Backups"
-    echo "[4] Create Savegame Backup (.zip)"
-    echo "[5] Other ctl Commands"
+    echo "[4] start"
+    echo "[5] stop"
+    echo "[6] restart"
+    echo "[7] update"
+    echo "[8] force-update"
+    echo "[9] password-view"
+    echo "[10] Create Savegame Backup (.zip)"
+    echo "[11] Other ctl Commands"
     echo
     echo "[0] Exit"
     echo
@@ -27,9 +33,27 @@ menu_main() {
         menu_backups_menu
         ;;
       4)
-        menu_run_savegame_backup
+        menu_run_ctl start
         ;;
       5)
+        menu_run_ctl stop
+        ;;
+      6)
+        menu_run_ctl restart
+        ;;
+      7)
+        menu_run_ctl update
+        ;;
+      8)
+        menu_run_ctl force-update
+        ;;
+      9)
+        menu_run_ctl password-view
+        ;;
+      10)
+        menu_run_savegame_backup
+        ;;
+      11)
         menu_other_commands
         ;;
       0)

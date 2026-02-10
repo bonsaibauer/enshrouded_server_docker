@@ -28,10 +28,19 @@ docker exec -it <container> menu
 1. `Enshrouded Server Settings`
 2. `Server Manager Settings`
 3. `Backups`
-4. `Create Savegame Backup (.zip)`
-5. `Other ctl Commands`
+4. `start`
+5. `stop`
+6. `restart`
+7. `update`
+8. `force-update`
+9. `password-view`
+10. `Create Savegame Backup (.zip)`
+11. `Other ctl Commands`
 
-Note: `Create Savegame Backup (.zip)` is a shortcut for `Backups -> Create savegame backup now (.zip)`.
+Notes:
+
+- `Create Savegame Backup (.zip)` is a shortcut for `Backups -> Create savegame backup now (.zip)`.
+- The items `start/stop/restart/update/force-update/password-view` are the same actions as `ctl <command>` and are shown in the main menu for convenience.
 
 ## Enshrouded Server Settings
 
@@ -139,8 +148,8 @@ If `BACKUP_MAX_COUNT=7` and cron creates one backup per day, you will keep the n
 
 This submenu is a convenience wrapper around existing `ctl` commands:
 
-- `status`, `start`, `stop`, `restart`
-- `update`, `password-view`, `scheduled-restart`, `force-update`
+- `status`
+- `scheduled-restart`
 - `bootstrap`
 - `cron-start`, `cron-stop`, `cron-restart`
 
