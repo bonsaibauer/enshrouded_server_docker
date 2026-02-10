@@ -15,7 +15,15 @@ main() {
   config_file="${install_path}/enshrouded_server.json"
 
   if [[ ! -f "$source_profile" ]]; then
-    fatal "Enshrouded profile not found: $source_profile"
+    # If EN_PROFILE_DIR is empty (fresh volume), fall back to shipped templates.
+    ensure_enshrouded_profile_file "$profile" || true
+    source_profile="$(enshrouded_profile_path "$profile")"
+  fi
+  if [[ ! -f "$source_profile" ]]; then
+    source_profile="$(enshrouded_profile_template_path "$profile")"
+  fi
+  if [[ ! -f "$source_profile" ]]; then
+    fatal "Enshrouded profile not found: $profile (searched: $EN_PROFILE_DIR, $EN_PROFILE_TEMPLATE_DIR)"
   fi
   if ! jq -e '.' "$source_profile" >/dev/null 2>&1; then
     fatal "Invalid JSON in enshrouded profile: $source_profile"

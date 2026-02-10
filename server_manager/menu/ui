@@ -268,7 +268,6 @@ ui_header() {
 
   if ui_has_tty; then
     ui_note "Navigation: enter a number (or command letter) and press Enter."
-    ui_note "Common: [0] Back (main: exit)  [m] Main  [x] Exit"
     ui_note "Exit behavior: if the server is STOPPED, you will be asked if it should be started."
   else
     ui_warn_line "Hint: no TTY detected. Start with: docker exec -it CONTAINER_NAME ctl menu"

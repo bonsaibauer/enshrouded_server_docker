@@ -20,12 +20,12 @@ menu_other_commands() {
     fi
     ui_header "Other ctl Commands"
 
-    ui_opt 1 "status"
-    ui_opt 2 "scheduled-restart"
-    ui_opt 3 "bootstrap"
-    ui_opt 4 "cron-start"
-    ui_opt 5 "cron-stop"
-    ui_opt 6 "cron-restart"
+    ui_opt 1 "Status"
+    ui_opt 2 "Scheduled Restart"
+    ui_opt 3 "Bootstrap"
+    ui_opt 4 "Cron Start"
+    ui_opt 5 "Cron Stop"
+    ui_opt 6 "Cron Restart"
     echo
     ui_actions_bar "0 Back" "m Main" "x Exit"
     echo

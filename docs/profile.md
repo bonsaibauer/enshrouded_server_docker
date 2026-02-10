@@ -8,17 +8,27 @@ This file describes both profile types in the current layout.
 - Enshrouded-Profile: `server_manager/profiles/enshrouded/<name>_enshrouded_server.json`
 
 In the container:
-- Manager-Templates: `/usr/local/etc/enshrouded/profiles/manager/`
-- Enshrouded-Templates: `/usr/local/etc/enshrouded/profiles/enshrouded/`
+- Manager-Templates (shipped): `/usr/local/etc/enshrouded/profiles/manager/`
+- Enshrouded-Templates (shipped): `/usr/local/etc/enshrouded/profiles/enshrouded/`
 
 Runtime copies:
 - Manager config: `/home/enshrouded/server/server_manager/server_manager.json`
 - Manager-Profile-Store: `/home/enshrouded/server/profile/<name>/<name>_server_manager.json`
 - Enshrouded config: `/home/enshrouded/server/enshrouded_server.json`
 
+Persistent profile catalogs (volume):
+- Manager-Profile-Catalog (default `MANAGER_PROFILE_TEMPLATE_DIR`): `/home/enshrouded/server/profiles/manager/`
+  - Seeded from the shipped templates on container start (copy only missing files)
+- Enshrouded-Profile-Catalog (default `EN_PROFILE_DIR`): `/home/enshrouded/server/profiles/enshrouded/`
+  - Seeded from the shipped templates on container start (copy only missing files)
+
 ## Creating New Profiles
 
-Profiles are template JSON files shipped inside the image. To add your own, create a new template file in this repo and rebuild the image (or mount your own templates into the container).
+Profiles are template JSON files. Shipped templates live inside the image and are (by default) copied into the persistent volume catalog on container start.
+
+To add your own profiles without rebuilding the image, drop new `*_enshrouded_server.json` template files into:
+
+- `/home/enshrouded/server/profiles/enshrouded/`
 
 Naming rules:
 
@@ -31,14 +41,14 @@ Naming rules:
 
 1. Copy `server_manager/profiles/enshrouded/default_enshrouded_server.json` to `server_manager/profiles/enshrouded/<name>_enshrouded_server.json`
 2. Edit the JSON (must stay valid JSON)
-3. Rebuild the Docker image
+3. Put the file into the volume catalog: `/home/enshrouded/server/profiles/enshrouded/` (or rebuild the image to ship it)
 4. Select it with `EN_PROFILE=<name>` or via `ctl menu`
 
 ### Server Manager Profile
 
 1. Copy `server_manager/profiles/manager/default_server_manager.json` to `server_manager/profiles/manager/<name>_server_manager.json`
 2. Edit the JSON (see `docs/environment.md` for variable meanings)
-3. Rebuild the Docker image
+3. Put the file into the volume catalog: `/home/enshrouded/server/profiles/manager/` (or rebuild the image to ship it)
 4. Select it with `MANAGER_PROFILE=<name>` or via `ctl menu`
 
 When selected, the Server Manager template is copied into the persistent profile store at:

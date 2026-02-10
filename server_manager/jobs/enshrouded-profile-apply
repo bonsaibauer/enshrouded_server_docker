@@ -57,9 +57,15 @@ main() {
     fatal "Request file missing .profile: $run_file"
   fi
 
+  # Ensure the selected profile exists in EN_PROFILE_DIR (seed from shipped templates if needed).
+  ensure_enshrouded_profile_file "$profile" || true
+
   template="$(enshrouded_profile_path "$profile")"
   if [[ ! -f "$template" ]]; then
-    fatal "Enshrouded profile not found: $template"
+    template="$(enshrouded_profile_template_path "$profile")"
+  fi
+  if [[ ! -f "$template" ]]; then
+    fatal "Enshrouded profile not found: $profile (searched: $EN_PROFILE_DIR, $EN_PROFILE_TEMPLATE_DIR)"
   fi
   if ! jq -e '.' "$template" >/dev/null 2>&1; then
     fatal "Invalid JSON in enshrouded profile: $template"

@@ -69,7 +69,7 @@ Notes:
    - The menu will confirm and stop `enshrouded-server` (if running) before replacing `/home/enshrouded/server/enshrouded_server.json`
 
 3. `Select new profile`
-     - Lists profile templates from `/usr/local/etc/enshrouded/profiles/enshrouded/`
+     - Lists profile templates from `EN_PROFILE_DIR` (default: `/home/enshrouded/server/profiles/enshrouded/`, seeded from `/usr/local/etc/enshrouded/profiles/enshrouded/`)
      - If an active config exists, the menu will confirm and then replace it when applying the selected profile
      - Applies the selected template to `/home/enshrouded/server/enshrouded_server.json`
      - Ensures `.bans` exists and generates missing `userGroups[].password` values
@@ -98,7 +98,7 @@ When switching Enshrouded profiles the menu uses the existing Supervisor program
    - The menu will confirm and stop `enshrouded-server` (if running) before replacing `/home/enshrouded/server/server_manager/server_manager.json`
 
 3. `Select new profile`
-     - Lists template profiles from `/usr/local/etc/enshrouded/profiles/manager/`
+     - Lists profile templates from `MANAGER_PROFILE_TEMPLATE_DIR` (default: `/home/enshrouded/server/profiles/manager/`, seeded from `/usr/local/etc/enshrouded/profiles/manager/`)
      - If an active config exists, the menu will confirm and then replace it when applying the selected profile
      - Copies the selected template into:
        - the profile store: `/home/enshrouded/server/profile/<name>/<name>_server_manager.json`

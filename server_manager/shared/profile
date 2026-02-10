@@ -12,8 +12,18 @@ MANAGER_ROOT="${MANAGER_ROOT:-$(cd "$PROFILE_SCRIPT_DIR/.." && pwd)}"
 MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-${install_path}/server_manager}"
 MANAGER_PROFILE_ROOT="${MANAGER_PROFILE_ROOT:-${install_path}/profile}"
 MANAGER_PROFILE_DIR="$MANAGER_PROFILE_ROOT"
-MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT}/profiles/manager}"
-EN_PROFILE_DIR="${EN_PROFILE_DIR:-${MANAGER_ROOT}/profiles/enshrouded}"
+
+# Server Manager profile templates:
+# - MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR: templates shipped with the image (read-only layer)
+# - MANAGER_PROFILE_TEMPLATE_DIR: runtime profile catalog used by menu/apply/reset (default: persistent volume)
+MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR="${MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR:-${MANAGER_ROOT}/profiles/manager}"
+MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${install_path}/profiles/manager}"
+
+# Enshrouded profile templates:
+# - EN_PROFILE_TEMPLATE_DIR: templates shipped with the image (read-only layer)
+# - EN_PROFILE_DIR: runtime profile catalog used by menu/apply/reset (default: persistent volume)
+EN_PROFILE_TEMPLATE_DIR="${EN_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT}/profiles/enshrouded}"
+EN_PROFILE_DIR="${EN_PROFILE_DIR:-${install_path}/profiles/enshrouded}"
 
 # Profile selection persistence (single source of truth):
 # Stored in server_manager.json as top-level keys:
@@ -334,10 +344,22 @@ manager_profile_template_path() {
   printf "%s/%s_server_manager.json" "$MANAGER_PROFILE_TEMPLATE_DIR" "$name"
 }
 
+manager_profile_template_shipped_path() {
+  local name
+  name="${1:-$MANAGER_PROFILE_DEFAULT}"
+  printf "%s/%s_server_manager.json" "$MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR" "$name"
+}
+
 enshrouded_profile_path() {
   local name
   name="${1:-$EN_PROFILE_DEFAULT}"
   printf "%s/%s_enshrouded_server.json" "$EN_PROFILE_DIR" "$name"
+}
+
+enshrouded_profile_template_path() {
+  local name
+  name="${1:-$EN_PROFILE_DEFAULT}"
+  printf "%s/%s_enshrouded_server.json" "$EN_PROFILE_TEMPLATE_DIR" "$name"
 }
 
 manager_profile_resolve() {
@@ -355,7 +377,7 @@ manager_profile_resolve() {
     echo "$MANAGER_PROFILE_DEFAULT"
     return 0
   fi
-  if [[ -f "$(manager_profile_path "$name")" || -f "$(manager_profile_template_path "$name")" ]]; then
+  if [[ -f "$(manager_profile_path "$name")" || -f "$(manager_profile_template_path "$name")" || -f "$(manager_profile_template_shipped_path "$name")" ]]; then
     echo "$name"
     return 0
   fi
@@ -378,7 +400,7 @@ enshrouded_profile_resolve() {
     echo "$EN_PROFILE_DEFAULT"
     return 0
   fi
-  if [[ -f "$(enshrouded_profile_path "$name")" ]]; then
+  if [[ -f "$(enshrouded_profile_path "$name")" || -f "$(enshrouded_profile_template_path "$name")" ]]; then
     echo "$name"
     return 0
   fi
@@ -399,7 +421,7 @@ enshrouded_profile_resolve_from_value() {
     echo "$EN_PROFILE_DEFAULT"
     return 0
   fi
-  if [[ -f "$(enshrouded_profile_path "$name")" ]]; then
+  if [[ -f "$(enshrouded_profile_path "$name")" || -f "$(enshrouded_profile_template_path "$name")" ]]; then
     echo "$name"
     return 0
   fi
@@ -421,6 +443,18 @@ ensure_manager_profile_file() {
     return 0
   fi
   if [[ ! -f "$template_file" ]]; then
+    # If the persistent template catalog is empty (fresh volume), fall back to shipped templates.
+    local shipped
+    shipped="$(manager_profile_template_shipped_path "$profile")"
+    if [[ -f "$shipped" ]]; then
+      mkdir -p "$(dirname "$template_file")" 2>/dev/null || true
+      if cp "$shipped" "$template_file" 2>/dev/null; then
+        chmod 600 "$template_file" 2>/dev/null || true
+        chown enshrouded:enshrouded "$template_file" 2>/dev/null || true
+      fi
+    fi
+  fi
+  if [[ ! -f "$template_file" ]]; then
     warn "Server Manager profile template not found: $template_file"
     return 1
   fi
@@ -432,6 +466,106 @@ ensure_manager_profile_file() {
   mkdir -p "$(dirname "$profile_file")" 2>/dev/null || true
   cp "$template_file" "$profile_file"
   info "Server Manager profile created: $profile_file"
+}
+
+ensure_manager_profile_catalog() {
+  # Seed MANAGER_PROFILE_TEMPLATE_DIR with shipped templates (copy only missing files).
+  local src_dir dest_dir f dest
+  src_dir="${MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR:-}"
+  dest_dir="${MANAGER_PROFILE_TEMPLATE_DIR:-}"
+
+  if [[ -z "$src_dir" || -z "$dest_dir" ]]; then
+    return 0
+  fi
+  if [[ "$src_dir" == "$dest_dir" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$dest_dir" 2>/dev/null || true
+
+  shopt -s nullglob
+  for f in "$src_dir"/*_server_manager.json; do
+    dest="$dest_dir/$(basename "$f")"
+    if [[ -e "$dest" ]]; then
+      continue
+    fi
+    if ! jq -e '.' "$f" >/dev/null 2>&1; then
+      warn "Invalid JSON in server manager profile template: $f (skipping)"
+      continue
+    fi
+    if cp "$f" "$dest" 2>/dev/null; then
+      chmod 600 "$dest" 2>/dev/null || true
+      chown enshrouded:enshrouded "$dest" 2>/dev/null || true
+    else
+      warn "Failed to seed Server Manager profile template: $dest"
+    fi
+  done
+  shopt -u nullglob
+}
+
+ensure_enshrouded_profile_file() {
+  local profile profile_file template_file
+  profile="$1"
+  profile_file="$(enshrouded_profile_path "$profile")"
+  template_file="$(enshrouded_profile_template_path "$profile")"
+
+  if [[ -f "$profile_file" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$template_file" ]]; then
+    warn "Enshrouded profile template not found: $template_file"
+    return 1
+  fi
+  if ! jq -e '.' "$template_file" >/dev/null 2>&1; then
+    warn "Invalid JSON in enshrouded profile template: $template_file"
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$profile_file")" 2>/dev/null || true
+  if cp "$template_file" "$profile_file" 2>/dev/null; then
+    chmod 600 "$profile_file" 2>/dev/null || true
+    chown enshrouded:enshrouded "$profile_file" 2>/dev/null || true
+    info "Enshrouded profile created: $profile_file"
+    return 0
+  fi
+
+  warn "Failed to create Enshrouded profile: $profile_file"
+  return 1
+}
+
+ensure_enshrouded_profile_catalog() {
+  # Seed EN_PROFILE_DIR with shipped templates (copy only missing files).
+  local src_dir dest_dir f dest
+  src_dir="${EN_PROFILE_TEMPLATE_DIR:-}"
+  dest_dir="${EN_PROFILE_DIR:-}"
+
+  if [[ -z "$src_dir" || -z "$dest_dir" ]]; then
+    return 0
+  fi
+  if [[ "$src_dir" == "$dest_dir" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$dest_dir" 2>/dev/null || true
+
+  shopt -s nullglob
+  for f in "$src_dir"/*_enshrouded_server.json; do
+    dest="$dest_dir/$(basename "$f")"
+    if [[ -e "$dest" ]]; then
+      continue
+    fi
+    if ! jq -e '.' "$f" >/dev/null 2>&1; then
+      warn "Invalid JSON in enshrouded profile template: $f (skipping)"
+      continue
+    fi
+    if cp "$f" "$dest" 2>/dev/null; then
+      chmod 600 "$dest" 2>/dev/null || true
+      chown enshrouded:enshrouded "$dest" 2>/dev/null || true
+    else
+      warn "Failed to seed Enshrouded profile template: $dest"
+    fi
+  done
+  shopt -u nullglob
 }
 
 manager_json_get() {
@@ -618,7 +752,12 @@ load_enshrouded_env_from_profile() {
   fi
 
   profile="$(enshrouded_profile_resolve)"
+  # Prefer a persisted profile file in EN_PROFILE_DIR, seed from shipped templates if needed.
+  ensure_enshrouded_profile_file "$profile" || true
   profile_file="$(enshrouded_profile_path "$profile")"
+  if [[ ! -f "$profile_file" ]]; then
+    profile_file="$(enshrouded_profile_template_path "$profile")"
+  fi
 
   if [[ ! -f "$profile_file" ]]; then
     return 1
@@ -659,9 +798,16 @@ load_enshrouded_env_from_profile() {
 }
 
 init_runtime_env() {
+  # Ensure MANAGER_PROFILE_TEMPLATE_DIR contains a persistent copy of shipped Server Manager templates.
+  ensure_manager_profile_catalog || true
+
   if ! update_or_create_manager_config; then
     fatal "Failed to initialize server_manager.json from profile"
   fi
+
+  # Ensure EN_PROFILE_DIR contains a persistent copy of shipped Enshrouded templates.
+  ensure_enshrouded_profile_catalog || true
+
   if ! load_enshrouded_env_from_profile; then
     fatal "Failed to load Enshrouded profile defaults"
   fi
@@ -681,7 +827,15 @@ ensure_enshrouded_config_from_profile() {
   profile="$(enshrouded_profile_resolve)"
   source_profile="$(enshrouded_profile_path "$profile")"
   if [[ ! -f "$source_profile" ]]; then
-    warn "No enshrouded profile file found: $EN_PROFILE_DIR"
+    # If EN_PROFILE_DIR is empty (fresh volume), fall back to shipped templates.
+    ensure_enshrouded_profile_file "$profile" || true
+    source_profile="$(enshrouded_profile_path "$profile")"
+  fi
+  if [[ ! -f "$source_profile" ]]; then
+    source_profile="$(enshrouded_profile_template_path "$profile")"
+  fi
+  if [[ ! -f "$source_profile" ]]; then
+    warn "No enshrouded profile file found for '$profile' (searched: $EN_PROFILE_DIR, $EN_PROFILE_TEMPLATE_DIR)"
     return 1
   fi
   if ! jq -e '.' "$source_profile" >/dev/null 2>&1; then
