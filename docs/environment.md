@@ -11,6 +11,19 @@ Profile selection is special:
 - The menu persists profile selection in `server_manager.json` under `actualProfilManager` / `actualProfilEnshrouded`.
 - `EN_PROFILE` / `MANAGER_PROFILE` ENV vars are mainly used for the first bootstrap (fresh volume / deleted config).
 
+## Validation Rules
+
+ENV input validation and interactive menu validation are driven by a single rule file:
+
+- `server_manager/shared/validation/vars.json`
+
+If you want to adjust allowed values, ranges, regex, or the menu hints for a variable, change that JSON.
+
+The rules support:
+
+- `required`: if `true`, empty/unset is invalid.
+- `envMode`: `hard` will abort bootstrap on invalid values, `soft` will only warn.
+
 ## Profile Selection
 
 | Variable | Description | Default |
@@ -103,7 +116,7 @@ Schema: `ENSHROUDED_ROLE_<index>_<FIELD>`
 
 ## Gameplay Variables
 
-Schema: `ENSHROUDED_GS_*` (fully validated in `server_manager/shared/env`).
+Schema: `ENSHROUDED_GS_*` (validated via `server_manager/shared/validation/vars.json`).
 
 - `ENSHROUDED_GS_PRESET`
 - `ENSHROUDED_GS_PLAYER_HEALTH_FACTOR`

@@ -402,12 +402,13 @@ menu_env_locked_badge() {
 menu_warn_env_overrides_before_manager_profile_selection() {
   local any v value
   any="false"
-  for v in "${MANAGER_VARS[@]}"; do
+  while IFS= read -r v; do
+    [[ -z "$v" ]] && continue
     if menu_env_override_is_set "$v"; then
       any="true"
       break
     fi
-  done
+  done < <(validation_list_vars_by_meta_field "managerJsonPath")
 
   if [[ "$any" != "true" ]]; then
     return 0
@@ -418,12 +419,13 @@ menu_warn_env_overrides_before_manager_profile_selection() {
   ui_warn_line "They will overwrite profile/template values on bootstrap or next container start."
   echo
   ui_note "Active overrides:"
-  for v in "${MANAGER_VARS[@]}"; do
+  while IFS= read -r v; do
+    [[ -z "$v" ]] && continue
     if menu_env_override_is_set "$v"; then
       value="$(menu_env_override_value "$v")"
       printf "%s=%s\n" "$v" "$(menu_env_override_pretty_value "$v" "$value")"
     fi
-  done
+  done < <(validation_list_vars_by_meta_field "managerJsonPath")
   echo
 
   if ! ui_confirm_yes_no "Continue anyway?"; then

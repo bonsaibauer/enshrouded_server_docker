@@ -56,70 +56,33 @@ enshrouded_editor_set_jq() {
   return 1
 }
 
-enshrouded_validate_ipv4_soft() {
-  local value
-  value="$1"
-  if [[ -z "$value" ]]; then
-    ui_warn_line "IP must not be empty."
-    return 1
-  fi
-  if ! [[ "$value" =~ ^([0-9]{1,3}\\.){3}[0-9]{1,3}$ ]]; then
-    ui_warn_line "Invalid IPv4: $value"
-    return 1
-  fi
-  return 0
-}
-
-enshrouded_validate_int_range_soft() {
-  local name value min max
-  name="$1"
-  value="$2"
-  min="$3"
-  max="$4"
-  if [[ -z "$value" ]] || ! [[ "$value" =~ ^[0-9]+$ ]]; then
-    ui_warn_line "$name must be a number (actual: $value)"
-    return 1
-  fi
-  if [[ "$value" -lt "$min" || "$value" -gt "$max" ]]; then
-    ui_warn_line "$name must be between $min and $max (actual: $value)"
-    return 1
-  fi
-  return 0
-}
-
-enshrouded_validate_bool_soft_local() {
-  local name value normalized
-  name="$1"
-  value="$2"
-  normalized="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
-  if [[ "$normalized" != "true" && "$normalized" != "false" ]]; then
-    ui_warn_line "$name must be true or false (actual: $value)"
-    return 1
-  fi
-  return 0
-}
-
 enshrouded_prompt_scalar() {
-  local label current hint value normalized
-  label="$1"
-  current="$2"
-  hint="$3"
+  local env_var label current value normalized desc hint type
+  env_var="$1"
+  label="$2"
+  current="$3"
 
   echo
   ui_kv "Field" "$label"
   ui_kv "Current" "${current:-<empty>}"
-  if [[ -n "$hint" ]]; then
-    ui_note "$hint"
+  if [[ -n "$env_var" ]]; then
+    desc="$(validation_var_description "$env_var" 2>/dev/null || true)"
+    hint="$(validation_var_allowed_hint "$env_var" 2>/dev/null || true)"
+    [[ -n "$desc" ]] && ui_note "$desc"
+    [[ -n "$hint" ]] && ui_note "$hint"
   fi
   echo
 
   value="$(ui_read "New value (empty = cancel): ")"
   value="$(echo "$value" | xargs)"
-  normalized="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
-  case "$normalized" in
-    1|ja|j|y|yes) value="true" ;;
-    0|nein|n|no) value="false" ;;
-  esac
+  type="$(validation_var_type "$env_var" 2>/dev/null || true)"
+  if [[ "$type" == "bool" ]]; then
+    normalized="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+      1|ja|j|y|yes) value="true" ;;
+      0|nein|n|no) value="false" ;;
+    esac
+  fi
   printf "%s" "$value"
 }
 
@@ -144,27 +107,21 @@ enshrouded_editor_block_if_env_locked() {
 }
 
 enshrouded_editor_role_locked_badge() {
-  local g env_var
+  local g env_var field
   g="$1"
 
   if ! declare -F menu_env_override_is_set >/dev/null 2>&1; then
     return 0
   fi
 
-  for env_var in \
-    "ENSHROUDED_ROLE_${g}_NAME" \
-    "ENSHROUDED_ROLE_${g}_PASSWORD" \
-    "ENSHROUDED_ROLE_${g}_RESERVED_SLOTS" \
-    "ENSHROUDED_ROLE_${g}_CAN_KICK_BAN" \
-    "ENSHROUDED_ROLE_${g}_CAN_ACCESS_INVENTORIES" \
-    "ENSHROUDED_ROLE_${g}_CAN_EDIT_WORLD" \
-    "ENSHROUDED_ROLE_${g}_CAN_EDIT_BASE" \
-    "ENSHROUDED_ROLE_${g}_CAN_EXTEND_BASE"; do
+  while IFS= read -r field; do
+    [[ -z "$field" ]] && continue
+    env_var="ENSHROUDED_ROLE_${g}_${field}"
     if menu_env_override_is_set "$env_var"; then
       printf " %s" "${C_RED}[ENV]${C_RESET}"
       return 0
     fi
-  done
+  done < <(validation_list_template_fields "ENSHROUDED_ROLE")
 
   return 0
 }
@@ -194,17 +151,148 @@ enshrouded_editor_set_bool() {
 }
 
 enshrouded_editor_set_tags() {
-  local file tags_csv
+  local file env_var tags_csv
   file="$1"
-  tags_csv="$2"
+  env_var="$2"
+  tags_csv="$3"
   if [[ -z "$tags_csv" ]]; then
     enshrouded_editor_set_jq "$file" '.tags = []'
     return $?
   fi
-  if ! validate_tags "$tags_csv"; then
+  if ! validation_check "$env_var" "$tags_csv"; then
+    ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid tags}"
     return 1
   fi
   enshrouded_editor_set_jq "$file" --arg tags "$tags_csv" '.tags = ($tags | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)))'
+}
+
+enshrouded_editor_label_from_json_path() {
+  local path
+  path="$1"
+  path="${path#.}"
+  printf "%s" "$path"
+}
+
+enshrouded_editor_display_value_for_var() {
+  local file env_var json_path raw
+  file="$1"
+  env_var="$2"
+  json_path="$3"
+
+  if menu_env_override_is_set "$env_var"; then
+    raw="$(menu_env_override_value "$env_var")"
+    if [[ -z "$raw" ]]; then
+      printf "%s" "${C_DIM}<empty>${C_RESET}"
+    else
+      printf "%s%s%s" "${C_RED}" "$raw" "${C_RESET}"
+    fi
+    return 0
+  fi
+
+  if [[ "$json_path" == ".tags" ]]; then
+    raw="$(jq -r '.tags // [] | join(",")' "$file" 2>/dev/null || echo "")"
+  else
+    raw="$(enshrouded_editor_get_raw "$file" "$json_path")"
+  fi
+
+  if [[ -z "$raw" ]]; then
+    printf "%s" "${C_DIM}<empty>${C_RESET}"
+  else
+    printf "%s%s%s" "${C_GREEN}" "$raw" "${C_RESET}"
+  fi
+}
+
+enshrouded_editor_edit_var() {
+  # Edit a top-level config value based on the validation spec.
+  local file env_var json_path label type current v desc hint cur normalized
+  file="$1"
+  env_var="$2"
+
+  if ! enshrouded_editor_block_if_env_locked "$env_var"; then
+    return 0
+  fi
+
+  json_path="$(validation_var_meta_field "$env_var" "enshroudedMenuJsonPath" 2>/dev/null || true)"
+  if [[ -z "$json_path" ]]; then
+    ui_warn_line "No config mapping for: $env_var"
+    ui_pause
+    return 0
+  fi
+
+  label="$(enshrouded_editor_label_from_json_path "$json_path")"
+  type="$(validation_var_type "$env_var" 2>/dev/null || true)"
+  [[ -z "$type" ]] && type="string"
+
+  if [[ "$json_path" == ".tags" ]]; then
+    current="$(jq -r '.tags // [] | join(",")' "$file" 2>/dev/null || echo "")"
+    echo
+    ui_kv "Field" "$label"
+    ui_kv "Current" "${current:-<empty>}"
+    desc="$(validation_var_description "$env_var" 2>/dev/null || true)"
+    hint="$(validation_var_allowed_hint "$env_var" 2>/dev/null || true)"
+    [[ -n "$desc" ]] && ui_note "$desc"
+    [[ -n "$hint" ]] && ui_note "$hint"
+    echo
+    v="$(ui_read "Tags (empty = clear): ")"
+    v="$(echo "$v" | xargs)"
+    if ! enshrouded_editor_set_tags "$file" "$env_var" "$v"; then
+      ui_pause
+    fi
+    return 0
+  fi
+
+  if [[ "$type" == "bool" ]]; then
+    cur="$(enshrouded_editor_get_raw "$file" "$json_path")"
+    [[ -z "$cur" ]] && cur="false"
+    echo
+    ui_kv "Field" "$label"
+    ui_kv "Current" "$cur"
+    ui_note "Enter = toggle (current: $cur)"
+    desc="$(validation_var_description "$env_var" 2>/dev/null || true)"
+    hint="$(validation_var_allowed_hint "$env_var" 2>/dev/null || true)"
+    [[ -n "$desc" ]] && ui_note "$desc"
+    [[ -n "$hint" ]] && ui_note "$hint"
+    v="$(ui_read "New value (true/false or empty): ")"
+    v="$(echo "$v" | xargs)"
+    if [[ -z "$v" ]]; then
+      if [[ "$cur" == "true" ]]; then v="false"; else v="true"; fi
+    fi
+    normalized="$(echo "$v" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+      1|ja|j|y|yes) v="true" ;;
+      0|nein|n|no) v="false" ;;
+      *) v="$normalized" ;;
+    esac
+    if validation_check "$env_var" "$v"; then
+      enshrouded_editor_set_bool "$file" "$json_path" "$v" || true
+    else
+      ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value}"
+      ui_pause
+    fi
+    return 0
+  fi
+
+  current="$(enshrouded_editor_get_raw "$file" "$json_path")"
+  v="$(enshrouded_prompt_scalar "$env_var" "$label" "$current")"
+  if [[ -z "$v" ]]; then
+    return 0
+  fi
+  if ! validation_check "$env_var" "$v"; then
+    ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value}"
+    ui_pause
+    return 0
+  fi
+
+  case "$type" in
+    int|number)
+      enshrouded_editor_set_number "$file" "$json_path" "$v" || true
+      ;;
+    *)
+      enshrouded_editor_set_string "$file" "$json_path" "$v" || true
+      ;;
+  esac
+
+  return 0
 }
 
 enshrouded_editor_game_settings_definitions() {
@@ -372,7 +460,7 @@ enshrouded_editor_game_settings_menu() {
       continue
     fi
 
-    local key_index new_value key type suffix path current_raw
+    local key_index new_value key type suffix path current_raw env_var
     key_index=$((choice - 1))
     if [[ "$key_index" -lt 0 || "$key_index" -ge "${#keys[@]}" ]]; then
       ui_warn_line "Invalid selection."
@@ -385,39 +473,34 @@ enshrouded_editor_game_settings_menu() {
     suffix="${suffixes[$key_index]}"
     path=".gameSettings.${key}"
     current_raw="$(enshrouded_editor_get_raw "$file" "$path")"
+    env_var="ENSHROUDED_GS_${suffix}"
 
-    if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_GS_${suffix}"; then
+    if ! enshrouded_editor_block_if_env_locked "$env_var"; then
       continue
     fi
 
-    new_value="$(enshrouded_prompt_scalar "$key" "$current_raw" "")"
+    new_value="$(enshrouded_prompt_scalar "$env_var" "$key" "$current_raw")"
     if [[ -z "$new_value" ]]; then
       ui_note "Cancelled."
       ui_pause
       continue
     fi
 
-    if ! validate_game_setting "$suffix" "$new_value"; then
-      ui_warn_line "Invalid value, not saved."
+    if [[ "$type" == "bool" ]]; then
+      new_value="$(echo "$new_value" | tr '[:upper:]' '[:lower:]')"
+    fi
+
+    if ! validation_check "$env_var" "$new_value"; then
+      ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value, not saved.}"
       ui_pause
       continue
     fi
 
     case "$type" in
       bool)
-        new_value="$(echo "$new_value" | tr '[:upper:]' '[:lower:]')"
-        if ! enshrouded_validate_bool_soft_local "$key" "$new_value"; then
-          ui_pause
-          continue
-        fi
         enshrouded_editor_set_bool "$file" "$path" "$new_value" || true
         ;;
       number)
-        if ! is_number "$new_value"; then
-          ui_warn_line "Must be numeric (actual: $new_value)"
-          ui_pause
-          continue
-        fi
         enshrouded_editor_set_number "$file" "$path" "$new_value" || true
         ;;
       *)
@@ -602,8 +685,9 @@ enshrouded_editor_user_groups_menu() {
           if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_ROLE_${g}_NAME"; then
             continue
           fi
-          local v
-          v="$(enshrouded_prompt_scalar "name" "$current_name" "")"
+          local v env_var
+          env_var="ENSHROUDED_ROLE_${g}_NAME"
+          v="$(enshrouded_prompt_scalar "$env_var" "name" "$current_name")"
           if [[ -z "$v" ]]; then
             ui_note "Cancelled."
             ui_pause
@@ -617,6 +701,12 @@ enshrouded_editor_user_groups_menu() {
           fi
           local v
           echo
+          local env_var desc hint
+          env_var="ENSHROUDED_ROLE_${g}_PASSWORD"
+          desc="$(validation_var_description "$env_var" 2>/dev/null || true)"
+          hint="$(validation_var_allowed_hint "$env_var" 2>/dev/null || true)"
+          [[ -n "$desc" ]] && ui_note "$desc"
+          [[ -n "$hint" ]] && ui_note "$hint"
           ui_note "Empty = password will be set to null (may be auto-generated after bootstrap)."
           v="$(ui_read "New password: ")"
           v="$(echo "$v" | xargs)"
@@ -630,16 +720,17 @@ enshrouded_editor_user_groups_menu() {
           if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_ROLE_${g}_RESERVED_SLOTS"; then
             continue
           fi
-          local v
-          v="$(enshrouded_prompt_scalar "reservedSlots" "$reserved" "Allowed: integer >= 0")"
+          local v env_var
+          env_var="ENSHROUDED_ROLE_${g}_RESERVED_SLOTS"
+          v="$(enshrouded_prompt_scalar "$env_var" "reservedSlots" "$reserved")"
           if [[ -z "$v" ]]; then
             ui_note "Cancelled."
             ui_pause
-          elif ! [[ "$v" =~ ^[0-9]+$ ]]; then
-            ui_warn_line "reservedSlots must be numeric."
-            ui_pause
-          else
+          elif validation_check "$env_var" "$v"; then
             enshrouded_editor_set_number "$file" "$base.reservedSlots" "$v" || true
+          else
+            ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value}"
+            ui_pause
           fi
           ;;
         4|5|6|7|8)
@@ -711,30 +802,39 @@ editor_enshrouded_json() {
     echo
 
     field_count=0
+    local -a options
+    options=()
+    local last_group var group json_path label
+    last_group=""
 
-    echo "${C_DIM}== Server ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "name" "$(menu_env_override_is_set "ENSHROUDED_NAME" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_NAME")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.name')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_NAME")"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "ip" "$(menu_env_override_is_set "ENSHROUDED_IP" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_IP")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.ip')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_IP")"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "queryPort" "$(menu_env_override_is_set "ENSHROUDED_QUERY_PORT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_QUERY_PORT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.queryPort')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_QUERY_PORT")"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "slotCount" "$(menu_env_override_is_set "ENSHROUDED_SLOT_COUNT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_SLOT_COUNT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.slotCount')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_SLOT_COUNT")"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "saveDirectory" "$(menu_env_override_is_set "ENSHROUDED_SAVE_DIR" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_SAVE_DIR")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.saveDirectory')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_SAVE_DIR")"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "logDirectory" "$(menu_env_override_is_set "ENSHROUDED_LOG_DIR" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_LOG_DIR")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.logDirectory')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_LOG_DIR")"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "tags" "$(menu_env_override_is_set "ENSHROUDED_TAGS" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_TAGS")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(jq -r '.tags // [] | join(\",\")' "$config_file" 2>/dev/null || echo "")" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_TAGS")"
-    echo
+    while IFS= read -r var; do
+      [[ -z "$var" ]] && continue
+      json_path="$(validation_var_meta_field "$var" "enshroudedMenuJsonPath" 2>/dev/null || true)"
+      [[ -z "$json_path" ]] && continue
+      group="$(validation_var_meta_field "$var" "menuGroup" 2>/dev/null || true)"
+      label="$(enshrouded_editor_label_from_json_path "$json_path")"
 
-    echo "${C_DIM}== Voice / Text ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "voiceChatMode" "$(menu_env_override_is_set "ENSHROUDED_VOICE_CHAT_MODE" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_VOICE_CHAT_MODE")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.voiceChatMode')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_VOICE_CHAT_MODE")"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "enableVoiceChat" "$(menu_env_override_is_set "ENSHROUDED_ENABLE_VOICE_CHAT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_ENABLE_VOICE_CHAT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.enableVoiceChat')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_ENABLE_VOICE_CHAT")"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "enableTextChat" "$(menu_env_override_is_set "ENSHROUDED_ENABLE_TEXT_CHAT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_ENABLE_TEXT_CHAT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.enableTextChat')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_ENABLE_TEXT_CHAT")"
-    echo
+      if [[ "$group" != "$last_group" ]]; then
+        [[ -n "$last_group" ]] && echo
+        echo "${C_DIM}== ${group:-Settings} ==${C_RESET}"
+        last_group="$group"
+      fi
 
-    echo "${C_DIM}== Game ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "gameSettingsPreset" "$(menu_env_override_is_set "ENSHROUDED_GS_PRESET" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_GS_PRESET")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.gameSettingsPreset')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_GS_PRESET")"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "gameSettings (submenu)" "${C_DIM}<enter>${C_RESET}"
+      options+=("$var")
+      field_count=$((field_count + 1))
+      printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$label" "$(enshrouded_editor_display_value_for_var "$config_file" "$var" "$json_path")" "$(menu_env_locked_badge "$var")"
+    done < <(validation_list_vars_by_meta_field_ordered "enshroudedMenuJsonPath" "menuOrder")
+
+    # Keep submenu entries visible in the top-level editor.
+    options+=("__submenu_game_settings")
+    field_count=$((field_count + 1))
+    printf "%s[%s]%s %-24s %s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "gameSettings (submenu)" "${C_DIM}<enter>${C_RESET}"
     echo
 
     echo "${C_DIM}== Access ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "userGroups (submenu)" "${C_DIM}<enter>${C_RESET}"
+    options+=("__submenu_user_groups")
+    field_count=$((field_count + 1))
+    printf "%s[%s]%s %-24s %s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "userGroups (submenu)" "${C_DIM}<enter>${C_RESET}"
     echo
 
     ui_actions_bar "0 Back" "m Main" "x Exit"
@@ -756,168 +856,23 @@ editor_enshrouded_json() {
         ;;
     esac
 
-    case "$choice" in
-      1)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_NAME"; then
-          continue
-        fi
-        local v
-        v="$(enshrouded_prompt_scalar "name" "$(enshrouded_editor_get_raw "$config_file" '.name')" "")"
-        if [[ -n "$v" ]]; then
-          enshrouded_editor_set_string "$config_file" ".name" "$v" || true
-        fi
-        ;;
-      2)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_IP"; then
-          continue
-        fi
-        local v
-        v="$(enshrouded_prompt_scalar "ip" "$(enshrouded_editor_get_raw "$config_file" '.ip')" "IPv4 e.g. 0.0.0.0")"
-        if [[ -n "$v" ]]; then
-          if enshrouded_validate_ipv4_soft "$v"; then
-            enshrouded_editor_set_string "$config_file" ".ip" "$v" || true
-          else
-            ui_pause
-          fi
-        fi
-        ;;
-      3)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_QUERY_PORT"; then
-          continue
-        fi
-        local v
-        v="$(enshrouded_prompt_scalar "queryPort" "$(enshrouded_editor_get_raw "$config_file" '.queryPort')" "1..65535")"
-        if [[ -n "$v" ]]; then
-          if enshrouded_validate_int_range_soft "queryPort" "$v" 1 65535; then
-            enshrouded_editor_set_number "$config_file" ".queryPort" "$v" || true
-          else
-            ui_pause
-          fi
-        fi
-        ;;
-      4)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_SLOT_COUNT"; then
-          continue
-        fi
-        local v
-        v="$(enshrouded_prompt_scalar "slotCount" "$(enshrouded_editor_get_raw "$config_file" '.slotCount')" "1..16")"
-        if [[ -n "$v" ]]; then
-          if enshrouded_validate_int_range_soft "slotCount" "$v" 1 16; then
-            enshrouded_editor_set_number "$config_file" ".slotCount" "$v" || true
-          else
-            ui_pause
-          fi
-        fi
-        ;;
-      5)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_SAVE_DIR"; then
-          continue
-        fi
-        local v
-        v="$(enshrouded_prompt_scalar "saveDirectory" "$(enshrouded_editor_get_raw "$config_file" '.saveDirectory')" "")"
-        if [[ -n "$v" ]]; then
-          enshrouded_editor_set_string "$config_file" ".saveDirectory" "$v" || true
-        fi
-        ;;
-      6)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_LOG_DIR"; then
-          continue
-        fi
-        local v
-        v="$(enshrouded_prompt_scalar "logDirectory" "$(enshrouded_editor_get_raw "$config_file" '.logDirectory')" "")"
-        if [[ -n "$v" ]]; then
-          enshrouded_editor_set_string "$config_file" ".logDirectory" "$v" || true
-        fi
-        ;;
-      7)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_TAGS"; then
-          continue
-        fi
-        local v
-        echo
-        ui_note "Comma-separated, allowed: A-Z a-z 0-9 . _ -"
-        ui_note "Empty = [] (clears all tags)"
-        v="$(ui_read "Tags: ")"
-        v="$(echo "$v" | xargs)"
-        if ! enshrouded_editor_set_tags "$config_file" "$v"; then
-          ui_pause
-        fi
-        ;;
-      8)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_VOICE_CHAT_MODE"; then
-          continue
-        fi
-        local v
-        v="$(enshrouded_prompt_scalar "voiceChatMode" "$(enshrouded_editor_get_raw "$config_file" '.voiceChatMode')" "Proximity | Global")"
-        if [[ -n "$v" ]]; then
-          if validate_enum_soft "voiceChatMode" "$v" Proximity Global; then
-            enshrouded_editor_set_string "$config_file" ".voiceChatMode" "$v" || true
-          else
-            ui_pause
-          fi
-        fi
-        ;;
-      9)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_ENABLE_VOICE_CHAT"; then
-          continue
-        fi
-        local v cur
-        cur="$(enshrouded_editor_get_raw "$config_file" '.enableVoiceChat')"
-        ui_note "Enter = toggle (current: ${cur:-false})"
-        v="$(ui_read "New value (true/false or empty): ")"
-        v="$(echo "$v" | xargs)"
-        if [[ -z "$v" ]]; then
-          if [[ "$cur" == "true" ]]; then v="false"; else v="true"; fi
-        fi
-        v="$(echo "$v" | tr '[:upper:]' '[:lower:]')"
-        if enshrouded_validate_bool_soft_local "enableVoiceChat" "$v"; then
-          enshrouded_editor_set_bool "$config_file" ".enableVoiceChat" "$v" || true
-        else
-          ui_pause
-        fi
-        ;;
-      10)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_ENABLE_TEXT_CHAT"; then
-          continue
-        fi
-        local v cur
-        cur="$(enshrouded_editor_get_raw "$config_file" '.enableTextChat')"
-        ui_note "Enter = toggle (current: ${cur:-false})"
-        v="$(ui_read "New value (true/false or empty): ")"
-        v="$(echo "$v" | xargs)"
-        if [[ -z "$v" ]]; then
-          if [[ "$cur" == "true" ]]; then v="false"; else v="true"; fi
-        fi
-        v="$(echo "$v" | tr '[:upper:]' '[:lower:]')"
-        if enshrouded_validate_bool_soft_local "enableTextChat" "$v"; then
-          enshrouded_editor_set_bool "$config_file" ".enableTextChat" "$v" || true
-        else
-          ui_pause
-        fi
-        ;;
-      11)
-        if ! enshrouded_editor_block_if_env_locked "ENSHROUDED_GS_PRESET"; then
-          continue
-        fi
-        local v
-        v="$(enshrouded_prompt_scalar "gameSettingsPreset" "$(enshrouded_editor_get_raw "$config_file" '.gameSettingsPreset')" "Default | Relaxed | Hard | Survival | Custom")"
-        if [[ -n "$v" ]]; then
-          if validate_game_setting "PRESET" "$v"; then
-            enshrouded_editor_set_string "$config_file" ".gameSettingsPreset" "$v" || true
-          else
-            ui_pause
-          fi
-        fi
-        ;;
-      12)
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 || "$choice" -gt "$field_count" ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    local selected
+    selected="${options[$((choice - 1))]}"
+    case "$selected" in
+      __submenu_game_settings)
         enshrouded_editor_game_settings_menu "$config_file"
         ;;
-      13)
+      __submenu_user_groups)
         enshrouded_editor_user_groups_menu "$config_file"
         ;;
       *)
-        ui_warn_line "Invalid selection."
-        ui_pause
+        enshrouded_editor_edit_var "$config_file" "$selected" || true
         ;;
     esac
   done

@@ -54,22 +54,31 @@ manager_editor_prompt_value() {
   local var current type prompt value normalized
   var="$1"
   current="$2"
-  type="${MANAGER_TYPE[$var]-string}"
+  type="$(validation_var_type "$var" 2>/dev/null || true)"
+  [[ -z "$type" ]] && type="string"
 
   echo
   ui_kv "Key" "$var"
   ui_kv "Current" "${current:-<null>}"
-  case "$type" in
-    bool)
-      ui_note "Allowed: true | false (empty = null)"
-      ;;
-    int)
-      ui_note "Allowed: integer (empty = null)"
-      ;;
-    *)
-      ui_note "String (empty = null)"
-      ;;
-  esac
+  local desc allowed_hint
+  desc="$(validation_var_description "$var" 2>/dev/null || true)"
+  allowed_hint="$(validation_var_allowed_hint "$var" 2>/dev/null || true)"
+  if [[ -n "$desc" ]]; then
+    ui_note "$desc"
+  fi
+  if [[ -n "$allowed_hint" ]]; then
+    ui_note "$allowed_hint"
+  fi
+  local required allow_empty
+  required="$(validation_var_required "$var" 2>/dev/null || true)"
+  allow_empty="$(validation_rule_json "$var" 2>/dev/null | jq -r '.allowEmpty // true' 2>/dev/null || echo "true")"
+  if [[ "$required" == "true" ]]; then
+    ui_note "Empty is not allowed"
+  elif [[ "$allow_empty" == "true" ]]; then
+    ui_note "Empty = null"
+  else
+    ui_note "Empty is not allowed"
+  fi
   echo
 
   prompt="New value"
@@ -126,60 +135,13 @@ editor_manager_json() {
 
     field_count=0
 
-    echo "${C_DIM}== Identity ==${C_RESET}"
-    for v in PUID PGID; do
+    echo "${C_DIM}== Settings ==${C_RESET}"
+    while IFS= read -r v; do
+      [[ -z "$v" ]] && continue
       options_vars+=("$v")
       field_count=$((field_count + 1))
       printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
-    done
-    echo
-
-    echo "${C_DIM}== Steam ==${C_RESET}"
-    for v in STEAM_APP_ID GAME_BRANCH STEAMCMD_ARGS; do
-      options_vars+=("$v")
-      field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
-    done
-    echo
-
-    echo "${C_DIM}== Logging ==${C_RESET}"
-    for v in LOG_COLOR WINEDEBUG; do
-      options_vars+=("$v")
-      field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
-    done
-    echo
-
-    echo "${C_DIM}== Save ==${C_RESET}"
-    for v in SAVEFILE_NAME; do
-      options_vars+=("$v")
-      field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
-    done
-    echo
-
-    echo "${C_DIM}== Update / Restart ==${C_RESET}"
-    for v in UPDATE_CHECK_PLAYERS RESTART_CHECK_PLAYERS UPDATE_CRON RESTART_CRON UPDATE_PRE_HOOK UPDATE_POST_HOOK RESTART_PRE_HOOK RESTART_POST_HOOK; do
-      options_vars+=("$v")
-      field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
-    done
-    echo
-
-    echo "${C_DIM}== Backup ==${C_RESET}"
-    for v in BACKUP_DIR BACKUP_MAX_COUNT BACKUP_CRON BACKUP_PRE_HOOK BACKUP_POST_HOOK; do
-      options_vars+=("$v")
-      field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
-    done
-    echo
-
-    echo "${C_DIM}== Bootstrap ==${C_RESET}"
-    for v in BOOTSTRAP_HOOK; do
-      options_vars+=("$v")
-      field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
-    done
+    done < <(validation_list_vars_by_meta_field "managerJsonPath")
     echo
 
     ui_actions_bar "0 Back" "m Main" "x Exit"
@@ -219,8 +181,8 @@ editor_manager_json() {
       current="$(manager_json_get "$config_file" "$var")"
 
       new_value="$(manager_editor_prompt_value "$var" "$current")"
-      if ! validate_manager_value "$var" "$new_value" "soft"; then
-        ui_warn_line "Invalid value, not saved."
+      if ! validation_check "$var" "$new_value"; then
+        ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value, not saved.}"
         ui_pause
         continue
       fi

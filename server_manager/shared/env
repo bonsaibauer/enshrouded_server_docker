@@ -1,506 +1,83 @@
 #!/usr/bin/env bash
 
-ENSHROUDED_NAME="${ENSHROUDED_NAME:-}"
-ENSHROUDED_SAVE_DIR="${ENSHROUDED_SAVE_DIR:-}"
-ENSHROUDED_LOG_DIR="${ENSHROUDED_LOG_DIR:-}"
-ENSHROUDED_IP="${ENSHROUDED_IP:-}"
-ENSHROUDED_QUERY_PORT="${ENSHROUDED_QUERY_PORT:-}"
-ENSHROUDED_SLOT_COUNT="${ENSHROUDED_SLOT_COUNT:-}"
-ENSHROUDED_TAGS="${ENSHROUDED_TAGS:-}"
-ENSHROUDED_VOICE_CHAT_MODE="${ENSHROUDED_VOICE_CHAT_MODE:-}"
-ENSHROUDED_ENABLE_VOICE_CHAT="${ENSHROUDED_ENABLE_VOICE_CHAT:-}"
-ENSHROUDED_ENABLE_TEXT_CHAT="${ENSHROUDED_ENABLE_TEXT_CHAT:-}"
-ENSHROUDED_GS_PRESET="${ENSHROUDED_GS_PRESET:-}"
-
-is_bool() {
-  case "$1" in
-    true|false) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-is_number() {
-  [[ "$1" =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]
-}
-
-validate_bool() {
-  local name value
-  name="$1"
-  value="$2"
-  if [[ -n "$value" ]] && ! is_bool "$value"; then
-    fatal "$name must be true or false (actual: $value)"
-  fi
-}
-
-validate_bool_soft() {
-  local name value
-  name="$1"
-  value="$2"
-  if [[ -n "$value" ]] && ! is_bool "$value"; then
-    warn "$name must be true or false (actual: $value)"
-    return 1
-  fi
-  return 0
-}
-
-validate_enum() {
-  local name value allowed
-  name="$1"
-  value="$2"
-  shift 2
-  for allowed in "$@"; do
-    if [[ "$value" == "$allowed" ]]; then
-      return 0
-    fi
-  done
-  fatal "$name must be one of: $* (actual: $value)"
-}
-
-validate_enum_soft() {
-  local name value allowed
-  name="$1"
-  value="$2"
-  shift 2
-  for allowed in "$@"; do
-    if [[ "$value" == "$allowed" ]]; then
-      return 0
-    fi
-  done
-  warn "$name must be one of: $* (actual: $value)"
-  return 1
-}
-
-validate_number_range_soft() {
-  local name value min max
-  name="$1"
-  value="$2"
-  min="$3"
-  max="$4"
-  if ! is_number "$value"; then
-    warn "$name must be numeric (actual: $value)"
-    return 1
-  fi
-  if awk -v v="$value" -v min="$min" -v max="$max" 'BEGIN { exit !(v >= min && v <= max) }'; then
-    return 0
-  fi
-  warn "$name must be between $min and $max (actual: $value)"
-  return 1
-}
-
-normalize_log_level() {
-  local value lowered
-  value="$1"
-  lowered="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
-  case "$lowered" in
-    debug|info|warn|error)
-      echo "$lowered"
-      return 0
-      ;;
-    *)
-      echo "info"
-      return 1
-      ;;
-  esac
-}
-
-manager_validation_fail() {
-  local mode
-  mode="$1"
-  shift
-  if [[ "$mode" == "hard" ]]; then
-    fatal "$@"
-  else
-    warn "$@"
-    return 1
-  fi
-}
-
-validate_int_min() {
-  local name value min mode
-  name="$1"
-  value="$2"
-  min="$3"
-  mode="$4"
-  if ! [[ "$value" =~ ^[0-9]+$ ]] || [[ "$value" -lt "$min" ]]; then
-    manager_validation_fail "$mode" "$name must be an integer >= $min (actual: $value)"
-    return 1
-  fi
-  return 0
-}
-
-validate_number_min() {
-  local name value min mode
-  name="$1"
-  value="$2"
-  min="$3"
-  mode="$4"
-  if ! is_number "$value"; then
-    manager_validation_fail "$mode" "$name must be numeric (actual: $value)"
-    return 1
-  fi
-  if awk -v v="$value" -v min="$min" 'BEGIN { exit !(v >= min) }'; then
-    return 0
-  fi
-  manager_validation_fail "$mode" "$name must be >= $min (actual: $value)"
-  return 1
-}
-
-validate_manager_value() {
-  local var value mode
-  var="$1"
-  value="$2"
-  mode="$3"
-
-  case "$var" in
-    PUID|PGID)
-      if [[ -z "$value" ]]; then
-        return 0
-      fi
-      validate_int_min "$var" "$value" 1 "$mode"
-      return $?
-      ;;
-    STEAM_APP_ID)
-      if [[ -z "$value" ]]; then
-        return 0
-      fi
-      validate_int_min "$var" "$value" 1 "$mode"
-      return $?
-      ;;
-    STOP_TIMEOUT)
-      validate_int_min "$var" "$value" 1 "$mode"
-      return $?
-      ;;
-    AUTO_UPDATE_INTERVAL)
-      validate_int_min "$var" "$value" 1 "$mode"
-      return $?
-      ;;
-    A2S_RETRIES)
-      validate_int_min "$var" "$value" 0 "$mode"
-      return $?
-      ;;
-    BACKUP_MAX_COUNT)
-      validate_int_min "$var" "$value" 0 "$mode"
-      return $?
-      ;;
-    A2S_TIMEOUT)
-      validate_number_min "$var" "$value" 0 "$mode"
-      return $?
-      ;;
-    A2S_RETRY_DELAY)
-      validate_number_min "$var" "$value" 0 "$mode"
-      return $?
-      ;;
-    AUTO_FIX_DIR_MODE|AUTO_FIX_FILE_MODE)
-      if [[ -n "$value" ]] && ! [[ "$value" =~ ^[0-7]{3,4}$ ]]; then
-        manager_validation_fail "$mode" "$var must be an octal string like 775 (actual: $value)"
-        return 1
-      fi
-      ;;
-    UMASK)
-      if [[ -n "$value" ]] && ! [[ "$value" =~ ^[0-7]{3,4}$ ]]; then
-        manager_validation_fail "$mode" "$var must be an octal string like 027 (actual: $value)"
-        return 1
-      fi
-      ;;
-    LOG_LEVEL)
-      if [[ -n "$value" ]]; then
-        case "$(echo "$value" | tr '[:upper:]' '[:lower:]')" in
-          debug|info|warn|error) ;;
-          *)
-            manager_validation_fail "$mode" "$var must be one of: debug info warn error (actual: $value)"
-            return 1
-            ;;
-        esac
-      fi
-      ;;
-    AUTO_UPDATE|AUTO_UPDATE_ON_BOOT|AUTO_RESTART_ON_UPDATE|SAFE_MODE|UPDATE_CHECK_PLAYERS|RESTART_CHECK_PLAYERS|ENABLE_CRON|PRINT_GROUP_PASSWORDS|LOG_COLOR)
-      if [[ "$mode" == "hard" ]]; then
-        validate_bool "$var" "$value"
-      else
-        validate_bool_soft "$var" "$value"
-      fi
-      return $?
-      ;;
-  esac
-}
-
-validate_tags() {
-  local tag_list tag trimmed
-  tag_list="$1"
-  IFS=',' read -r -a tags <<<"$tag_list"
-  for tag in "${tags[@]}"; do
-    trimmed="$(echo "$tag" | xargs)"
-    if [[ -z "$trimmed" ]]; then
-      warn "ENSHROUDED_TAGS contains an empty tag"
-      return 1
-    fi
-    if ! [[ "$trimmed" =~ ^[A-Za-z0-9._-]+$ ]]; then
-      warn "ENSHROUDED_TAGS contains invalid tag: $trimmed"
-      return 1
-    fi
-  done
-  return 0
-}
-
-validate_game_setting() {
-  local suffix value name
-  suffix="$1"
-  value="$2"
-  name="ENSHROUDED_GS_${suffix}"
-
-  case "$suffix" in
-    PRESET)
-      validate_enum_soft "$name" "$value" Default Relaxed Hard Survival Custom
-      ;;
-    PLAYER_HEALTH_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 4
-      ;;
-    PLAYER_MANA_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 4
-      ;;
-    PLAYER_STAMINA_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 4
-      ;;
-    PLAYER_BODY_HEAT_FACTOR)
-      validate_enum_soft "$name" "$value" 0.5 1 1.5 2
-      ;;
-    PLAYER_DIVING_TIME_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.5 2
-      ;;
-    ENABLE_DURABILITY|ENABLE_STARVING_DEBUFF|ENABLE_GLIDER_TURBULENCES|PACIFY_ALL_ENEMIES)
-      validate_bool_soft "$name" "$value"
-      ;;
-    FOOD_BUFF_DURATION_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.5 2
-      ;;
-    FROM_HUNGER_TO_STARVING)
-      validate_number_range_soft "$name" "$value" 300000000000 1200000000000
-      ;;
-    SHROUD_TIME_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.5 2
-      ;;
-    TOMBSTONE_MODE)
-      validate_enum_soft "$name" "$value" AddBackpackMaterials Everything NoTombstone
-      ;;
-    WEATHER_FREQUENCY)
-      validate_enum_soft "$name" "$value" Disabled Rare Normal Often
-      ;;
-    FISHING_DIFFICULTY)
-      validate_enum_soft "$name" "$value" VeryEasy Easy Normal Hard VeryHard
-      ;;
-    MINING_DAMAGE_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.5 2
-      ;;
-    PLANT_GROWTH_SPEED_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 2
-      ;;
-    RESOURCE_DROP_STACK_AMOUNT_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 2
-      ;;
-    FACTORY_PRODUCTION_SPEED_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 2
-      ;;
-    PERK_UPGRADE_RECYCLING_FACTOR)
-      validate_number_range_soft "$name" "$value" 0 1
-      ;;
-    PERK_COST_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 2
-      ;;
-    EXPERIENCE_COMBAT_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 2
-      ;;
-    EXPERIENCE_MINING_FACTOR)
-      validate_number_range_soft "$name" "$value" 0 2
-      ;;
-    EXPERIENCE_EXPLORATION_QUESTS_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 2
-      ;;
-    RANDOM_SPAWNER_AMOUNT)
-      validate_enum_soft "$name" "$value" Few Normal Many Extreme
-      ;;
-    AGGRO_POOL_AMOUNT)
-      validate_enum_soft "$name" "$value" Few Normal Many Extreme
-      ;;
-    ENEMY_DAMAGE_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 5
-      ;;
-    ENEMY_HEALTH_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.25 4
-      ;;
-    ENEMY_STAMINA_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.5 2
-      ;;
-    ENEMY_PERCEPTION_RANGE_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.5 2
-      ;;
-    BOSS_DAMAGE_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.2 5
-      ;;
-    BOSS_HEALTH_FACTOR)
-      validate_number_range_soft "$name" "$value" 0.2 5
-      ;;
-    THREAT_BONUS)
-      validate_number_range_soft "$name" "$value" 0.25 4
-      ;;
-    TAMING_STARTLE_REPERCUSSION)
-      validate_enum_soft "$name" "$value" KeepProgress LoseSomeProgress LoseAllProgress
-      ;;
-    DAY_TIME_DURATION)
-      validate_number_range_soft "$name" "$value" 120000000000 3600000000000
-      ;;
-    NIGHT_TIME_DURATION)
-      validate_number_range_soft "$name" "$value" 120000000000 3600000000000
-      ;;
-    CURSE_MODIFIER)
-      validate_enum_soft "$name" "$value" Easy Normal Hard
-      ;;
-    *)
-      warn "Unknown game setting: $name"
-      return 1
-      ;;
-  esac
-}
-
-declare -a ENSHROUDED_GS_VARS=(
-  ENSHROUDED_GS_PRESET
-  ENSHROUDED_GS_PLAYER_HEALTH_FACTOR
-  ENSHROUDED_GS_PLAYER_MANA_FACTOR
-  ENSHROUDED_GS_PLAYER_STAMINA_FACTOR
-  ENSHROUDED_GS_PLAYER_BODY_HEAT_FACTOR
-  ENSHROUDED_GS_PLAYER_DIVING_TIME_FACTOR
-  ENSHROUDED_GS_ENABLE_DURABILITY
-  ENSHROUDED_GS_ENABLE_STARVING_DEBUFF
-  ENSHROUDED_GS_FOOD_BUFF_DURATION_FACTOR
-  ENSHROUDED_GS_FROM_HUNGER_TO_STARVING
-  ENSHROUDED_GS_SHROUD_TIME_FACTOR
-  ENSHROUDED_GS_TOMBSTONE_MODE
-  ENSHROUDED_GS_ENABLE_GLIDER_TURBULENCES
-  ENSHROUDED_GS_WEATHER_FREQUENCY
-  ENSHROUDED_GS_FISHING_DIFFICULTY
-  ENSHROUDED_GS_MINING_DAMAGE_FACTOR
-  ENSHROUDED_GS_PLANT_GROWTH_SPEED_FACTOR
-  ENSHROUDED_GS_RESOURCE_DROP_STACK_AMOUNT_FACTOR
-  ENSHROUDED_GS_FACTORY_PRODUCTION_SPEED_FACTOR
-  ENSHROUDED_GS_PERK_UPGRADE_RECYCLING_FACTOR
-  ENSHROUDED_GS_PERK_COST_FACTOR
-  ENSHROUDED_GS_EXPERIENCE_COMBAT_FACTOR
-  ENSHROUDED_GS_EXPERIENCE_MINING_FACTOR
-  ENSHROUDED_GS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR
-  ENSHROUDED_GS_RANDOM_SPAWNER_AMOUNT
-  ENSHROUDED_GS_AGGRO_POOL_AMOUNT
-  ENSHROUDED_GS_ENEMY_DAMAGE_FACTOR
-  ENSHROUDED_GS_ENEMY_HEALTH_FACTOR
-  ENSHROUDED_GS_ENEMY_STAMINA_FACTOR
-  ENSHROUDED_GS_ENEMY_PERCEPTION_RANGE_FACTOR
-  ENSHROUDED_GS_BOSS_DAMAGE_FACTOR
-  ENSHROUDED_GS_BOSS_HEALTH_FACTOR
-  ENSHROUDED_GS_THREAT_BONUS
-  ENSHROUDED_GS_PACIFY_ALL_ENEMIES
-  ENSHROUDED_GS_TAMING_STARTLE_REPERCUSSION
-  ENSHROUDED_GS_DAY_TIME_DURATION
-  ENSHROUDED_GS_NIGHT_TIME_DURATION
-  ENSHROUDED_GS_CURSE_MODIFIER
-)
-
-validate_profile_selector_env() {
-  if [[ -n "$EN_PROFILE" ]] && ! [[ "$EN_PROFILE" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    fatal "EN_PROFILE contains invalid characters (actual: $EN_PROFILE)"
-  fi
-  if [[ -n "$MANAGER_PROFILE" ]] && ! [[ "$MANAGER_PROFILE" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    fatal "MANAGER_PROFILE contains invalid characters (actual: $MANAGER_PROFILE)"
-  fi
-}
+ENV_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+. "$ENV_SCRIPT_DIR/validation/lib"
 
 validate_role_env_vars() {
-  local var_name group_index group_param group_value
+  local var_name value
   for var_name in $(compgen -A variable | grep -E "^ENSHROUDED_ROLE_[0-9]+_" || true); do
-    group_index="$(echo "$var_name" | cut -d'_' -f3)"
-    group_param="$(echo "$var_name" | cut -d'_' -f4-)"
-    group_value="${!var_name-}"
-
-    case "$group_param" in
-      NAME|PASSWORD)
-        ;;
-      CAN_KICK_BAN|CAN_ACCESS_INVENTORIES|CAN_EDIT_WORLD|CAN_EDIT_BASE|CAN_EXTEND_BASE)
-        validate_bool "ENSHROUDED_ROLE_${group_index}_${group_param}" "$group_value"
-        ;;
-      RESERVED_SLOTS)
-        if [[ ! "$group_value" =~ ^[0-9]+$ ]]; then
-          fatal "ENSHROUDED_ROLE_${group_index}_RESERVED_SLOTS must be numeric (actual: $group_value)"
-        fi
-        ;;
-      *)
-        warn "Unknown role env var detected: $var_name"
-        ;;
-    esac
+    value="${!var_name-}"
+    env_validate_var_from_spec "$var_name" "$value" || true
   done
 }
 
-validate_manager_env_vars() {
-  local var value
-  for var in "${MANAGER_VARS[@]}"; do
-    value="$(printenv "$var" 2>/dev/null || true)"
-    if [[ -z "$value" ]]; then
-      continue
+validate_known_vars_from_spec() {
+  local var_name value
+  while IFS= read -r var_name; do
+    [[ -z "$var_name" ]] && continue
+    value="${!var_name-}"
+    env_validate_var_from_spec "$var_name" "$value" || true
+  done < <(validation_list_vars)
+}
+
+validate_unknown_game_settings_env_vars() {
+  local var_name
+  if [[ ! -f "${VALIDATION_SPEC_FILE:-}" ]] || ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+  for var_name in $(compgen -A variable | grep '^ENSHROUDED_GS_' || true); do
+    if ! validation_rule_json "$var_name" >/dev/null 2>&1; then
+      warn "Unknown game setting env var detected: $var_name"
     fi
-    validate_manager_value "$var" "$value" "soft" || true
   done
 }
 
-validate_game_settings_env_vars() {
-  local suffix var_name var_value unknown_vars pattern
+env_validate_var() {
+  # Usage: env_validate_var <var_name> <value> hard|soft
+  local var value mode rc
+  var="$1"
+  value="${2-}"
+  mode="$3"
 
-  for var_name in "${ENSHROUDED_GS_VARS[@]}"; do
-    suffix="${var_name#ENSHROUDED_GS_}"
-    var_value="${!var_name:-}"
-    if [[ -z "$var_value" ]]; then
-      continue
+  if validation_check "$var" "$value"; then
+    return 0
+  fi
+  rc=$?
+  case "$rc" in
+    1)
+      if [[ "$mode" == "hard" ]]; then
+        fatal "$VALIDATION_LAST_ERROR"
+      fi
+      warn "$VALIDATION_LAST_ERROR"
+      return 1
+      ;;
+    *)
+      # Unknown rule / unavailable validator: warn but do not block bootstrap.
+      warn "$VALIDATION_LAST_ERROR"
+      return 0
+      ;;
+  esac
+}
+
+env_validate_var_from_spec() {
+  # Usage: env_validate_var_from_spec <var_name> <value>
+  local var value mode required
+  var="$1"
+  value="${2-}"
+  mode="$(validation_var_env_mode "$var" 2>/dev/null || true)"
+  if [[ "$mode" != "hard" && "$mode" != "soft" ]]; then
+    required="$(validation_var_required "$var" 2>/dev/null || true)"
+    if [[ "$required" == "true" ]]; then
+      mode="hard"
+    else
+      mode="soft"
     fi
-    validate_game_setting "$suffix" "$var_value" || true
-  done
-
-  pattern="^($(printf '%s\n' "${ENSHROUDED_GS_VARS[@]}" | tr '\n' '|' | sed 's/|$//'))$"
-  if [[ -n "$pattern" ]]; then
-    unknown_vars="$(compgen -A variable | grep '^ENSHROUDED_GS_' | grep -v -E "$pattern" || true)"
   fi
-  if [[ -n "$unknown_vars" ]]; then
-    warn "Unknown game setting env vars detected: $(echo "$unknown_vars" | xargs)"
-  fi
+  env_validate_var "$var" "$value" "$mode"
 }
 
 verify_variables() {
-  validate_profile_selector_env
-
-  if [[ -n "$ENSHROUDED_SLOT_COUNT" ]]; then
-    if [[ ! "$ENSHROUDED_SLOT_COUNT" =~ ^[0-9]+$ ]] || [[ "$ENSHROUDED_SLOT_COUNT" -lt 1 ]] || [[ "$ENSHROUDED_SLOT_COUNT" -gt 16 ]]; then
-      fatal "ENSHROUDED_SLOT_COUNT must be between 1 and 16 (actual: $ENSHROUDED_SLOT_COUNT)"
-    fi
-  fi
-
-  if [[ -n "$ENSHROUDED_QUERY_PORT" ]]; then
-    if [[ ! "$ENSHROUDED_QUERY_PORT" =~ ^[0-9]+$ ]] || [[ "$ENSHROUDED_QUERY_PORT" -lt 1 ]] || [[ "$ENSHROUDED_QUERY_PORT" -gt 65535 ]]; then
-      fatal "ENSHROUDED_QUERY_PORT must be between 1 and 65535 (actual: $ENSHROUDED_QUERY_PORT)"
-    fi
-  fi
-
-  if [[ -n "$ENSHROUDED_IP" ]]; then
-    if ! [[ "$ENSHROUDED_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-      fatal "ENSHROUDED_IP must be a valid ipv4 address (actual: $ENSHROUDED_IP)"
-    fi
-  fi
-
-  if [[ -n "$ENSHROUDED_VOICE_CHAT_MODE" ]]; then
-    validate_enum "ENSHROUDED_VOICE_CHAT_MODE" "$ENSHROUDED_VOICE_CHAT_MODE" Proximity Global
-  fi
-
-  validate_bool "ENSHROUDED_ENABLE_VOICE_CHAT" "$ENSHROUDED_ENABLE_VOICE_CHAT"
-  validate_bool "ENSHROUDED_ENABLE_TEXT_CHAT" "$ENSHROUDED_ENABLE_TEXT_CHAT"
-
-  if [[ -n "$ENSHROUDED_TAGS" ]]; then
-    validate_tags "$ENSHROUDED_TAGS" || true
-  fi
-
+  validate_known_vars_from_spec
   validate_role_env_vars
-  validate_manager_env_vars
-  validate_game_settings_env_vars
+  validate_unknown_game_settings_env_vars
 }

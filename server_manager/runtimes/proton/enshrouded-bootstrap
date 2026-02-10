@@ -7,6 +7,7 @@ init_runtime_env
 
 main() {
   info "Running enshrouded-bootstrap"
+  verify_variables
   prepareEnshroudedAppFolders
   updateOrCreateEnshroudedServerConfig
   prepareSteamA2sPythonLibrary

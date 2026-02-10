@@ -15,31 +15,13 @@ declare -A MENU_EXTERNAL_ENV=()
 menu_capture_external_env() {
   local var value line name
 
-  # Manager vars (server_manager.json)
-  for var in "${MANAGER_VARS[@]}"; do
+  while IFS= read -r var; do
+    [[ -z "$var" ]] && continue
     value="$(printenv "$var" 2>/dev/null || true)"
     if [[ -n "$value" ]]; then
       MENU_EXTERNAL_ENV["$var"]="$value"
     fi
-  done
-
-  # Enshrouded top-level vars (enshrouded_server.json)
-  for var in \
-    ENSHROUDED_NAME \
-    ENSHROUDED_SAVE_DIR \
-    ENSHROUDED_LOG_DIR \
-    ENSHROUDED_IP \
-    ENSHROUDED_QUERY_PORT \
-    ENSHROUDED_SLOT_COUNT \
-    ENSHROUDED_TAGS \
-    ENSHROUDED_VOICE_CHAT_MODE \
-    ENSHROUDED_ENABLE_VOICE_CHAT \
-    ENSHROUDED_ENABLE_TEXT_CHAT; do
-    value="$(printenv "$var" 2>/dev/null || true)"
-    if [[ -n "$value" ]]; then
-	      MENU_EXTERNAL_ENV["$var"]="$value"
-	    fi
-	  done
+  done < <(validation_list_vars)
 
   # Pattern-based overrides (game settings + roles)
   while IFS= read -r line; do

@@ -1,0 +1,1663 @@
+{
+  "version": 1,
+  "vars": {
+    "BACKUP_CRON": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Cron schedule for savegame backup job (crond).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".backupCron",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "BACKUP_DIR": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Base backup directory (savegame zips in BACKUP_DIR, config backups in BACKUP_DIR/profiles).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".backupDir",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "BACKUP_MAX_COUNT": {
+      "type": "int",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Number of savegame zip backups to keep (0 = unlimited).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".backupMaxCount",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "BACKUP_POST_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed after savegame backup.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".backupPostHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "BACKUP_PRE_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed before savegame backup.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".backupPreHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "BOOTSTRAP_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed during bootstrap.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".bootstrapHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_ENABLE_TEXT_CHAT": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Enable in-game text chat.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".enableTextChat",
+        "enshroudedMenuJsonPath": ".enableTextChat",
+        "menuGroup": "Voice / Text",
+        "menuOrder": 10
+      }
+    },
+    "ENSHROUDED_ENABLE_VOICE_CHAT": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Enable in-game voice chat.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".enableVoiceChat",
+        "enshroudedMenuJsonPath": ".enableVoiceChat",
+        "menuGroup": "Voice / Text",
+        "menuOrder": 9
+      }
+    },
+    "ENSHROUDED_GS_AGGRO_POOL_AMOUNT": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "Few",
+        "Normal",
+        "Many",
+        "Extreme"
+      ],
+      "list": null,
+      "description": "Game setting override (Custom): AGGRO_POOL_AMOUNT.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_BOSS_DAMAGE_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.2,
+      "max": 5,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): BOSS_DAMAGE_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_BOSS_HEALTH_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.2,
+      "max": 5,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): BOSS_HEALTH_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_CURSE_MODIFIER": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "Easy",
+        "Normal",
+        "Hard"
+      ],
+      "list": null,
+      "description": "Game setting override (Custom): CURSE_MODIFIER.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_DAY_TIME_DURATION": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 120000000000,
+      "max": 3600000000000,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): DAY_TIME_DURATION.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_ENABLE_DURABILITY": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): ENABLE_DURABILITY.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_ENABLE_GLIDER_TURBULENCES": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): ENABLE_GLIDER_TURBULENCES.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_ENABLE_STARVING_DEBUFF": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): ENABLE_STARVING_DEBUFF.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_ENEMY_DAMAGE_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 5,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): ENEMY_DAMAGE_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_ENEMY_HEALTH_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 4,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): ENEMY_HEALTH_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_ENEMY_PERCEPTION_RANGE_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.5,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): ENEMY_PERCEPTION_RANGE_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_ENEMY_STAMINA_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.5,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): ENEMY_STAMINA_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_EXPERIENCE_COMBAT_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): EXPERIENCE_COMBAT_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): EXPERIENCE_EXPLORATION_QUESTS_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_EXPERIENCE_MINING_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): EXPERIENCE_MINING_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_FACTORY_PRODUCTION_SPEED_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): FACTORY_PRODUCTION_SPEED_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_FISHING_DIFFICULTY": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "VeryEasy",
+        "Easy",
+        "Normal",
+        "Hard",
+        "VeryHard"
+      ],
+      "list": null,
+      "description": "Game setting override (Custom): FISHING_DIFFICULTY.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_FOOD_BUFF_DURATION_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.5,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): FOOD_BUFF_DURATION_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_FROM_HUNGER_TO_STARVING": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 300000000000,
+      "max": 1200000000000,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): FROM_HUNGER_TO_STARVING.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_MINING_DAMAGE_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.5,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): MINING_DAMAGE_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_NIGHT_TIME_DURATION": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 120000000000,
+      "max": 3600000000000,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): NIGHT_TIME_DURATION.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PACIFY_ALL_ENEMIES": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): PACIFY_ALL_ENEMIES.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PERK_COST_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): PERK_COST_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PERK_UPGRADE_RECYCLING_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0,
+      "max": 1,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): PERK_UPGRADE_RECYCLING_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PLANT_GROWTH_SPEED_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): PLANT_GROWTH_SPEED_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PLAYER_BODY_HEAT_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        0.5,
+        1,
+        1.5,
+        2
+      ],
+      "list": null,
+      "description": "Game setting override (Custom): PLAYER_BODY_HEAT_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PLAYER_DIVING_TIME_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.5,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): PLAYER_DIVING_TIME_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PLAYER_HEALTH_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 4,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): PLAYER_HEALTH_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PLAYER_MANA_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 4,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): PLAYER_MANA_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PLAYER_STAMINA_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 4,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): PLAYER_STAMINA_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_PRESET": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "Default",
+        "Relaxed",
+        "Hard",
+        "Survival",
+        "Custom"
+      ],
+      "list": null,
+      "description": "Game settings preset.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": ".gameSettingsPreset",
+        "menuGroup": "Game",
+        "menuOrder": 11
+      }
+    },
+    "ENSHROUDED_GS_RANDOM_SPAWNER_AMOUNT": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "Few",
+        "Normal",
+        "Many",
+        "Extreme"
+      ],
+      "list": null,
+      "description": "Game setting override (Custom): RANDOM_SPAWNER_AMOUNT.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_RESOURCE_DROP_STACK_AMOUNT_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): RESOURCE_DROP_STACK_AMOUNT_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_SHROUD_TIME_FACTOR": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.5,
+      "max": 2,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): SHROUD_TIME_FACTOR.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_TAMING_STARTLE_REPERCUSSION": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "KeepProgress",
+        "LoseSomeProgress",
+        "LoseAllProgress"
+      ],
+      "list": null,
+      "description": "Game setting override (Custom): TAMING_STARTLE_REPERCUSSION.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_THREAT_BONUS": {
+      "type": "number",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 0.25,
+      "max": 4,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Game setting override (Custom): THREAT_BONUS.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_TOMBSTONE_MODE": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "AddBackpackMaterials",
+        "Everything",
+        "NoTombstone"
+      ],
+      "list": null,
+      "description": "Game setting override (Custom): TOMBSTONE_MODE.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_GS_WEATHER_FREQUENCY": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "Disabled",
+        "Rare",
+        "Normal",
+        "Often"
+      ],
+      "list": null,
+      "description": "Game setting override (Custom): WEATHER_FREQUENCY.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "ENSHROUDED_IP": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": null,
+      "max": null,
+      "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$",
+      "enum": null,
+      "list": null,
+      "description": "Server bind IP (IPv4).",
+      "allowed": "IPv4 address, e.g. 0.0.0.0",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".ip",
+        "enshroudedMenuJsonPath": ".ip",
+        "menuGroup": "Server",
+        "menuOrder": 2
+      }
+    },
+    "ENSHROUDED_LOG_DIR": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Log directory (relative to /home/enshrouded/server or absolute path).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".logDirectory",
+        "enshroudedMenuJsonPath": ".logDirectory",
+        "menuGroup": "Server",
+        "menuOrder": 6
+      }
+    },
+    "ENSHROUDED_NAME": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Server name shown in the server browser.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".name",
+        "enshroudedMenuJsonPath": ".name",
+        "menuGroup": "Server",
+        "menuOrder": 1
+      }
+    },
+    "ENSHROUDED_QUERY_PORT": {
+      "type": "int",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": 1,
+      "max": 65535,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "A2S query port.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".queryPort",
+        "enshroudedMenuJsonPath": ".queryPort",
+        "menuGroup": "Server",
+        "menuOrder": 3
+      }
+    },
+    "ENSHROUDED_SAVE_DIR": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Savegame directory (relative to /home/enshrouded/server or absolute path).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".saveDirectory",
+        "enshroudedMenuJsonPath": ".saveDirectory",
+        "menuGroup": "Server",
+        "menuOrder": 5
+      }
+    },
+    "ENSHROUDED_SLOT_COUNT": {
+      "type": "int",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": 1,
+      "max": 16,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Max player slots.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".slotCount",
+        "enshroudedMenuJsonPath": ".slotCount",
+        "menuGroup": "Server",
+        "menuOrder": 4
+      }
+    },
+    "ENSHROUDED_TAGS": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": {
+        "separator": ",",
+        "trim": true,
+        "itemNoEmpty": true,
+        "itemRegex": "^[A-Za-z0-9._-]+$"
+      },
+      "description": "Comma-separated server tags written to enshrouded_server.json .tags array.",
+      "allowed": "Comma-separated; each tag: A-Z a-z 0-9 . _ - (empty clears all tags)",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": ".tags",
+        "menuGroup": "Server",
+        "menuOrder": 7
+      }
+    },
+    "ENSHROUDED_VOICE_CHAT_MODE": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "Proximity",
+        "Global"
+      ],
+      "list": null,
+      "description": "Voice chat mode.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".voiceChatMode",
+        "enshroudedMenuJsonPath": ".voiceChatMode",
+        "menuGroup": "Voice / Text",
+        "menuOrder": 8
+      }
+    },
+    "EN_PROFILE": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": null,
+      "max": null,
+      "regex": "^[A-Za-z0-9._-]+$",
+      "enum": null,
+      "list": null,
+      "description": "Selects the Enshrouded profile template on first bootstrap (fresh volume).",
+      "allowed": "A-Z a-z 0-9 . _ -",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "GAME_BRANCH": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Steam branch name.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".gameBranch",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "LOG_COLOR": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Enable colored log levels (TTY only).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".logColor",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "MANAGER_PROFILE": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": null,
+      "max": null,
+      "regex": "^[A-Za-z0-9._-]+$",
+      "enum": null,
+      "list": null,
+      "description": "Selects the Server Manager profile template on first bootstrap (fresh volume).",
+      "allowed": "A-Z a-z 0-9 . _ -",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "PGID": {
+      "type": "int",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 1,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "GID for the enshrouded user.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".pgid",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "PUID": {
+      "type": "int",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 1,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "UID for the enshrouded user.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".puid",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "RESTART_CHECK_PLAYERS": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Only restart when 0 players are connected.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".restartCheckPlayers",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "RESTART_CRON": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Cron schedule for restart job (crond).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".restartCron",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "RESTART_POST_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed after restart.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".restartPostHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "RESTART_PRE_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed before restart.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".restartPreHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "SAVEFILE_NAME": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[A-Za-z0-9._-]+$",
+      "enum": null,
+      "list": null,
+      "description": "Base name for save/backup files.",
+      "allowed": "A-Z a-z 0-9 . _ -",
+      "meta": {
+        "managerJsonPath": ".savefileName",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "STEAMCMD_ARGS": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Additional SteamCMD args.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".steamcmdArgs",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "STEAM_APP_ID": {
+      "type": "int",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": 1,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Steam App ID.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".steamAppId",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "UPDATE_CHECK_PLAYERS": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Only update when 0 players are connected.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".updateCheckPlayers",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "UPDATE_CRON": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Cron schedule for update job (crond).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".updateCron",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "UPDATE_POST_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed after update.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".updatePostHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "UPDATE_PRE_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed before update.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".updatePreHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    },
+    "WINEDEBUG": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Wine debug level.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".winedebug",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": null,
+        "menuOrder": null
+      }
+    }
+  },
+  "templates": {
+    "ENSHROUDED_ROLE": {
+      "fields": {
+        "CAN_ACCESS_INVENTORIES": {
+          "type": "bool",
+          "required": false,
+          "allowEmpty": true,
+          "envMode": "hard",
+          "min": null,
+          "max": null,
+          "regex": null,
+          "enum": null,
+          "list": null,
+          "description": "Allow access to other players' inventories.",
+          "allowed": "",
+          "meta": {
+            "managerJsonPath": null,
+            "enshroudedJsonPath": null,
+            "enshroudedMenuJsonPath": null,
+            "menuGroup": null,
+            "menuOrder": null
+          }
+        },
+        "CAN_EDIT_BASE": {
+          "type": "bool",
+          "required": false,
+          "allowEmpty": true,
+          "envMode": "hard",
+          "min": null,
+          "max": null,
+          "regex": null,
+          "enum": null,
+          "list": null,
+          "description": "Allow editing bases.",
+          "allowed": "",
+          "meta": {
+            "managerJsonPath": null,
+            "enshroudedJsonPath": null,
+            "enshroudedMenuJsonPath": null,
+            "menuGroup": null,
+            "menuOrder": null
+          }
+        },
+        "CAN_EDIT_WORLD": {
+          "type": "bool",
+          "required": false,
+          "allowEmpty": true,
+          "envMode": "hard",
+          "min": null,
+          "max": null,
+          "regex": null,
+          "enum": null,
+          "list": null,
+          "description": "Allow editing the world.",
+          "allowed": "",
+          "meta": {
+            "managerJsonPath": null,
+            "enshroudedJsonPath": null,
+            "enshroudedMenuJsonPath": null,
+            "menuGroup": null,
+            "menuOrder": null
+          }
+        },
+        "CAN_EXTEND_BASE": {
+          "type": "bool",
+          "required": false,
+          "allowEmpty": true,
+          "envMode": "hard",
+          "min": null,
+          "max": null,
+          "regex": null,
+          "enum": null,
+          "list": null,
+          "description": "Allow extending bases.",
+          "allowed": "",
+          "meta": {
+            "managerJsonPath": null,
+            "enshroudedJsonPath": null,
+            "enshroudedMenuJsonPath": null,
+            "menuGroup": null,
+            "menuOrder": null
+          }
+        },
+        "CAN_KICK_BAN": {
+          "type": "bool",
+          "required": false,
+          "allowEmpty": true,
+          "envMode": "hard",
+          "min": null,
+          "max": null,
+          "regex": null,
+          "enum": null,
+          "list": null,
+          "description": "Allow kicking/banning players.",
+          "allowed": "",
+          "meta": {
+            "managerJsonPath": null,
+            "enshroudedJsonPath": null,
+            "enshroudedMenuJsonPath": null,
+            "menuGroup": null,
+            "menuOrder": null
+          }
+        },
+        "NAME": {
+          "type": "string",
+          "required": false,
+          "allowEmpty": true,
+          "envMode": "hard",
+          "min": null,
+          "max": null,
+          "regex": "^[^\\r\\n]*$",
+          "enum": null,
+          "list": null,
+          "description": "User group name.",
+          "allowed": "",
+          "meta": {
+            "managerJsonPath": null,
+            "enshroudedJsonPath": null,
+            "enshroudedMenuJsonPath": null,
+            "menuGroup": null,
+            "menuOrder": null
+          }
+        },
+        "PASSWORD": {
+          "type": "string",
+          "required": false,
+          "allowEmpty": true,
+          "envMode": "hard",
+          "min": null,
+          "max": null,
+          "regex": "^[^\\r\\n]*$",
+          "enum": null,
+          "list": null,
+          "description": "User group password (empty = auto-generated if missing in config).",
+          "allowed": "",
+          "meta": {
+            "managerJsonPath": null,
+            "enshroudedJsonPath": null,
+            "enshroudedMenuJsonPath": null,
+            "menuGroup": null,
+            "menuOrder": null
+          }
+        },
+        "RESERVED_SLOTS": {
+          "type": "int",
+          "required": false,
+          "allowEmpty": false,
+          "envMode": "hard",
+          "min": 0,
+          "max": null,
+          "regex": null,
+          "enum": null,
+          "list": null,
+          "description": "Reserved slots for this user group.",
+          "allowed": "",
+          "meta": {
+            "managerJsonPath": null,
+            "enshroudedJsonPath": null,
+            "enshroudedMenuJsonPath": null,
+            "menuGroup": null,
+            "menuOrder": null
+          }
+        }
+      }
+    }
+  }
+}
