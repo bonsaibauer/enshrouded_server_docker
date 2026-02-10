@@ -32,7 +32,8 @@ createFolders() {
     fi
   fi
 
-  if [[ -n "$BACKUP_CRON" ]] && [[ -n "$BACKUP_DIR" ]]; then
+  # Create BACKUP_DIR even without BACKUP_CRON so manual backups/restores work.
+  if [[ -n "$BACKUP_DIR" ]]; then
     if [[ "$BACKUP_DIR" == /* ]]; then
       mkdir -p "$BACKUP_DIR"
     else

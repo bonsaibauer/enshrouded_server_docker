@@ -359,6 +359,9 @@ menu_restore_manager_backup() {
 menu_backups_menu() {
   local choice
   while :; do
+    if menu_nav_is_set; then
+      return 0
+    fi
     ui_header "Backups"
 
     echo "[1] Restore Enshrouded settings (enshrouded_server.json)"
@@ -368,14 +371,28 @@ menu_backups_menu() {
     echo
     echo "[0] Back"
     echo
-
-    choice="$(ui_prompt_number "Choice")"
+    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    echo
+    choice="$(ui_prompt_choice "Choice")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
       1) menu_restore_enshrouded_backup || true ;;
       2) menu_restore_manager_backup || true ;;
       3) menu_run_savegame_backup || true ;;
       4) menu_restore_savegame_backup || true ;;
       0) return 0 ;;
+      m)
+        menu_nav_set "main"
+        return 0
+        ;;
+      x|q)
+        menu_nav_set "exit"
+        return 0
+        ;;
+      s)
+        menu_nav_set "exit_start"
+        return 0
+        ;;
       *)
         ui_warn_line "Invalid selection."
         ui_pause

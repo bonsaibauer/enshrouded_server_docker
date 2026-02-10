@@ -22,6 +22,9 @@ enshrouded_select_profile_flow() {
   fi
 
   while :; do
+    if menu_nav_is_set; then
+      return 0
+    fi
     ui_header "Select Enshrouded Profile"
     ui_kv "Profiles Folder" "$EN_PROFILE_DIR"
     echo
@@ -34,9 +37,33 @@ enshrouded_select_profile_flow() {
     echo "[0] Back"
     echo
 
-    selected="$(ui_prompt_number "Profile")"
-    if [[ "$selected" -eq 0 ]]; then
-      return 0
+    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    echo
+
+    selected="$(ui_prompt_choice "Profile")"
+    selected="$(echo "$selected" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$selected" in
+      0)
+        return 0
+        ;;
+      m)
+        menu_nav_set "main"
+        return 0
+        ;;
+      x|q)
+        menu_nav_set "exit"
+        return 0
+        ;;
+      s)
+        menu_nav_set "exit_start"
+        return 0
+        ;;
+    esac
+
+    if ! [[ "$selected" =~ ^[0-9]+$ ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
     fi
     if [[ "$selected" -lt 1 || "$selected" -gt "$profile_count" ]]; then
       ui_warn_line "Invalid selection."
@@ -110,6 +137,9 @@ enshrouded_select_profile_flow() {
 menu_enshrouded_settings() {
   local choice
   while :; do
+    if menu_nav_is_set; then
+      return 0
+    fi
     ui_header "Enshrouded Server Settings"
 
     echo "[1] Edit current settings"
@@ -119,7 +149,10 @@ menu_enshrouded_settings() {
     echo "[0] Back"
     echo
 
-    choice="$(ui_prompt_number "Choice")"
+    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    echo
+    choice="$(ui_prompt_choice "Choice")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
       1)
         editor_enshrouded_json
@@ -131,6 +164,18 @@ menu_enshrouded_settings() {
         enshrouded_select_profile_flow "select" || true
         ;;
       0)
+        return 0
+        ;;
+      m)
+        menu_nav_set "main"
+        return 0
+        ;;
+      x|q)
+        menu_nav_set "exit"
+        return 0
+        ;;
+      s)
+        menu_nav_set "exit_start"
         return 0
         ;;
       *)

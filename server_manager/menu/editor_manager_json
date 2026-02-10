@@ -32,11 +32,21 @@ manager_editor_display_value() {
   local file var value
   file="$1"
   var="$2"
+  if menu_env_override_is_set "$var"; then
+    value="$(menu_env_override_value "$var")"
+    if [[ -z "$value" ]]; then
+      printf "%s" "${C_DIM}<empty>${C_RESET}"
+    else
+      printf "%s%s%s" "${C_RED}" "$value" "${C_RESET}"
+    fi
+    return 0
+  fi
+
   value="$(manager_json_get "$file" "$var")"
   if [[ -z "$value" ]]; then
     printf "%s" "${C_DIM}<null>${C_RESET}"
   else
-    printf "%s" "$value"
+    printf "%s%s%s" "${C_GREEN}" "$value" "${C_RESET}"
   fi
 }
 
@@ -80,9 +90,9 @@ manager_editor_prompt_value() {
 }
 
 editor_manager_json() {
-  local config_file tmp changed choice field_count save_choice save_restart_choice
+  local config_file choice field_count backed_up
   config_file="$(manager_config_path)"
-  changed="false"
+  backed_up="false"
 
   # Ensure config exists and is valid.
   if [[ ! -f "$config_file" ]] || ! jq -e 'type == "object"' "$config_file" >/dev/null 2>&1; then
@@ -96,20 +106,21 @@ editor_manager_json() {
     return 1
   fi
 
-  tmp="$(mktemp)"
-  cp "$config_file" "$tmp"
-  chmod 600 "$tmp" 2>/dev/null || true
-  trap 'rm -f "$tmp" 2>/dev/null || true' RETURN
+  if ! menu_stop_server_for_config_change "edit Server Manager settings"; then
+    return 0
+  fi
 
   while :; do
     local -a options_vars
     options_vars=()
 
-    ui_header "Edit Server Manager JSON"
-    ui_kv "File" "$config_file"
-    if [[ "$changed" == "true" ]]; then
-      ui_warn_line "Unsaved changes."
+    if menu_nav_is_set; then
+      return 0
     fi
+
+    ui_header "Edit Server Manager Settings"
+    ui_kv "File" "$(menu_display_path "$config_file")"
+    ui_note "Changes are written immediately."
     ui_note "[ENV] = controlled by container environment (locked)"
     echo
 
@@ -119,7 +130,7 @@ editor_manager_json() {
     for v in PUID PGID; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -127,7 +138,7 @@ editor_manager_json() {
     for v in STEAM_APP_ID GAME_BRANCH STEAMCMD_ARGS; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -135,7 +146,7 @@ editor_manager_json() {
     for v in LOG_COLOR WINEDEBUG; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -143,7 +154,7 @@ editor_manager_json() {
     for v in SAVEFILE_NAME; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -151,7 +162,7 @@ editor_manager_json() {
     for v in UPDATE_CHECK_PLAYERS RESTART_CHECK_PLAYERS UPDATE_CRON RESTART_CRON UPDATE_PRE_HOOK UPDATE_POST_HOOK RESTART_PRE_HOOK RESTART_POST_HOOK; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -159,7 +170,7 @@ editor_manager_json() {
     for v in BACKUP_DIR BACKUP_MAX_COUNT BACKUP_CRON BACKUP_PRE_HOOK BACKUP_POST_HOOK; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -167,128 +178,35 @@ editor_manager_json() {
     for v in BOOTSTRAP_HOOK; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$tmp" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
-    save_choice=$((field_count + 1))
-    save_restart_choice=$((field_count + 2))
-    echo "[${save_choice}] Save"
-    echo "[${save_restart_choice}] Save and run bootstrap (recommended)"
-    echo
-    echo "[0] Back"
+    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
     echo
 
-    choice="$(ui_prompt_number "Choice")"
-    if [[ "$choice" -eq 0 ]]; then
-      if [[ "$changed" != "true" ]]; then
+    choice="$(ui_prompt_choice "Choice")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
+
+    case "$choice" in
+      0)
         return 0
-      fi
-      ui_warn_line "Discard unsaved changes?"
-      echo "[1] Save"
-      echo "[2] Discard"
-      echo "[0] Cancel"
-      echo
-      case "$(ui_prompt_number "Action")" in
-        1)
-          if ! menu_stop_server_for_config_change "save Server Manager settings"; then
-            ui_pause
-            continue
-          fi
-          local config_dir save_tmp
-          config_dir="$(dirname "$config_file")"
-          mkdir -p "$config_dir" 2>/dev/null || true
-          save_tmp="$(mktemp "${config_dir}/.server_manager.json.save.XXXXXX")"
-          if ! cp "$tmp" "$save_tmp"; then
-            rm -f "$save_tmp" 2>/dev/null || true
-            ui_error "Failed to save file."
-            ui_pause
-            continue
-          fi
-          backup_config_file "$config_file" "server_manager" || true
-          mv -f "$save_tmp" "$config_file"
-          chmod 600 "$config_file" 2>/dev/null || true
-          chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
-          ui_success "Saved: $config_file"
-          echo
-          menu_prompt_start_server "Start enshrouded-server now to apply changes?"
-          ui_pause
-          return 0
-          ;;
-        2)
-          ui_note "Discarded."
-          ui_pause
-          return 0
-          ;;
-        0)
-          continue
-          ;;
-        *)
-          continue
-          ;;
-      esac
-    fi
+        ;;
+      m)
+        menu_nav_set "main"
+        return 0
+        ;;
+      x|q)
+        menu_nav_set "exit"
+        return 0
+        ;;
+      s)
+        menu_nav_set "exit_start"
+        return 0
+        ;;
+    esac
 
-    if [[ "$choice" -eq "$save_choice" ]]; then
-      if ! menu_stop_server_for_config_change "save Server Manager settings"; then
-        ui_pause
-        continue
-      fi
-      local config_dir save_tmp
-      config_dir="$(dirname "$config_file")"
-      mkdir -p "$config_dir" 2>/dev/null || true
-      save_tmp="$(mktemp "${config_dir}/.server_manager.json.save.XXXXXX")"
-      if ! cp "$tmp" "$save_tmp"; then
-        rm -f "$save_tmp" 2>/dev/null || true
-        ui_error "Failed to save file."
-        ui_pause
-        continue
-      fi
-      backup_config_file "$config_file" "server_manager" || true
-      mv -f "$save_tmp" "$config_file"
-      chmod 600 "$config_file" 2>/dev/null || true
-      chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
-      ui_success "Saved: $config_file"
-      echo
-      menu_prompt_start_server "Start enshrouded-server now to apply changes?"
-      ui_pause
-      return 0
-    fi
-
-    if [[ "$choice" -eq "$save_restart_choice" ]]; then
-      if ! menu_stop_server_for_config_change "save Server Manager settings"; then
-        ui_pause
-        continue
-      fi
-      local config_dir save_tmp
-      config_dir="$(dirname "$config_file")"
-      mkdir -p "$config_dir" 2>/dev/null || true
-      save_tmp="$(mktemp "${config_dir}/.server_manager.json.save.XXXXXX")"
-      if ! cp "$tmp" "$save_tmp"; then
-        rm -f "$save_tmp" 2>/dev/null || true
-        ui_error "Failed to save file."
-        ui_pause
-        continue
-      fi
-      backup_config_file "$config_file" "server_manager" || true
-      mv -f "$save_tmp" "$config_file"
-      chmod 600 "$config_file" 2>/dev/null || true
-      chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
-      ui_success "Saved: $config_file"
-      supervisorctl start enshrouded-bootstrap || true
-      ui_success "Bootstrap started."
-      ui_note "Note: bootstrap does not start the server."
-      if menu_wait_for_program_exit "enshrouded-bootstrap" 600; then
-        echo
-        menu_prompt_start_server "Start enshrouded-server now?"
-      else
-        ui_note "Start the server later once bootstrap has finished."
-      fi
-      ui_pause
-      return 0
-    fi
-
-    if [[ "$choice" -ge 1 && "$choice" -le "$field_count" ]]; then
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 && "$choice" -le "$field_count" ]]; then
       local var current new_value
       var="${options_vars[$((choice - 1))]}"
 
@@ -302,7 +220,7 @@ editor_manager_json() {
         continue
       fi
 
-      current="$(manager_json_get "$tmp" "$var")"
+      current="$(manager_json_get "$config_file" "$var")"
 
       new_value="$(manager_editor_prompt_value "$var" "$current")"
       if ! validate_manager_value "$var" "$new_value" "soft"; then
@@ -311,8 +229,12 @@ editor_manager_json() {
         continue
       fi
 
-      manager_config_set_value "$tmp" "$var" "$new_value"
-      changed="true"
+      if [[ "$backed_up" != "true" ]]; then
+        backup_config_file "$config_file" "server_manager" || true
+        backed_up="true"
+      fi
+      manager_config_set_value "$config_file" "$var" "$new_value"
+      ui_success "Updated: $var"
       continue
     fi
 

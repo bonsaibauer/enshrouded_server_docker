@@ -57,7 +57,7 @@ profiles_apply_enshrouded() {
   # Ensure group passwords exist (same behavior as bootstrap).
   ensureUserGroupPasswords || true
 
-  # Ensure profile selection keys exist (and migrate legacy schema if needed).
+  # Ensure profile selection keys exist (and drop legacy .profiles if present).
   profiles_ensure_schema || true
 
   # Persist selection in server_manager.json (single source of truth).
@@ -106,7 +106,7 @@ profiles_apply_manager() {
   chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
   chown enshrouded:enshrouded "$(manager_profile_path "$profile")" 2>/dev/null || true
 
-  # Ensure profile selection keys exist (and migrate legacy schema if needed).
+  # Ensure profile selection keys exist (and drop legacy .profiles if present).
   profiles_ensure_schema || true
 
   # Restore selection fields and set the new manager profile selection.

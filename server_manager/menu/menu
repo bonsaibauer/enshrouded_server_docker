@@ -24,22 +24,22 @@ menu_capture_external_env() {
   done
 
   # Enshrouded top-level vars (enshrouded_server.json)
-	  for var in \
-	    ENSHROUDED_NAME \
-	    ENSHROUDED_SAVE_DIR \
-	    ENSHROUDED_LOG_DIR \
-	    ENSHROUDED_IP \
-	    ENSHROUDED_QUERY_PORT \
-	    ENSHROUDED_SLOT_COUNT \
-	    ENSHROUDED_TAGS \
-	    ENSHROUDED_VOICE_CHAT_MODE \
-	    ENSHROUDED_ENABLE_VOICE_CHAT \
-	    ENSHROUDED_ENABLE_TEXT_CHAT; do
-	    value="$(printenv "$var" 2>/dev/null || true)"
-	    if [[ -n "$value" ]]; then
-      MENU_EXTERNAL_ENV["$var"]="$value"
-    fi
-  done
+  for var in \
+    ENSHROUDED_NAME \
+    ENSHROUDED_SAVE_DIR \
+    ENSHROUDED_LOG_DIR \
+    ENSHROUDED_IP \
+    ENSHROUDED_QUERY_PORT \
+    ENSHROUDED_SLOT_COUNT \
+    ENSHROUDED_TAGS \
+    ENSHROUDED_VOICE_CHAT_MODE \
+    ENSHROUDED_ENABLE_VOICE_CHAT \
+    ENSHROUDED_ENABLE_TEXT_CHAT; do
+    value="$(printenv "$var" 2>/dev/null || true)"
+    if [[ -n "$value" ]]; then
+	      MENU_EXTERNAL_ENV["$var"]="$value"
+	    fi
+	  done
 
   # Pattern-based overrides (game settings + roles)
   while IFS= read -r line; do
@@ -71,4 +71,13 @@ init_runtime_env
 . "$MENU_DIR/manager"
 . "$MENU_DIR/main"
 
+MENU_NAV=""
 menu_main
+
+case "${MENU_NAV:-}" in
+  exit_start)
+    ui_hr
+    ui_note "Starting enshrouded-server..."
+    /usr/local/etc/enshrouded/entrypoints/ctl start >/dev/null 2>&1 || true
+    ;;
+esac

@@ -114,21 +114,6 @@ profiles_env_get() {
   echo "$value"
 }
 
-profiles_env_has_key() {
-  # Check if a captured ENV selector key exists in server_manager.json.
-  # Usage: profiles_env_has_key EN_PROFILE|MANAGER_PROFILE
-  local key file
-  key="$1"
-  file="$(manager_config_path)"
-  if ! command -v jq >/dev/null 2>&1; then
-    return 1
-  fi
-  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
-    return 1
-  fi
-  jq -e --arg key "$key" 'has($key)' "$file" >/dev/null 2>&1
-}
-
 profiles_config_set() {
   # Set a profile selector value in server_manager.json (top-level keys).
   # Usage: profiles_config_set manager|enshrouded <value>
@@ -423,7 +408,7 @@ enshrouded_profile_resolve_from_value() {
 }
 
 ensure_manager_paths() {
-  mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_ROOT" "$MANAGER_DATA_DIR/run"
+  mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_ROOT"
 }
 
 ensure_manager_profile_file() {
@@ -489,6 +474,8 @@ manager_config_set() {
   temp_file="$(mktemp)"
   if jq "$@" "$file" >"$temp_file"; then
     mv "$temp_file" "$file"
+    chmod 600 "$file" 2>/dev/null || true
+    chown enshrouded:enshrouded "$file" 2>/dev/null || true
   else
     rm -f "$temp_file"
     warn "Failed to update $file (jq error)"
@@ -554,7 +541,7 @@ update_or_create_manager_config() {
     created_config="true"
   fi
 
-  # Ensure profile selection keys exist (and migrate legacy schema if needed).
+  # Ensure profile selection keys exist (and drop legacy .profiles if present).
   profiles_ensure_schema || true
 
   for var in "${MANAGER_VARS[@]}"; do
@@ -706,6 +693,8 @@ ensure_enshrouded_config_from_profile() {
   temp_file="$(mktemp)"
   if jq 'if has("bans") then . else . + {bans: []} end' "$source_profile" >"$temp_file"; then
     mv "$temp_file" "$config_file"
+    chmod 600 "$config_file" 2>/dev/null || true
+    chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
     info "Created enshrouded_server.json from profile: $profile"
     return 0
   fi

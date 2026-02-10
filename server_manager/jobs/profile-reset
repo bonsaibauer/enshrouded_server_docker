@@ -32,7 +32,7 @@ main() {
   chmod 600 "$config_file" 2>/dev/null || true
   info "Server Manager config reset from profile: $profile"
 
-  # Ensure profile selection keys exist (and migrate legacy schema if needed).
+  # Ensure profile selection keys exist (and drop legacy .profiles if present).
   profiles_ensure_schema || true
 
   # Restore selectors into the new config file (single source of truth: server_manager.json).

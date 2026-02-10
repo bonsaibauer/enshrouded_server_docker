@@ -4,6 +4,16 @@ menu_main() {
   local choice
 
   while :; do
+    if menu_nav_is_set; then
+      case "$(menu_nav_value)" in
+        main)
+          menu_nav_clear
+          ;;
+        *)
+          return 0
+          ;;
+      esac
+    fi
     ui_header "Main Menu"
 
     echo "[1] Enshrouded Server Settings"
@@ -21,7 +31,10 @@ menu_main() {
     echo "[0] Exit"
     echo
 
-    choice="$(ui_prompt_number "Choice")"
+    ui_actions_bar "0 Exit" "x Exit" "s Start+Exit"
+    echo
+    choice="$(ui_prompt_choice "Choice")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
       1)
         menu_enshrouded_settings
@@ -58,6 +71,16 @@ menu_main() {
         ;;
       0)
         ui_clear
+        menu_nav_set "exit"
+        return 0
+        ;;
+      x|q)
+        ui_clear
+        menu_nav_set "exit"
+        return 0
+        ;;
+      s)
+        menu_nav_set "exit_start"
         return 0
         ;;
       *)

@@ -15,6 +15,9 @@ menu_run_ctl() {
 menu_other_commands() {
   local choice
   while :; do
+    if menu_nav_is_set; then
+      return 0
+    fi
     ui_header "Other ctl Commands"
 
     echo "[1] status"
@@ -26,8 +29,10 @@ menu_other_commands() {
     echo
     echo "[0] Back"
     echo
-
-    choice="$(ui_prompt_number "Choice")"
+    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    echo
+    choice="$(ui_prompt_choice "Choice")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
       1) menu_run_ctl status ;;
       2) menu_run_ctl scheduled-restart ;;
@@ -36,6 +41,18 @@ menu_other_commands() {
       5) menu_run_ctl cron-stop ;;
       6) menu_run_ctl cron-restart ;;
       0) return 0 ;;
+      m)
+        menu_nav_set "main"
+        return 0
+        ;;
+      x|q)
+        menu_nav_set "exit"
+        return 0
+        ;;
+      s)
+        menu_nav_set "exit_start"
+        return 0
+        ;;
       *)
         ui_warn_line "Invalid selection."
         ui_pause

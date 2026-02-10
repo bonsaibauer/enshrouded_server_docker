@@ -20,8 +20,12 @@ docker exec -it enshroudedserver menu
 
 ## Navigation
 
-- Enter a number and press Enter
+- Enter a number (or command letter) and press Enter
 - `[0]` is always `Back` (or `Exit` in the main menu)
+- Global commands (available in most menus):
+  - `m` = Main Menu
+  - `x` (or `q`) = Exit menu
+  - `s` = Start server and Exit menu
 - Prompts use `yes/no` (also accepts `y/n`)
 - `[ENV]` marks settings controlled by container environment variables (locked in the editors)
 
@@ -48,16 +52,13 @@ Notes:
 
 1. `Edit current settings`
    - Edits `/home/enshrouded/server/enshrouded_server.json` (persistent volume file)
-   - The editor works on a temporary copy and only writes to the real file when you choose `Save`
+   - When entering the editor, the menu will ask to stop `enshrouded-server` first if it is running (required)
+   - Changes are written immediately to the real file (no explicit Save step)
    - Includes submenus for:
       - `gameSettings`
       - `userGroups`
    - Validates inputs (ports, slots, booleans, tags, game setting ranges/enums)
-   - When saving, the menu will ask to stop `enshrouded-server` first if it is running
-   - Save options:
-      - `Save`
-      - `Save and restart server`
-      - `Save and run bootstrap`
+   - After editing, use the main menu (`start/restart`) or `s` (Start+Exit) to apply changes.
 
 2. `Delete current profile`
    - Guided flow to replace the active config with a selected profile
@@ -75,8 +76,8 @@ Notes:
 
 When switching Enshrouded profiles the menu uses the existing Supervisor programs via `supervisorctl`:
 
-- `supervisorctl stop enshrouded-server` (before editing/saving or deleting/replacing the active config)
-- `supervisorctl start|restart enshrouded-server` (after saving/applying, to activate changes)
+- `supervisorctl stop enshrouded-server` (before editing or deleting/replacing the active config)
+- `supervisorctl start|restart enshrouded-server` (after editing/applying, to activate changes)
 - `supervisorctl start enshrouded-bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)
 
 ## Server Manager Settings
@@ -84,10 +85,9 @@ When switching Enshrouded profiles the menu uses the existing Supervisor program
 1. `Edit current settings`
    - Edits `/home/enshrouded/server/server_manager/server_manager.json`
    - Validates inputs using the existing validation logic from `server_manager/shared/env`
-   - When saving, the menu will ask to stop `enshrouded-server` first if it is running
-   - Save options:
-      - `Save`
-      - `Save and run bootstrap` (recommended to refresh cron schedules)
+   - When entering the editor, the menu will ask to stop `enshrouded-server` first if it is running (required)
+   - Changes are written immediately to the real file (no explicit Save step)
+   - After editing, use the main menu (`start/restart`) or `s` (Start+Exit) to apply changes.
 
 2. `Delete current profile`
    - Guided flow to replace the active config with a selected profile
@@ -109,7 +109,7 @@ When switching Server Manager profiles the menu reuses existing profile/init hel
 
 - `ensure_manager_profile_file` (copies template into the volume profile store)
 - `supervisorctl stop enshrouded-server` (before replacing the active config)
-- `supervisorctl start|restart enshrouded-server` (after saving/applying, to activate changes)
+- `supervisorctl start|restart enshrouded-server` (after editing/applying, to activate changes)
 - `supervisorctl start enshrouded-bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)
 
 ## Backups
@@ -187,7 +187,7 @@ By default (`backupDir = "backups"`), this is:
 
 Backups are created when you:
 
-- `Save` in the JSON editors
+- change a value in the JSON editors (exactly one backup per edit session, created on the first write)
 - apply a profile template (`Select new profile`)
 - run the existing reset commands (`ctl profile-reset`, `ctl enshrouded-profile-reset`)
 
