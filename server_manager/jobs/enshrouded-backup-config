@@ -1,0 +1,25 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+init_runtime_env
+
+main() {
+  local config_file
+  config_file="${install_path}/enshrouded_server.json"
+
+  info "Creating Enshrouded config backup"
+  info "Config: $config_file"
+
+  if [[ ! -f "$config_file" ]]; then
+    warn "Config file not found, skipping: $config_file"
+    return 0
+  fi
+
+  if ! backup_config_file "$config_file" "enshrouded_server"; then
+    fatal "Failed to create Enshrouded config backup"
+  fi
+}
+
+main "$@"
+

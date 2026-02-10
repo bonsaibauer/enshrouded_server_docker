@@ -34,7 +34,8 @@ enshrouded_editor_session_backup_if_needed() {
     return 0
   fi
 
-  backup_config_file "$file" "enshrouded_server" || true
+  ui_note "Creating config backup (logged via Supervisor)..."
+  menu_run_config_backup_job "enshrouded-backup-config" 30 || true
   backed_up="true"
   return 0
 }

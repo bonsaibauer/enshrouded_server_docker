@@ -14,6 +14,8 @@ docker exec enshroudedserver stop
 docker exec enshroudedserver restart
 docker exec enshroudedserver update
 docker exec enshroudedserver backup
+docker exec enshroudedserver enshrouded-backup-config
+docker exec enshroudedserver server-manager-backup-config
 docker exec enshroudedserver server-manager-profil-apply
 docker exec enshroudedserver enshrouded-profile-apply
 docker exec enshroudedserver enshrouded-config-restore
@@ -40,6 +42,8 @@ docker exec enshroudedserver ctl stop
 docker exec enshroudedserver ctl restart
 docker exec enshroudedserver ctl update
 docker exec enshroudedserver ctl backup
+docker exec enshroudedserver ctl enshrouded-backup-config
+docker exec enshroudedserver ctl server-manager-backup-config
 docker exec enshroudedserver ctl server-manager-profil-apply
 docker exec enshroudedserver ctl enshrouded-profile-apply
 docker exec enshroudedserver ctl enshrouded-config-restore
@@ -63,6 +67,8 @@ enshrouded-bootstrap
 enshrouded-server
 enshrouded-updater
 enshrouded-backup
+enshrouded-backup-config
+server-manager-backup-config
 enshrouded-restart
 enshrouded-force-update
 server-manager-profil-reset

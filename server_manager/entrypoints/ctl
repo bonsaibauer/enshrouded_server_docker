@@ -37,6 +37,10 @@ Commands:
   restart        Restart enshrouded-server
   update         Trigger enshrouded-updater
   backup         Trigger enshrouded-backup
+  enshrouded-backup-config
+                 Create a backup of enshrouded_server.json under BACKUP_DIR/profiles
+  server-manager-backup-config
+                 Create a backup of server_manager.json under BACKUP_DIR/profiles
   server-manager-profil-apply
                  Apply the selected Server Manager profile (menu writes a request file)
   enshrouded-profile-apply
@@ -99,6 +103,12 @@ main() {
       ;;
     backup)
       run_supervisorctl start enshrouded-backup
+      ;;
+    enshrouded-backup-config)
+      run_supervisorctl start enshrouded-backup-config
+      ;;
+    server-manager-backup-config)
+      run_supervisorctl start server-manager-backup-config
       ;;
     server-manager-profil-apply)
       run_supervisorctl start server-manager-profil-apply

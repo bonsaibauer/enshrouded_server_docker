@@ -229,7 +229,17 @@ menu_restore_from_backup_generic() {
       if [[ -f "$config_file" ]]; then
         echo
         if ui_confirm_yes_no "Create a backup of the current config now?"; then
-          backup_config_file "$config_file" "$label" || true
+          case "$label" in
+            enshrouded_server)
+              menu_run_config_backup_job "enshrouded-backup-config" 30 || true
+              ;;
+            server_manager)
+              menu_run_config_backup_job "server-manager-backup-config" 30 || true
+              ;;
+            *)
+              ui_warn_line "Unknown config label, cannot run backup job: $label"
+              ;;
+          esac
           ui_pause
           continue
         fi

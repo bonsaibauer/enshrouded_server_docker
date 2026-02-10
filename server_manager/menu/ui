@@ -503,3 +503,20 @@ menu_write_request_json() {
   rm -f "$tmp" 2>/dev/null || true
   return 1
 }
+
+menu_run_config_backup_job() {
+  # Trigger a one-shot Supervisor job that creates a config backup.
+  # The job output is logged via Supervisor and visible in `docker logs`.
+  local program timeout
+  program="$1"
+  timeout="${2:-30}"
+
+  supervisorctl start "$program" >/dev/null 2>&1 || true
+  if ! menu_wait_for_program_exit "$program" "$timeout"; then
+    ui_warn_line "Timeout while waiting for $program."
+    ui_note "Check: supervisorctl status $program"
+    return 1
+  fi
+
+  return 0
+}

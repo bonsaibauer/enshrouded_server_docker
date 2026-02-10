@@ -226,7 +226,8 @@ editor_manager_json() {
       fi
 
       if [[ "$backed_up" != "true" ]]; then
-        backup_config_file "$config_file" "server_manager" || true
+        ui_note "Creating config backup (logged via Supervisor)..."
+        menu_run_config_backup_job "server-manager-backup-config" 30 || true
         backed_up="true"
       fi
       manager_config_set_value "$config_file" "$var" "$new_value"

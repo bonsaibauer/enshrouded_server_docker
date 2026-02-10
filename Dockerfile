@@ -72,6 +72,8 @@ RUN ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/ctl \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/restart \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/update \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/backup \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/enshrouded-backup-config \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/server-manager-backup-config \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/server-manager-profil-apply \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/enshrouded-profile-apply \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/enshrouded-config-restore \

@@ -1,0 +1,25 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+init_runtime_env
+
+main() {
+  local config_file
+  config_file="$(manager_config_path)"
+
+  info "Creating Server Manager config backup"
+  info "Config: $config_file"
+
+  if [[ ! -f "$config_file" ]]; then
+    warn "Config file not found, skipping: $config_file"
+    return 0
+  fi
+
+  if ! backup_config_file "$config_file" "server_manager"; then
+    fatal "Failed to create Server Manager config backup"
+  fi
+}
+
+main "$@"
+
