@@ -130,7 +130,7 @@ editor_manager_json() {
     for v in PUID PGID; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -138,7 +138,7 @@ editor_manager_json() {
     for v in STEAM_APP_ID GAME_BRANCH STEAMCMD_ARGS; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -146,7 +146,7 @@ editor_manager_json() {
     for v in LOG_COLOR WINEDEBUG; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -154,7 +154,7 @@ editor_manager_json() {
     for v in SAVEFILE_NAME; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -162,7 +162,7 @@ editor_manager_json() {
     for v in UPDATE_CHECK_PLAYERS RESTART_CHECK_PLAYERS UPDATE_CRON RESTART_CRON UPDATE_PRE_HOOK UPDATE_POST_HOOK RESTART_PRE_HOOK RESTART_POST_HOOK; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -170,7 +170,7 @@ editor_manager_json() {
     for v in BACKUP_DIR BACKUP_MAX_COUNT BACKUP_CRON BACKUP_PRE_HOOK BACKUP_POST_HOOK; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
@@ -178,11 +178,11 @@ editor_manager_json() {
     for v in BOOTSTRAP_HOOK; do
       options_vars+=("$v")
       field_count=$((field_count + 1))
-      printf "[%s] %-26s %s%s\n" "$field_count" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
+      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$(manager_editor_label "$v")" "$(manager_editor_display_value "$config_file" "$v")" "$(menu_env_locked_badge "$v")"
     done
     echo
 
-    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
     choice="$(ui_prompt_choice "Choice")"
@@ -198,10 +198,6 @@ editor_manager_json() {
         ;;
       x|q)
         menu_nav_set "exit"
-        return 0
-        ;;
-      s)
-        menu_nav_set "exit_start"
         return 0
         ;;
     esac

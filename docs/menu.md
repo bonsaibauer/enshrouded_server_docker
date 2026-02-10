@@ -25,9 +25,13 @@ docker exec -it enshroudedserver menu
 - Global commands (available in most menus):
   - `m` = Main Menu
   - `x` (or `q`) = Exit menu
-  - `s` = Start server and Exit menu
 - Prompts use `yes/no` (also accepts `y/n`)
 - `[ENV]` marks settings controlled by container environment variables (locked in the editors)
+- Some actions (apply/restore) run as Supervisor jobs; their output is visible in `docker logs`.
+
+Exit behavior:
+
+- If `enshrouded-server` is `STOPPED` when you exit, the menu will ask whether it should be started before closing.
 
 ## Main Menu
 
@@ -58,7 +62,7 @@ Notes:
       - `gameSettings`
       - `userGroups`
    - Validates inputs (ports, slots, booleans, tags, game setting ranges/enums)
-   - After editing, use the main menu (`start/restart`) or `s` (Start+Exit) to apply changes.
+   - After editing, use the main menu (`start/restart`) to apply changes, or exit the menu (`x`) and confirm the start prompt.
 
 2. `Delete current profile`
    - Guided flow to replace the active config with a selected profile
@@ -87,7 +91,7 @@ When switching Enshrouded profiles the menu uses the existing Supervisor program
    - Validates inputs using the existing validation logic from `server_manager/shared/env`
    - When entering the editor, the menu will ask to stop `enshrouded-server` first if it is running (required)
    - Changes are written immediately to the real file (no explicit Save step)
-   - After editing, use the main menu (`start/restart`) or `s` (Start+Exit) to apply changes.
+   - After editing, use the main menu (`start/restart`) to apply changes, or exit the menu (`x`) and confirm the start prompt.
 
 2. `Delete current profile`
    - Guided flow to replace the active config with a selected profile
@@ -155,7 +159,7 @@ This submenu is a convenience wrapper around existing `ctl` commands:
 - `bootstrap`
 - `cron-start`, `cron-stop`, `cron-restart`
 
-Note: reset commands (`profile-reset`, `enshrouded-profile-reset`) are intentionally not listed here, because the menu provides profile delete/select flows instead.
+Note: reset commands (`server-manager-profil-reset`, `enshrouded-profile-reset`) are intentionally not listed here, because the menu provides profile delete/select flows instead.
 
 ## Profile Selection Persistence
 
@@ -189,7 +193,7 @@ Backups are created when you:
 
 - change a value in the JSON editors (exactly one backup per edit session, created on the first write)
 - apply a profile template (`Select new profile`)
-- run the existing reset commands (`ctl profile-reset`, `ctl enshrouded-profile-reset`)
+- run the existing reset commands (`ctl server-manager-profil-reset`, `ctl enshrouded-profile-reset`)
 
 Retention:
 

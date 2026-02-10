@@ -1,0 +1,96 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+init_runtime_env
+
+request_dir="${MANAGER_DATA_DIR}/requests"
+request_file="${request_dir}/server_manager_config_restore.json"
+run_file=""
+fail_file=""
+
+stop_server_now() {
+  if ! checkRunning "enshrouded-server"; then
+    return 0
+  fi
+
+  info "Stopping enshrouded-server"
+  supervisorctl stop enshrouded-server >/dev/null 2>&1 || true
+
+  local deadline now
+  deadline=$(( $(date +%s) + 90 ))
+  while checkRunning "enshrouded-server"; do
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      fatal "Timeout while stopping enshrouded-server"
+    fi
+    sleep 1
+  done
+  info "enshrouded-server stopped"
+}
+
+main() {
+  local backup_path safety config_file config_dir tmp ts
+
+  mkdir -p "$request_dir" 2>/dev/null || true
+
+  if [[ ! -f "$request_file" ]]; then
+    fatal "Missing request file: $request_file"
+  fi
+  if ! jq -e 'type == "object"' "$request_file" >/dev/null 2>&1; then
+    fatal "Invalid request JSON: $request_file"
+  fi
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  run_file="${request_dir}/.server_manager_config_restore.${ts}.$$"
+  if ! mv -f "$request_file" "$run_file" 2>/dev/null; then
+    fatal "Failed to claim request file: $request_file"
+  fi
+
+  fail_file="${request_dir}/failed_server_manager_config_restore.${ts}.$$.json"
+  trap 'mv -f "$run_file" "$fail_file" 2>/dev/null || true' EXIT
+
+  backup_path="$(jq -r '.backupPath // empty' "$run_file" 2>/dev/null || true)"
+  safety="$(jq -r '.createSafetyBackup // false' "$run_file" 2>/dev/null || echo "false")"
+
+  if [[ -z "$backup_path" ]]; then
+    fatal "Request file missing .backupPath: $run_file"
+  fi
+  if [[ ! -f "$backup_path" ]]; then
+    fatal "Backup file not found: $backup_path"
+  fi
+  if ! jq -e 'type == "object"' "$backup_path" >/dev/null 2>&1; then
+    fatal "Invalid JSON in backup file: $backup_path"
+  fi
+
+  stop_server_now
+
+  config_file="$(manager_config_path)"
+  config_dir="$(dirname "$config_file")"
+  mkdir -p "$config_dir" 2>/dev/null || true
+
+  if [[ "$safety" == "true" ]]; then
+    backup_config_file "$config_file" "server_manager" || true
+  fi
+
+  tmp="$(mktemp "${config_dir}/.server_manager.json.restore.XXXXXX")"
+  if ! cp "$backup_path" "$tmp"; then
+    rm -f "$tmp" 2>/dev/null || true
+    fatal "Failed to copy backup into place"
+  fi
+
+  mv -f "$tmp" "$config_file"
+  chmod 600 "$config_file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
+
+  # Ensure profile selection keys exist (and drop legacy .profiles if present).
+  profiles_ensure_schema || true
+
+  info "Restored Server Manager config: $config_file"
+
+  rm -f "$run_file" 2>/dev/null || true
+  trap - EXIT
+}
+
+main "$@"
+

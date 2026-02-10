@@ -75,9 +75,20 @@ MENU_NAV=""
 menu_main
 
 case "${MENU_NAV:-}" in
-  exit_start)
-    ui_hr
-    ui_note "Starting enshrouded-server..."
-    /usr/local/etc/enshrouded/entrypoints/ctl start >/dev/null 2>&1 || true
+  exit)
+    # On exit, offer to start the server if it is currently stopped.
+    if ! checkRunning "enshrouded-server"; then
+      ui_clear
+      ui_banner
+      ui_warn_line "The Enshrouded server is currently STOPPED."
+      echo
+      if ui_confirm_yes_no "Do you want me to start enshrouded-server before exiting?"; then
+        ui_note "Starting enshrouded-server..."
+        /usr/local/etc/enshrouded/entrypoints/ctl start >/dev/null 2>&1 || true
+        ui_success "Start requested."
+      else
+        ui_note "Server remains stopped."
+      fi
+    fi
     ;;
 esac

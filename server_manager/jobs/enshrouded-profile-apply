@@ -1,0 +1,98 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+. "$(dirname "$0")/../shared/enshrouded-bootstrap-shared"
+init_runtime_env
+
+request_dir="${MANAGER_DATA_DIR}/requests"
+request_file="${request_dir}/enshrouded_profile_apply.json"
+run_file=""
+fail_file=""
+
+stop_server_now() {
+  if ! checkRunning "enshrouded-server"; then
+    return 0
+  fi
+
+  info "Stopping enshrouded-server"
+  supervisorctl stop enshrouded-server >/dev/null 2>&1 || true
+
+  local deadline now
+  deadline=$(( $(date +%s) + 90 ))
+  while checkRunning "enshrouded-server"; do
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      fatal "Timeout while stopping enshrouded-server"
+    fi
+    sleep 1
+  done
+  info "enshrouded-server stopped"
+}
+
+main() {
+  local profile template config_file config_dir tmp ts
+
+  mkdir -p "$request_dir" 2>/dev/null || true
+
+  if [[ ! -f "$request_file" ]]; then
+    fatal "Missing request file: $request_file"
+  fi
+  if ! jq -e 'type == "object"' "$request_file" >/dev/null 2>&1; then
+    fatal "Invalid request JSON: $request_file"
+  fi
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  run_file="${request_dir}/.enshrouded_profile_apply.${ts}.$$"
+  if ! mv -f "$request_file" "$run_file" 2>/dev/null; then
+    fatal "Failed to claim request file: $request_file"
+  fi
+
+  # If something fails, keep the request for debugging.
+  fail_file="${request_dir}/failed_enshrouded_profile_apply.${ts}.$$.json"
+  trap 'mv -f "$run_file" "$fail_file" 2>/dev/null || true' EXIT
+
+  profile="$(jq -r '.profile // empty' "$run_file" 2>/dev/null || true)"
+  if [[ -z "$profile" ]]; then
+    fatal "Request file missing .profile: $run_file"
+  fi
+
+  template="$(enshrouded_profile_path "$profile")"
+  if [[ ! -f "$template" ]]; then
+    fatal "Enshrouded profile not found: $template"
+  fi
+  if ! jq -e '.' "$template" >/dev/null 2>&1; then
+    fatal "Invalid JSON in enshrouded profile: $template"
+  fi
+
+  stop_server_now
+
+  config_file="${install_path}/enshrouded_server.json"
+  config_dir="$(dirname "$config_file")"
+  mkdir -p "$config_dir" 2>/dev/null || true
+
+  tmp="$(mktemp "${config_dir}/.enshrouded_server.json.apply.XXXXXX")"
+  if jq 'if has("bans") then . else . + {bans: []} end' "$template" >"$tmp"; then
+    backup_config_file "$config_file" "enshrouded_server" || true
+    mv -f "$tmp" "$config_file"
+    chmod 600 "$config_file" 2>/dev/null || true
+    chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
+  else
+    rm -f "$tmp" 2>/dev/null || true
+    fatal "Failed to apply profile (jq error)"
+  fi
+
+  # Ensure passwords exist (same behavior as bootstrap).
+  ensureUserGroupPasswords || true
+
+  # Persist selection in server_manager.json (single source of truth).
+  profiles_ensure_schema || true
+  profiles_config_set "enshrouded" "$profile" || true
+
+  info "Enshrouded profile applied: $profile"
+
+  rm -f "$run_file" 2>/dev/null || true
+  trap - EXIT
+}
+
+main "$@"

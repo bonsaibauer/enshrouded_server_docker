@@ -68,7 +68,7 @@ The initial ENV selectors are captured once for transparency:
 
 ## Reset Commands
 
-- `profile-reset`:
+- `server-manager-profil-reset`:
   - resets `/home/enshrouded/server/server_manager/server_manager.json` from the selected manager profile (`actualProfilManager`)
   - creates a timestamped backup in `BACKUP_DIR/profiles` before replacing the config
   - stops `supervisord` afterwards for a clean restart

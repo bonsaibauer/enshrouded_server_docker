@@ -87,12 +87,6 @@ menu_restore_savegame_backup() {
   backup_dir="$(backup_dir_resolve)"
   save_dir="$(menu_save_dir_resolve)"
 
-  if ! command -v unzip >/dev/null 2>&1; then
-    ui_error "unzip not found. Cannot restore savegame backups."
-    ui_pause
-    return 1
-  fi
-
   while :; do
     local -a files
     mapfile -t files < <(menu_savegame_backups_list_files)
@@ -120,16 +114,33 @@ menu_restore_savegame_backup() {
     for file in "${files[@]}"; do
       base="$(basename "$file")"
       ts="${base:0:19}"
-      printf "[%s] %-19s  %s\n" "$idx" "$ts" "$base"
+      printf "%s[%s]%s %s%-19s%s  %s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${C_DIM}" "$ts" "${C_RESET}" "$base"
       idx=$((idx + 1))
     done
     echo
-    echo "[0] Back"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
-    choice="$(ui_prompt_number "Backup")"
-    if [[ "$choice" -eq 0 ]]; then
-      return 0
+    choice="$(ui_prompt_choice "Backup")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$choice" in
+      0)
+        return 0
+        ;;
+      m)
+        menu_nav_set "main"
+        return 0
+        ;;
+      x|q)
+        menu_nav_set "exit"
+        return 0
+        ;;
+    esac
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
     fi
     if [[ "$choice" -lt 1 || "$choice" -gt "${#files[@]}" ]]; then
       ui_warn_line "Invalid selection."
@@ -153,23 +164,12 @@ menu_restore_savegame_backup() {
       continue
     fi
 
-    if ! menu_stop_server_now; then
-      ui_pause
-      continue
-    fi
-
     echo
     ui_note "Optional safety step:"
+    local safety
+    safety="false"
     if ui_confirm_yes_no "Create a backup of the current savegame before restoring?"; then
-      supervisorctl start enshrouded-backup >/dev/null 2>&1 || true
-      if ! menu_wait_for_program_exit "enshrouded-backup" 1200; then
-        ui_error "Backup did not finish (timeout). Aborting restore to be safe."
-        ui_pause
-        continue
-      fi
-      ui_success "Current savegame backup created."
-    else
-      ui_note "Skipping backup."
+      safety="true"
     fi
 
     echo
@@ -180,21 +180,22 @@ menu_restore_savegame_backup() {
       continue
     fi
 
-    mkdir -p "$save_dir" 2>/dev/null || true
-
-    # Delete only files belonging to the current savefile prefix.
-    shopt -s nullglob
-    rm -f -- "$save_dir/$savefile_name" "$save_dir/$savefile_name-index" "$save_dir/$savefile_name-"* 2>/dev/null || true
-    shopt -u nullglob
-
-    if ! unzip -o "$selected" -d "$save_dir" >/dev/null 2>&1; then
-      ui_error "Failed to restore backup (unzip error)."
+    if ! menu_write_request_json "savegame_restore.json" \
+      --arg zipPath "$selected" \
+      --argjson createSafetyBackup "$safety" \
+      '{zipPath: $zipPath, createSafetyBackup: $createSafetyBackup}' >/dev/null; then
+      ui_error "Failed to create request for enshrouded-backup-restore."
       ui_pause
       continue
     fi
 
-    chmod 600 "$save_dir/$savefile_name" "$save_dir/$savefile_name-index" 2>/dev/null || true
-    chown enshrouded:enshrouded "$save_dir/$savefile_name" "$save_dir/$savefile_name-index" 2>/dev/null || true
+    supervisorctl start enshrouded-backup-restore >/dev/null 2>&1 || true
+    if ! menu_wait_for_program_exit "enshrouded-backup-restore" 1200; then
+      ui_warn_line "Timeout while waiting for enshrouded-backup-restore."
+      ui_note "Check: supervisorctl status enshrouded-backup-restore"
+      ui_pause
+      continue
+    fi
 
     ui_success "Savegame restored."
     echo
@@ -205,7 +206,7 @@ menu_restore_savegame_backup() {
 }
 
 menu_restore_from_backup_generic() {
-  local title label config_file backup_dir selected choice file config_dir tmp
+  local title label config_file backup_dir selected choice file
   title="$1"
   label="$2"
   config_file="$3"
@@ -246,16 +247,33 @@ menu_restore_from_backup_generic() {
     for file in "${files[@]}"; do
       base="$(basename "$file")"
       ts="${base:0:19}"
-      printf "[%s] %-19s  %s\n" "$idx" "$ts" "$base"
+      printf "%s[%s]%s %s%-19s%s  %s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${C_DIM}" "$ts" "${C_RESET}" "$base"
       idx=$((idx + 1))
     done
     echo
-    echo "[0] Back"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
-    choice="$(ui_prompt_number "Backup")"
-    if [[ "$choice" -eq 0 ]]; then
-      return 0
+    choice="$(ui_prompt_choice "Backup")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$choice" in
+      0)
+        return 0
+        ;;
+      m)
+        menu_nav_set "main"
+        return 0
+        ;;
+      x|q)
+        menu_nav_set "exit"
+        return 0
+        ;;
+    esac
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
     fi
     if [[ "$choice" -lt 1 || "$choice" -gt "${#files[@]}" ]]; then
       ui_warn_line "Invalid selection."
@@ -279,45 +297,54 @@ menu_restore_from_backup_generic() {
       continue
     fi
 
-    if ! menu_stop_server_now; then
-      ui_pause
-      continue
-    fi
-
     echo
     ui_note "Optional safety step:"
+    local safety program req_name
+    safety="false"
     if ui_confirm_yes_no "Create a backup of the current config before restoring?"; then
-      backup_config_file "$config_file" "$label" || true
-    else
-      ui_note "Skipping backup."
+      safety="true"
     fi
 
-    config_dir="$(dirname "$config_file")"
-    mkdir -p "$config_dir" 2>/dev/null || true
-    tmp="$(mktemp "${config_dir}/.${label}.restore.XXXXXX")"
-    if ! cp "$selected" "$tmp"; then
-      rm -f "$tmp" 2>/dev/null || true
-      ui_error "Failed to restore backup."
+    case "$label" in
+      enshrouded_server)
+        program="enshrouded-config-restore"
+        req_name="enshrouded_config_restore.json"
+        ;;
+      server_manager)
+        program="server-manager-config-restore"
+        req_name="server_manager_config_restore.json"
+        ;;
+      *)
+        ui_error "Unknown restore label: $label"
+        ui_pause
+        continue
+        ;;
+    esac
+
+    if ! menu_write_request_json "$req_name" \
+      --arg backupPath "$selected" \
+      --argjson createSafetyBackup "$safety" \
+      '{backupPath: $backupPath, createSafetyBackup: $createSafetyBackup}' >/dev/null; then
+      ui_error "Failed to create request for $program."
       ui_pause
       continue
     fi
 
-    mv -f "$tmp" "$config_file"
-    chmod 600 "$config_file" 2>/dev/null || true
-    chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
-
-    # Normalize manager config profile selector keys after restore.
-    if [[ "$label" == "server_manager" ]]; then
-      profiles_ensure_schema || true
+    supervisorctl start "$program" >/dev/null 2>&1 || true
+    if ! menu_wait_for_program_exit "$program" 600; then
+      ui_warn_line "Timeout while waiting for $program."
+      ui_note "Check: supervisorctl status $program"
+      ui_pause
+      continue
     fi
 
     ui_success "Restored: $config_file"
 
     echo
     ui_note "Apply changes:"
-    echo "[1] Start/restart Enshrouded server"
-    echo "[2] Run bootstrap (recommended; does not start server)"
-    echo "[0] Back to menu"
+    ui_opt 1 "Start/restart Enshrouded server"
+    ui_opt 2 "Run bootstrap (recommended; does not start server)"
+    ui_opt 0 "Back to menu"
     echo
 
     case "$(ui_prompt_number "Action")" in
@@ -364,14 +391,12 @@ menu_backups_menu() {
     fi
     ui_header "Backups"
 
-    echo "[1] Restore Enshrouded settings (enshrouded_server.json)"
-    echo "[2] Restore Server Manager settings (server_manager.json)"
-    echo "[3] Create savegame backup now (.zip)"
-    echo "[4] Restore savegame from .zip backup"
+    ui_opt 1 "Restore Enshrouded settings (enshrouded_server.json)"
+    ui_opt 2 "Restore Server Manager settings (server_manager.json)"
+    ui_opt 3 "Create savegame backup now (.zip)"
+    ui_opt 4 "Restore savegame from .zip backup"
     echo
-    echo "[0] Back"
-    echo
-    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
     choice="$(ui_prompt_choice "Choice")"
     choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
@@ -387,10 +412,6 @@ menu_backups_menu() {
         ;;
       x|q)
         menu_nav_set "exit"
-        return 0
-        ;;
-      s)
-        menu_nav_set "exit_start"
         return 0
         ;;
       *)

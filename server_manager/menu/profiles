@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Profile selection + application helpers.
+# Profile selection helpers.
 # Expected to be sourced after server_manager/shared/profile and server_manager/shared/common.
 
 profiles_list_enshrouded() {
@@ -23,102 +23,4 @@ profiles_list_manager() {
     echo "$name"
   done
   shopt -u nullglob
-}
-
-profiles_apply_enshrouded() {
-  local profile template config_file config_dir temp_file
-  profile="$1"
-  template="$(enshrouded_profile_path "$profile")"
-  config_file="${install_path}/enshrouded_server.json"
-  config_dir="$(dirname "$config_file")"
-
-  if [[ ! -f "$template" ]]; then
-    ui_error "Enshrouded profile not found: $template"
-    return 1
-  fi
-  if ! jq -e '.' "$template" >/dev/null 2>&1; then
-    ui_error "Invalid JSON in profile: $template"
-    return 1
-  fi
-
-  mkdir -p "$config_dir" 2>/dev/null || true
-  temp_file="$(mktemp "${config_dir}/.enshrouded_server.json.tmp.XXXXXX")"
-  if jq 'if has("bans") then . else . + {bans: []} end' "$template" >"$temp_file"; then
-    backup_config_file "$config_file" "enshrouded_server" || true
-    mv -f "$temp_file" "$config_file"
-    chmod 600 "$config_file" 2>/dev/null || true
-    chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
-  else
-    rm -f "$temp_file"
-    ui_error "Failed to apply profile (jq error)."
-    return 1
-  fi
-
-  # Ensure group passwords exist (same behavior as bootstrap).
-  ensureUserGroupPasswords || true
-
-  # Ensure profile selection keys exist (and drop legacy .profiles if present).
-  profiles_ensure_schema || true
-
-  # Persist selection in server_manager.json (single source of truth).
-  profiles_config_set "enshrouded" "$profile" || true
-
-  ui_success "Enshrouded profile applied: $profile"
-  return 0
-}
-
-profiles_apply_manager() {
-  local profile config_file config_dir temp_file
-  local old_enshrouded old_env_manager old_env_enshrouded
-  profile="$1"
-  config_file="$(manager_config_path)"
-  config_dir="$(dirname "$config_file")"
-
-  if ! command -v jq >/dev/null 2>&1; then
-    ui_error "jq not found"
-    return 1
-  fi
-
-  # Preserve persisted profile selectors across a full config replacement.
-  old_enshrouded="$(profiles_config_get "enshrouded")"
-  old_env_manager="$(profiles_env_get "MANAGER_PROFILE")"
-  old_env_enshrouded="$(profiles_env_get "EN_PROFILE")"
-
-  ensure_manager_paths
-  if ! ensure_manager_profile_file "$profile"; then
-    ui_error "Failed to create Server Manager profile: $profile"
-    return 1
-  fi
-
-  # Make sure the persisted profile store stays editable for the enshrouded user.
-  chown -R enshrouded:enshrouded "$(dirname "$(manager_profile_path "$profile")")" 2>/dev/null || true
-
-  mkdir -p "$config_dir" 2>/dev/null || true
-  temp_file="$(mktemp "${config_dir}/.server_manager.json.tmp.XXXXXX")"
-  if ! cp "$(manager_profile_path "$profile")" "$temp_file"; then
-    rm -f "$temp_file"
-    ui_error "Failed to copy Server Manager profile into place."
-    return 1
-  fi
-  backup_config_file "$config_file" "server_manager" || true
-  mv -f "$temp_file" "$config_file"
-  chmod 600 "$config_file" 2>/dev/null || true
-  chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
-  chown enshrouded:enshrouded "$(manager_profile_path "$profile")" 2>/dev/null || true
-
-  # Ensure profile selection keys exist (and drop legacy .profiles if present).
-  profiles_ensure_schema || true
-
-  # Restore selection fields and set the new manager profile selection.
-  profiles_config_set "manager" "$profile" || true
-  if [[ -n "$old_enshrouded" ]]; then
-    profiles_config_set "enshrouded" "$old_enshrouded" || true
-  else
-    profiles_config_set "enshrouded" "$(enshrouded_profile_resolve)" || true
-  fi
-  profiles_env_set_if_missing "MANAGER_PROFILE" "$old_env_manager" || true
-  profiles_env_set_if_missing "EN_PROFILE" "$old_env_enshrouded" || true
-
-  ui_success "Server Manager profile applied: $profile"
-  return 0
 }

@@ -289,7 +289,7 @@ enshrouded_editor_game_settings_menu() {
       else
         current="$(printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")" "${C_RESET}")"
       fi
-      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
+      printf "%s[%s]%s %-36s %s%s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
@@ -302,7 +302,7 @@ enshrouded_editor_game_settings_menu() {
       else
         current="$(printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")" "${C_RESET}")"
       fi
-      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
+      printf "%s[%s]%s %-36s %s%s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
@@ -315,7 +315,7 @@ enshrouded_editor_game_settings_menu() {
       else
         current="$(printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")" "${C_RESET}")"
       fi
-      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
+      printf "%s[%s]%s %-36s %s%s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
@@ -328,7 +328,7 @@ enshrouded_editor_game_settings_menu() {
       else
         current="$(printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")" "${C_RESET}")"
       fi
-      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
+      printf "%s[%s]%s %-36s %s%s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
@@ -341,14 +341,12 @@ enshrouded_editor_game_settings_menu() {
       else
         current="$(printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_compact "$file" ".gameSettings.${keys[$i]}")" "${C_RESET}")"
       fi
-      printf "[%s] %-36s %s%s\n" "$idx" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
+      printf "%s[%s]%s %-36s %s%s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${keys[$i]}" "$current" "$(menu_env_locked_badge "$env_var")"
       idx=$((idx + 1))
     done
     echo
 
-    echo "[0] Back"
-    echo
-    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
     choice="$(ui_prompt_choice "Choice")"
@@ -363,10 +361,6 @@ enshrouded_editor_game_settings_menu() {
         ;;
       x|q)
         menu_nav_set "exit"
-        return 0
-        ;;
-      s)
-        menu_nav_set "exit_start"
         return 0
         ;;
     esac
@@ -451,9 +445,7 @@ enshrouded_editor_user_groups_menu() {
     if [[ "$count" -le 0 ]]; then
       ui_warn_line "No userGroups found."
       echo
-      echo "[0] Back"
-      echo
-      ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+      ui_actions_bar "0 Back" "m Main" "x Exit"
       echo
       choice="$(ui_prompt_choice "Choice")"
       choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
@@ -461,20 +453,16 @@ enshrouded_editor_user_groups_menu() {
         0) return 0 ;;
         m) menu_nav_set "main"; return 0 ;;
         x|q) menu_nav_set "exit"; return 0 ;;
-        s) menu_nav_set "exit_start"; return 0 ;;
       esac
       continue
     fi
 
     for idx in $(seq 0 $((count - 1))); do
       name="$(jq -r ".userGroups[$idx].name // \"Group $idx\"" "$file" 2>/dev/null || echo "Group $idx")"
-      printf "[%s] %s%s%s\n" "$((idx + 1))" "${C_GREEN}" "$name" "${C_RESET}$(enshrouded_editor_role_locked_badge "$idx")"
+      printf "%s[%s]%s %s%s%s\n" "${C_MAGENTA}" "$((idx + 1))" "${C_RESET}" "${C_GREEN}" "$name" "${C_RESET}$(enshrouded_editor_role_locked_badge "$idx")"
     done
     echo
-    echo "[0] Back"
-    echo
-
-    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
     choice="$(ui_prompt_choice "Group")"
     choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
@@ -482,7 +470,6 @@ enshrouded_editor_user_groups_menu() {
       0) return 0 ;;
       m) menu_nav_set "main"; return 0 ;;
       x|q) menu_nav_set "exit"; return 0 ;;
-      s) menu_nav_set "exit_start"; return 0 ;;
     esac
 
     if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
@@ -574,18 +561,16 @@ enshrouded_editor_user_groups_menu() {
         ce_display="$(printf "%s%s%s" "${C_GREEN}" "${ce:-false}" "${C_RESET}")"
       fi
 
-      printf "[1] %-22s %s%s\n" "name" "$name_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_NAME")"
-      printf "[2] %-22s %s%s\n" "password" "$pw_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_PASSWORD")"
-      printf "[3] %-22s %s%s\n" "reservedSlots" "$reserved_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_RESERVED_SLOTS")"
-      printf "[4] %-22s %s%s\n" "canKickBan" "$ck_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_KICK_BAN")"
-      printf "[5] %-22s %s%s\n" "canAccessInventories" "$ci_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_ACCESS_INVENTORIES")"
-      printf "[6] %-22s %s%s\n" "canEditWorld" "$cw_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_EDIT_WORLD")"
-      printf "[7] %-22s %s%s\n" "canEditBase" "$cb_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_EDIT_BASE")"
-      printf "[8] %-22s %s%s\n" "canExtendBase" "$ce_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_EXTEND_BASE")"
+      printf "%s[1]%s %-22s %s%s\n" "${C_MAGENTA}" "${C_RESET}" "name" "$name_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_NAME")"
+      printf "%s[2]%s %-22s %s%s\n" "${C_MAGENTA}" "${C_RESET}" "password" "$pw_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_PASSWORD")"
+      printf "%s[3]%s %-22s %s%s\n" "${C_MAGENTA}" "${C_RESET}" "reservedSlots" "$reserved_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_RESERVED_SLOTS")"
+      printf "%s[4]%s %-22s %s%s\n" "${C_MAGENTA}" "${C_RESET}" "canKickBan" "$ck_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_KICK_BAN")"
+      printf "%s[5]%s %-22s %s%s\n" "${C_MAGENTA}" "${C_RESET}" "canAccessInventories" "$ci_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_ACCESS_INVENTORIES")"
+      printf "%s[6]%s %-22s %s%s\n" "${C_MAGENTA}" "${C_RESET}" "canEditWorld" "$cw_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_EDIT_WORLD")"
+      printf "%s[7]%s %-22s %s%s\n" "${C_MAGENTA}" "${C_RESET}" "canEditBase" "$cb_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_EDIT_BASE")"
+      printf "%s[8]%s %-22s %s%s\n" "${C_MAGENTA}" "${C_RESET}" "canExtendBase" "$ce_display" "$(menu_env_locked_badge "ENSHROUDED_ROLE_${g}_CAN_EXTEND_BASE")"
       echo
-      echo "[0] Back"
-      echo
-      ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+      ui_actions_bar "0 Back" "m Main" "x Exit"
       echo
 
       local c
@@ -601,10 +586,6 @@ enshrouded_editor_user_groups_menu() {
           ;;
         x|q)
           menu_nav_set "exit"
-          return 0
-          ;;
-        s)
-          menu_nav_set "exit_start"
           return 0
           ;;
       esac
@@ -731,34 +712,31 @@ editor_enshrouded_json() {
     field_count=0
 
     echo "${C_DIM}== Server ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "name" "$(menu_env_override_is_set "ENSHROUDED_NAME" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_NAME")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.name')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_NAME")"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "ip" "$(menu_env_override_is_set "ENSHROUDED_IP" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_IP")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.ip')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_IP")"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "queryPort" "$(menu_env_override_is_set "ENSHROUDED_QUERY_PORT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_QUERY_PORT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.queryPort')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_QUERY_PORT")"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "slotCount" "$(menu_env_override_is_set "ENSHROUDED_SLOT_COUNT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_SLOT_COUNT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.slotCount')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_SLOT_COUNT")"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "saveDirectory" "$(menu_env_override_is_set "ENSHROUDED_SAVE_DIR" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_SAVE_DIR")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.saveDirectory')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_SAVE_DIR")"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "logDirectory" "$(menu_env_override_is_set "ENSHROUDED_LOG_DIR" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_LOG_DIR")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.logDirectory')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_LOG_DIR")"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "tags" "$(menu_env_override_is_set "ENSHROUDED_TAGS" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_TAGS")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(jq -r '.tags // [] | join(\",\")' "$config_file" 2>/dev/null || echo "")" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_TAGS")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "name" "$(menu_env_override_is_set "ENSHROUDED_NAME" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_NAME")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.name')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_NAME")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "ip" "$(menu_env_override_is_set "ENSHROUDED_IP" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_IP")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.ip')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_IP")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "queryPort" "$(menu_env_override_is_set "ENSHROUDED_QUERY_PORT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_QUERY_PORT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.queryPort')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_QUERY_PORT")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "slotCount" "$(menu_env_override_is_set "ENSHROUDED_SLOT_COUNT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_SLOT_COUNT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.slotCount')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_SLOT_COUNT")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "saveDirectory" "$(menu_env_override_is_set "ENSHROUDED_SAVE_DIR" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_SAVE_DIR")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.saveDirectory')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_SAVE_DIR")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "logDirectory" "$(menu_env_override_is_set "ENSHROUDED_LOG_DIR" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_LOG_DIR")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.logDirectory')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_LOG_DIR")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "tags" "$(menu_env_override_is_set "ENSHROUDED_TAGS" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_TAGS")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(jq -r '.tags // [] | join(\",\")' "$config_file" 2>/dev/null || echo "")" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_TAGS")"
     echo
 
     echo "${C_DIM}== Voice / Text ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "voiceChatMode" "$(menu_env_override_is_set "ENSHROUDED_VOICE_CHAT_MODE" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_VOICE_CHAT_MODE")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.voiceChatMode')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_VOICE_CHAT_MODE")"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "enableVoiceChat" "$(menu_env_override_is_set "ENSHROUDED_ENABLE_VOICE_CHAT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_ENABLE_VOICE_CHAT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.enableVoiceChat')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_ENABLE_VOICE_CHAT")"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "enableTextChat" "$(menu_env_override_is_set "ENSHROUDED_ENABLE_TEXT_CHAT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_ENABLE_TEXT_CHAT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.enableTextChat')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_ENABLE_TEXT_CHAT")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "voiceChatMode" "$(menu_env_override_is_set "ENSHROUDED_VOICE_CHAT_MODE" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_VOICE_CHAT_MODE")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.voiceChatMode')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_VOICE_CHAT_MODE")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "enableVoiceChat" "$(menu_env_override_is_set "ENSHROUDED_ENABLE_VOICE_CHAT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_ENABLE_VOICE_CHAT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.enableVoiceChat')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_ENABLE_VOICE_CHAT")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "enableTextChat" "$(menu_env_override_is_set "ENSHROUDED_ENABLE_TEXT_CHAT" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_ENABLE_TEXT_CHAT")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.enableTextChat')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_ENABLE_TEXT_CHAT")"
     echo
 
     echo "${C_DIM}== Game ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s%s\n" "$field_count" "gameSettingsPreset" "$(menu_env_override_is_set "ENSHROUDED_GS_PRESET" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_GS_PRESET")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.gameSettingsPreset')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_GS_PRESET")"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "gameSettings (submenu)" "${C_DIM}<enter>${C_RESET}"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "gameSettingsPreset" "$(menu_env_override_is_set "ENSHROUDED_GS_PRESET" && printf "%s%s%s" "${C_RED}" "$(menu_env_override_value "ENSHROUDED_GS_PRESET")" "${C_RESET}" || printf "%s%s%s" "${C_GREEN}" "$(enshrouded_editor_get_raw "$config_file" '.gameSettingsPreset')" "${C_RESET}")" "$(menu_env_locked_badge "ENSHROUDED_GS_PRESET")"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "gameSettings (submenu)" "${C_DIM}<enter>${C_RESET}"
     echo
 
     echo "${C_DIM}== Access ==${C_RESET}"
-    field_count=$((field_count + 1)); printf "[%s] %-24s %s\n" "$field_count" "userGroups (submenu)" "${C_DIM}<enter>${C_RESET}"
+    field_count=$((field_count + 1)); printf "%s[%s]%s %-24s %s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "userGroups (submenu)" "${C_DIM}<enter>${C_RESET}"
     echo
 
-    echo "[0] Back"
-    echo
-
-    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
     choice="$(ui_prompt_choice "Choice")"
@@ -773,10 +751,6 @@ editor_enshrouded_json() {
         ;;
       x|q)
         menu_nav_set "exit"
-        return 0
-        ;;
-      s)
-        menu_nav_set "exit_start"
         return 0
         ;;
     esac

@@ -63,6 +63,16 @@ ui_success() {
   printf "%s%s%s\n" "${C_GREEN}" "$*" "${C_RESET}"
 }
 
+ui_opt() {
+  # Print a menu option with a colored key.
+  # Usage: ui_opt 1 "Edit current settings"
+  local key text
+  key="$1"
+  shift || true
+  text="$*"
+  printf "%s[%s]%s %s\n" "${C_MAGENTA}" "$key" "${C_RESET}" "$text"
+}
+
 ui_read() {
   local prompt value
   prompt="$1"
@@ -136,7 +146,7 @@ ui_actions_bar() {
   # Usage: ui_actions_bar "0 Back" "m Main" "x Exit"
   local item
   ui_hr
-  printf "%s" "${C_DIM}"
+  printf "%s" "${C_MAGENTA}"
   printf "%s" "Actions:"
   for item in "$@"; do
     printf "  [%s]" "$item"
@@ -249,8 +259,8 @@ ui_header() {
     server_status="${C_RED}STOPPED${C_RESET}"
   fi
 
-  ui_kv "Enshrouded Profile" "$en_profile"
-  ui_kv "Manager Profile" "$manager_profile"
+  ui_kv "Enshrouded Profile" "${C_GREEN}${en_profile}${C_RESET}"
+  ui_kv "Manager Profile" "${C_GREEN}${manager_profile}${C_RESET}"
   ui_kv "Server" "$server_status"
   ui_kv "Enshrouded Config" "$(menu_display_path "${install_path}/enshrouded_server.json")"
   ui_kv "Manager Config" "$(menu_display_path "$(manager_config_path)")"
@@ -258,7 +268,8 @@ ui_header() {
 
   if ui_has_tty; then
     ui_note "Navigation: enter a number (or command letter) and press Enter."
-    ui_note "Common: [0] Back  [m] Main  [x] Exit  [s] Start+Exit"
+    ui_note "Common: [0] Back (main: exit)  [m] Main  [x] Exit"
+    ui_note "Exit behavior: if the server is STOPPED, you will be asked if it should be started."
   else
     ui_warn_line "Hint: no TTY detected. Start with: docker exec -it CONTAINER_NAME ctl menu"
   fi
@@ -462,4 +473,33 @@ menu_warn_env_overrides_before_enshrouded_profile_selection() {
   fi
 
   return 0
+}
+
+menu_requests_dir() {
+  # Store job requests on the persistent volume so supervisor jobs can pick them up.
+  printf "%s/requests" "$MANAGER_DATA_DIR"
+}
+
+menu_write_request_json() {
+  # Write a JSON request file (atomic via tmp+mv) and return its path on stdout.
+  # Usage: menu_write_request_json <filename> <jq -n args...>
+  local name dir file tmp
+  name="$1"
+  shift
+
+  dir="$(menu_requests_dir)"
+  mkdir -p "$dir" 2>/dev/null || true
+  file="${dir}/${name}"
+  tmp="$(mktemp "${dir}/.${name}.XXXXXX")"
+
+  if jq -n "$@" >"$tmp" 2>/dev/null; then
+    mv -f "$tmp" "$file"
+    chmod 600 "$file" 2>/dev/null || true
+    chown enshrouded:enshrouded "$file" 2>/dev/null || true
+    printf "%s" "$file"
+    return 0
+  fi
+
+  rm -f "$tmp" 2>/dev/null || true
+  return 1
 }

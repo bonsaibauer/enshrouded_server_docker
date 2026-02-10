@@ -26,14 +26,11 @@ manager_select_profile_flow() {
     echo
     idx=1
     for p in "${profiles[@]}"; do
-      printf "[%s] %s\n" "$idx" "$p"
+      printf "%s[%s]%s %s%s%s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${C_GREEN}" "$p" "${C_RESET}"
       idx=$((idx + 1))
     done
     echo
-    echo "[0] Back"
-    echo
-
-    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
     selected="$(ui_prompt_choice "Profile")"
@@ -48,10 +45,6 @@ manager_select_profile_flow() {
         ;;
       x|q)
         menu_nav_set "exit"
-        return 0
-        ;;
-      s)
-        menu_nav_set "exit_start"
         return 0
         ;;
     esac
@@ -85,22 +78,29 @@ manager_select_profile_flow() {
         ui_pause
         continue
       fi
-      if ! menu_stop_server_now; then
-        ui_pause
-        continue
-      fi
     fi
 
-    if ! profiles_apply_manager "$profile"; then
+    if ! menu_write_request_json "manager_profile_apply.json" --arg profile "$profile" '{profile: $profile}' >/dev/null; then
+      ui_error "Failed to create request for server-manager-profil-apply."
       ui_pause
       continue
     fi
 
+    supervisorctl start server-manager-profil-apply >/dev/null 2>&1 || true
+    if ! menu_wait_for_program_exit "server-manager-profil-apply" 600; then
+      ui_warn_line "Timeout while waiting for server-manager-profil-apply."
+      ui_note "Check: supervisorctl status server-manager-profil-apply"
+      ui_pause
+      continue
+    fi
+
+    ui_success "Server Manager profile applied: $profile"
+
     echo
     ui_note "Apply changes:"
-    echo "[1] Start/restart Enshrouded server"
-    echo "[2] Run bootstrap (recommended; updates cron, does not start server)"
-    echo "[0] Back to menu"
+    ui_opt 1 "Start/restart Enshrouded server"
+    ui_opt 2 "Run bootstrap (recommended; updates cron, does not start server)"
+    ui_opt 0 "Back to menu"
     echo
     case "$(ui_prompt_number "Action")" in
       1)
@@ -138,14 +138,11 @@ menu_manager_settings() {
     fi
     ui_header "Server Manager Settings"
 
-    echo "[1] Edit current settings"
-    echo "[2] Delete current profile"
-    echo "[3] Select new profile"
+    ui_opt 1 "Edit current settings"
+    ui_opt 2 "Delete current profile"
+    ui_opt 3 "Select new profile"
     echo
-    echo "[0] Back"
-    echo
-
-    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
     choice="$(ui_prompt_choice "Choice")"
     choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
@@ -168,10 +165,6 @@ menu_manager_settings() {
         ;;
       x|q)
         menu_nav_set "exit"
-        return 0
-        ;;
-      s)
-        menu_nav_set "exit_start"
         return 0
         ;;
       *)

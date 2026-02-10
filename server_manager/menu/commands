@@ -20,16 +20,14 @@ menu_other_commands() {
     fi
     ui_header "Other ctl Commands"
 
-    echo "[1] status"
-    echo "[2] scheduled-restart"
-    echo "[3] bootstrap"
-    echo "[4] cron-start"
-    echo "[5] cron-stop"
-    echo "[6] cron-restart"
+    ui_opt 1 "status"
+    ui_opt 2 "scheduled-restart"
+    ui_opt 3 "bootstrap"
+    ui_opt 4 "cron-start"
+    ui_opt 5 "cron-stop"
+    ui_opt 6 "cron-restart"
     echo
-    echo "[0] Back"
-    echo
-    ui_actions_bar "0 Back" "m Main" "x Exit" "s Start+Exit"
+    ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
     choice="$(ui_prompt_choice "Choice")"
     choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
@@ -47,10 +45,6 @@ menu_other_commands() {
         ;;
       x|q)
         menu_nav_set "exit"
-        return 0
-        ;;
-      s)
-        menu_nav_set "exit_start"
         return 0
         ;;
       *)

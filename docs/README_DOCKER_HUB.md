@@ -36,7 +36,7 @@ docker exec enshroudedserver backup
 docker exec enshroudedserver password-view
 docker exec enshroudedserver scheduled-restart
 docker exec enshroudedserver force-update
-docker exec enshroudedserver profile-reset
+docker exec enshroudedserver server-manager-profil-reset
 docker exec enshroudedserver enshrouded-profile-reset
 docker exec enshroudedserver bootstrap
 docker exec enshroudedserver cron-start

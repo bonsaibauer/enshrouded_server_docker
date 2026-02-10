@@ -176,6 +176,6 @@ Refs: `origin/dev_3.1.0`, `dev_3.1.0`
 Differences (vs `dev_3.0.1`):
 - new interactive TTY menu: `server_manager/menu/*`
 - new docs: `docs/menu.md`
-- expanded backup/menu/reset flows (incl. `jobs/enshrouded-backup`, `jobs/profile-reset`)
+- expanded backup/menu/reset flows (incl. `jobs/enshrouded-backup`, `jobs/server-manager-profil-reset`)
 - added GitHub issue templates (`.github/workflows/ISSUE_TEMPLATE/*`)
 - small updates to `Dockerfile`/docs; fixes (incl. `pipefail`)

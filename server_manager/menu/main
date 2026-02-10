@@ -16,22 +16,20 @@ menu_main() {
     fi
     ui_header "Main Menu"
 
-    echo "[1] Enshrouded Server Settings"
-    echo "[2] Server Manager Settings"
-    echo "[3] Backups"
-    echo "[4] start"
-    echo "[5] stop"
-    echo "[6] restart"
-    echo "[7] update"
-    echo "[8] force-update"
-    echo "[9] password-view"
-    echo "[10] Create Savegame Backup (.zip)"
-    echo "[11] Other ctl Commands"
-    echo
-    echo "[0] Exit"
+    ui_opt 1 "Enshrouded Server Settings"
+    ui_opt 2 "Server Manager Settings"
+    ui_opt 3 "Backups"
+    ui_opt 4 "start"
+    ui_opt 5 "stop"
+    ui_opt 6 "restart"
+    ui_opt 7 "update"
+    ui_opt 8 "force-update"
+    ui_opt 9 "password-view"
+    ui_opt 10 "Create Savegame Backup (.zip)"
+    ui_opt 11 "Other ctl Commands"
     echo
 
-    ui_actions_bar "0 Exit" "x Exit" "s Start+Exit"
+    ui_actions_bar "x Exit"
     echo
     choice="$(ui_prompt_choice "Choice")"
     choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
@@ -69,18 +67,9 @@ menu_main() {
       11)
         menu_other_commands
         ;;
-      0)
+      0|x|q)
         ui_clear
         menu_nav_set "exit"
-        return 0
-        ;;
-      x|q)
-        ui_clear
-        menu_nav_set "exit"
-        return 0
-        ;;
-      s)
-        menu_nav_set "exit_start"
         return 0
         ;;
       *)

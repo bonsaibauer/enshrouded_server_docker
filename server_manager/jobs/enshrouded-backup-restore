@@ -1,0 +1,155 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+init_runtime_env
+
+request_dir="${MANAGER_DATA_DIR}/requests"
+request_file="${request_dir}/savegame_restore.json"
+run_file=""
+fail_file=""
+
+stop_server_now() {
+  if ! checkRunning "enshrouded-server"; then
+    return 0
+  fi
+
+  info "Stopping enshrouded-server"
+  supervisorctl stop enshrouded-server >/dev/null 2>&1 || true
+
+  local deadline now
+  deadline=$(( $(date +%s) + 90 ))
+  while checkRunning "enshrouded-server"; do
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      fatal "Timeout while stopping enshrouded-server"
+    fi
+    sleep 1
+  done
+  info "enshrouded-server stopped"
+}
+
+save_dir_resolve() {
+  local dir
+  dir="${ENSHROUDED_SAVE_DIR:-./savegame}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
+
+wait_for_program_exit() {
+  local proc timeout deadline now
+  proc="$1"
+  timeout="${2:-1200}"
+
+  if ! checkRunning "$proc"; then
+    return 0
+  fi
+
+  deadline=$(( $(date +%s) + timeout ))
+  while checkRunning "$proc"; do
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      return 1
+    fi
+    sleep 1
+  done
+
+  return 0
+}
+
+main() {
+  local zip_path safety save_dir ts run_backup
+  local backup_dir
+
+  mkdir -p "$request_dir" 2>/dev/null || true
+
+  if [[ ! -f "$request_file" ]]; then
+    fatal "Missing request file: $request_file"
+  fi
+  if ! jq -e 'type == "object"' "$request_file" >/dev/null 2>&1; then
+    fatal "Invalid request JSON: $request_file"
+  fi
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  run_file="${request_dir}/.savegame_restore.${ts}.$$"
+  if ! mv -f "$request_file" "$run_file" 2>/dev/null; then
+    fatal "Failed to claim request file: $request_file"
+  fi
+
+  fail_file="${request_dir}/failed_savegame_restore.${ts}.$$.json"
+  trap 'mv -f "$run_file" "$fail_file" 2>/dev/null || true' EXIT
+
+  zip_path="$(jq -r '.zipPath // empty' "$run_file" 2>/dev/null || true)"
+  safety="$(jq -r '.createSafetyBackup // false' "$run_file" 2>/dev/null || echo "false")"
+
+  if [[ -z "$zip_path" ]]; then
+    fatal "Request file missing .zipPath: $run_file"
+  fi
+  if [[ ! -f "$zip_path" ]]; then
+    fatal "Zip backup not found: $zip_path"
+  fi
+
+  save_dir="$(save_dir_resolve)"
+  backup_dir="$(backup_dir_resolve)"
+
+  stop_server_now
+
+  run_backup="false"
+  if [[ "$safety" == "true" ]]; then
+    run_backup="true"
+    info "Creating safety savegame backup..."
+    mkdir -p "$backup_dir" 2>/dev/null || true
+    chmod 700 "$backup_dir" 2>/dev/null || true
+    chown enshrouded:enshrouded "$backup_dir" 2>/dev/null || true
+    supervisorctl start enshrouded-backup >/dev/null 2>&1 || true
+    if ! wait_for_program_exit "enshrouded-backup" 1200; then
+      fatal "Safety backup did not finish (timeout). Aborting restore."
+    fi
+    info "Safety backup finished."
+  fi
+
+  info "Restoring savegame from: $zip_path"
+  info "Target save directory: $save_dir"
+  info "Savefile name: $savefile_name"
+  if [[ "$run_backup" == "true" ]]; then
+    info "Safety backup: enabled"
+  else
+    info "Safety backup: skipped"
+  fi
+
+  mkdir -p "$save_dir" 2>/dev/null || true
+  chown -R enshrouded:enshrouded "$save_dir" 2>/dev/null || true
+
+  # Delete only files belonging to the current savefile prefix.
+  shopt -s nullglob
+  rm -f -- "$save_dir/$savefile_name" "$save_dir/$savefile_name-index" "$save_dir/$savefile_name-"* 2>/dev/null || true
+  shopt -u nullglob
+
+  python3 - "$zip_path" "$save_dir" <<'PY'
+import sys
+import zipfile
+from pathlib import Path
+
+zip_path = Path(sys.argv[1])
+dest_dir = Path(sys.argv[2])
+
+dest_dir.mkdir(parents=True, exist_ok=True)
+
+with zipfile.ZipFile(zip_path, "r") as zf:
+    zf.extractall(dest_dir)
+PY
+
+  chmod 600 "$save_dir/$savefile_name" "$save_dir/$savefile_name-index" 2>/dev/null || true
+  chown enshrouded:enshrouded "$save_dir/$savefile_name" "$save_dir/$savefile_name-index" 2>/dev/null || true
+
+  info "Savegame restored."
+
+  rm -f "$run_file" 2>/dev/null || true
+  trap - EXIT
+}
+
+main "$@"
+
