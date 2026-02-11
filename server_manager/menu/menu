@@ -46,7 +46,6 @@ init_runtime_env
 . "$MENU_DIR/ui"
 . "$MENU_DIR/backups"
 . "$MENU_DIR/editor_spec_json"
-. "$MENU_DIR/editor_enshrouded_json"
 . "$MENU_DIR/enshrouded"
 . "$MENU_DIR/manager"
 
