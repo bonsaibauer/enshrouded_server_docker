@@ -3,12 +3,17 @@
 ENV_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 . "$ENV_SCRIPT_DIR/validation/lib"
 
-validate_role_env_vars() {
-  local var_name value
-  for var_name in $(compgen -A variable | grep -E "^ENSHROUDED_ROLE_[0-9]+_" || true); do
-    value="${!var_name-}"
-    env_validate_var_from_spec "$var_name" "$value" || true
-  done
+validate_template_env_vars() {
+  # Validate any template-driven env vars declared in vars.json (.templates).
+  local template var_name value
+  while IFS= read -r template; do
+    [[ -z "$template" ]] && continue
+    for var_name in $(compgen -A variable "${template}_" || true); do
+      [[ "$var_name" =~ ^${template}_[0-9]+_ ]] || continue
+      value="${!var_name-}"
+      env_validate_var_from_spec "$var_name" "$value" || true
+    done
+  done < <(validation_list_templates)
 }
 
 validate_known_vars_from_spec() {
@@ -78,6 +83,6 @@ env_validate_var_from_spec() {
 
 verify_variables() {
   validate_known_vars_from_spec
-  validate_role_env_vars
+  validate_template_env_vars
   validate_unknown_game_settings_env_vars
 }

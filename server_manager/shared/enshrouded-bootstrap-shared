@@ -1,5 +1,8 @@
 #!/bin/bash
 
+_enshrouded_bootstrap_shared_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+. "${_enshrouded_bootstrap_shared_dir}/spec_apply"
+
 prepareEnshroudedAppFolders() {
   mkdir -p "$install_path"
 }
@@ -37,62 +40,14 @@ bootstrapHook() {
   fi
 }
 
-enshrouded_bootstrap__snake_to_lower_camel() {
-  # Convert UPPER_SNAKE_CASE to lowerCamelCase (e.g. RESERVED_SLOTS -> reservedSlots).
-  local in
-  in="$1"
-  echo "$in" | tr '[:upper:]' '[:lower:]' | awk -F_ '{for(i=1;i<=NF;i++){if(i==1){out=$i}else{out=out toupper(substr($i,1,1)) substr($i,2)}}}END{print out}'
-}
-
-enshrouded_bootstrap_jq_set() {
-  # Apply a jq transform to $file atomically.
-  local file tmp
-  file="$1"
-  shift
-
-  tmp="$(mktemp)"
-  if jq "$@" "$file" >"$tmp"; then
-    mv "$tmp" "$file"
-    return 0
-  fi
-  rm -f "$tmp" 2>/dev/null || true
-  return 1
-}
-
 enshrouded_bootstrap_apply_top_level_env_to_config() {
   # Applies all known top-level vars (and gameSettingsPreset) based on validation spec.
-  local file var value json_path type jq_arg
+  local file
   file="$1"
 
-  while IFS= read -r var; do
-    [[ -z "$var" ]] && continue
-    json_path="$(validation_var_meta_field "$var" "enshroudedMenuJsonPath" 2>/dev/null || true)"
-    [[ -z "$json_path" ]] && continue
-
-    value="${!var-}"
-    [[ -z "$value" ]] && continue
-
-    case "$json_path" in
-      .tags)
-        debug "updating tags to $value"
-        if ! enshrouded_bootstrap_jq_set "$file" --arg tags "$value" '.tags = ($tags | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0)))'; then
-          warn "Failed to update $var in enshrouded_server.json (jq error)"
-        fi
-        ;;
-      *)
-        type="$(validation_var_type "$var" 2>/dev/null || echo "string")"
-        case "$type" in
-          bool|int|number) jq_arg="--argjson" ;;
-          *) jq_arg="--arg" ;;
-        esac
-
-        debug "Updating config: $var -> $json_path = $value"
-        if ! enshrouded_bootstrap_jq_set "$file" "$jq_arg" val "$value" "$json_path = \\$val"; then
-          warn "Failed to update $var in enshrouded_server.json (jq error)"
-        fi
-        ;;
-    esac
-  done < <(validation_list_vars_by_meta_field "enshroudedMenuJsonPath")
+  if ! apply_env_to_json --file "$file" --metaField "enshroudedMenuJsonPath" --orderField "menuOrder"; then
+    warn "Failed to apply some top-level ENV values to enshrouded_server.json (jq error)"
+  fi
 }
 
 updateOrCreateEnshroudedServerConfig() {
@@ -113,57 +68,15 @@ updateOrCreateEnshroudedServerConfig() {
 }
 
 updateUserGroupConfig() {
-  local group_count group_index group_param group_value
-  group_count=$(compgen -A variable | grep -E "^ENSHROUDED_ROLE_[0-9]+_" | cut -d'_' -f3 | sort -nr | head -n1)
-
   local config_file
   config_file="${install_path}/enshrouded_server.json"
-
-  if ! jq -e 'has("userGroups")' "$config_file" >/dev/null; then
-    debug "userGroups array does not exist, creating empty array"
-    enshrouded_bootstrap_jq_set "$config_file" '.userGroups = []' || true
+  if ! apply_env_template_to_json_array \
+    --file "$config_file" \
+    --template "ENSHROUDED_ROLE" \
+    --envPrefix "ENSHROUDED_ROLE" \
+    --arrayPath ".userGroups"; then
+    warn "Failed to apply some role ENV values to enshrouded_server.json (jq error)"
   fi
-
-  if [[ -n "$group_count" ]]; then
-    for group_index in $(seq 0 $group_count); do
-      if ! jq -e --argjson group_index "$group_index" '.userGroups | has($group_index)' "$config_file" >/dev/null; then
-        debug "group $group_index does not exist, creating default group"
-        enshrouded_bootstrap_jq_set "$config_file" '.userGroups += [{"name": "Default", "password": "", "canKickBan": false, "canAccessInventories": false, "canEditWorld": false, "canEditBase": false, "canExtendBase": false, "reservedSlots": 0}]' || true
-      fi
-    done
-  fi
-
-  for i in $(compgen -A variable | grep -E "^ENSHROUDED_ROLE_[0-9]+_"); do
-    group_index=$(echo "$i" | cut -d'_' -f3)
-    group_param=$(echo "$i" | cut -d'_' -f4-)
-    group_value="${!i-}"
-
-    # Skip unknown fields (also avoids accidental JSON injection from env var names).
-    if ! validation_rule_json "$i" >/dev/null 2>&1; then
-      continue
-    fi
-
-    local field_key type jq_arg prog
-    field_key="$(enshrouded_bootstrap__snake_to_lower_camel "$group_param")"
-    type="$(validation_var_type "$i" 2>/dev/null || echo "string")"
-
-    if [[ "$type" == "string" ]]; then
-      jq_arg="--arg"
-    else
-      # For bool/int/number fields: treat empty as "not set" (do not overwrite config).
-      [[ -z "$group_value" ]] && continue
-      jq_arg="--argjson"
-    fi
-
-    if [[ "$group_param" == "PASSWORD" ]]; then
-      debug "Updating group $group_index $field_key to [hidden]"
-    else
-      debug "Updating group $group_index $field_key to $group_value"
-    fi
-
-    prog=".userGroups[\\$idx].${field_key} = \\$val"
-    enshrouded_bootstrap_jq_set "$config_file" --argjson idx "$group_index" "$jq_arg" val "$group_value" "$prog" || true
-  done
 
   ensureUserGroupPasswords
 }
@@ -196,7 +109,7 @@ ensureUserGroupPasswords() {
 
   for idx in $(seq 0 $((count - 1))); do
     env_var="ENSHROUDED_ROLE_${idx}_PASSWORD"
-    if compgen -A variable | grep -q "^${env_var}$"; then
+    if [[ -n "${!env_var-}" ]]; then
       continue
     fi
 
@@ -211,53 +124,15 @@ ensureUserGroupPasswords() {
       continue
     fi
 
-    enshrouded_bootstrap_jq_set "${install_path}/enshrouded_server.json" --argjson group_index "$idx" --arg password "$new_password" '.userGroups[$group_index].password = $password' || warn "Failed to set generated password for group index $idx"
+    spec_apply__jq_set "${install_path}/enshrouded_server.json" --argjson group_index "$idx" --arg password "$new_password" '.userGroups[$group_index].password = $password' || warn "Failed to set generated password for group index $idx"
   done
 }
 
 updateGameSettingsConfig() {
-  for var_name in $(compgen -A variable | grep '^ENSHROUDED_GS_'); do
-    local var_value
-    var_value="${!var_name-}"
+  local config_file
+  config_file="${install_path}/enshrouded_server.json"
 
-    if [[ -z "$var_value" ]]; then
-      continue
-    fi
-
-    local suffix="${var_name#ENSHROUDED_GS_}"
-    if [[ "$suffix" == "PRESET" ]]; then
-      # gameSettingsPreset is a top-level key and handled by enshrouded_bootstrap_apply_top_level_env_to_config.
-      continue
-    fi
-    local jq_key_name
-    local full_jq_path
-    local jq_arg_option
-
-    jq_key_name="$(enshrouded_bootstrap__snake_to_lower_camel "$suffix")"
-    full_jq_path=".gameSettings.$jq_key_name"
-
-    # Prefer type info from validation spec when available.
-    local type
-    type="$(validation_var_type "$var_name" 2>/dev/null || echo "")"
-    case "$type" in
-      bool|int|number)
-        jq_arg_option="--argjson"
-        ;;
-      string)
-        jq_arg_option="--arg"
-        ;;
-      *)
-        # Fallback for unknown vars (keeps old behavior).
-        if [[ "$var_value" == "true" || "$var_value" == "false" || "$var_value" =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]; then
-          jq_arg_option="--argjson"
-        else
-          jq_arg_option="--arg"
-        fi
-        ;;
-    esac
-
-    debug "Updating game setting: $var_name -> $full_jq_path = $var_value (using $jq_arg_option)"
-
-    enshrouded_bootstrap_jq_set "${install_path}/enshrouded_server.json" "$jq_arg_option" val "$var_value" "$full_jq_path = \\$val" || warn "Failed to update $var_name in enshrouded_server.json. JQ command failed."
-  done
+  if ! apply_env_to_json --file "$config_file" --metaField "enshroudedJsonPath" --orderField "menuOrder" --filterPrefix ".gameSettings."; then
+    warn "Failed to apply some game settings ENV values to enshrouded_server.json (jq error)"
+  fi
 }

@@ -1,0 +1,373 @@
+#!/usr/bin/env bash
+#
+# Spec-driven helpers powered by shared/validation/vars.json.
+#
+# Currently used for applying ENV values into JSON config files based on a meta-field mapping
+# (e.g. meta.managerJsonPath / meta.enshroudedMenuJsonPath / meta.enshroudedJsonPath).
+
+_spec_apply_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+. "${_spec_apply_dir}/validation/lib"
+
+spec_apply__jq_set() {
+  # Apply a jq transform to $file atomically (tmp+mv).
+  local file tmp
+  file="$1"
+  shift
+
+  tmp="$(mktemp)"
+  if jq "$@" "$file" >"$tmp"; then
+    mv "$tmp" "$file"
+    return 0
+  fi
+  rm -f "$tmp" 2>/dev/null || true
+  return 1
+}
+
+apply_env_to_json() {
+  # Apply environment variables to a JSON file based on validation spec meta mapping.
+  #
+  # Usage:
+  #   apply_env_to_json --file <path> --metaField <metaField> [--orderField <metaOrderField>]
+  #                    [--filterPrefix <jsonPathPrefix>] [--applyEmpty true|false]
+  #
+  # Notes:
+  # - By default, empty values are skipped (keeps existing behavior: env is for overrides, not "clear").
+  # - If --applyEmpty true is used and a var is set but empty:
+  #   - list vars are set to [] (cleared)
+  #   - scalar vars are set to null
+  local file meta_field order_field filter_prefix apply_empty
+  file=""
+  meta_field=""
+  order_field="menuOrder"
+  filter_prefix=""
+  apply_empty="false"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --file)
+        file="${2-}"
+        shift 2
+        ;;
+      --metaField|--meta-field|--meta)
+        meta_field="${2-}"
+        shift 2
+        ;;
+      --orderField|--order-field)
+        order_field="${2-}"
+        shift 2
+        ;;
+      --filterPrefix|--filter-prefix)
+        filter_prefix="${2-}"
+        shift 2
+        ;;
+      --applyEmpty|--apply-empty)
+        apply_empty="${2-true}"
+        shift 2
+        ;;
+      *)
+        echo "apply_env_to_json: unknown arg: $1" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$file" || -z "$meta_field" ]]; then
+    echo "apply_env_to_json: missing --file or --metaField" >&2
+    return 1
+  fi
+  if [[ ! -f "$file" ]]; then
+    echo "apply_env_to_json: file not found: $file" >&2
+    return 1
+  fi
+
+  local any_fail var json_path rule type jq_arg value
+  any_fail="false"
+  while IFS= read -r var; do
+    [[ -z "$var" ]] && continue
+    json_path="$(validation_var_meta_field "$var" "$meta_field" 2>/dev/null || true)"
+    [[ -z "$json_path" ]] && continue
+
+    if [[ -n "$filter_prefix" ]]; then
+      case "$json_path" in
+        "${filter_prefix}"*) ;;
+        *) continue ;;
+      esac
+    fi
+
+    # Default: only apply non-empty values (preserves existing override semantics).
+    if [[ "$apply_empty" == "true" ]]; then
+      [[ -z "${!var+x}" ]] && continue
+    else
+      value="${!var-}"
+      [[ -z "$value" ]] && continue
+    fi
+
+    value="${!var-}"
+    rule="$(validation_rule_json "$var" 2>/dev/null || true)"
+
+    # If the value is empty but explicitly set, apply a clear behavior.
+    if [[ -z "$value" ]]; then
+      if [[ "$apply_empty" != "true" ]]; then
+        continue
+      fi
+      if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+        if ! spec_apply__jq_set "$file" "$json_path = []"; then
+          any_fail="true"
+        fi
+      else
+        if ! spec_apply__jq_set "$file" "$json_path = null"; then
+          any_fail="true"
+        fi
+      fi
+      continue
+    fi
+
+    # List vars (CSV) -> JSON array.
+    if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+      # Keep behavior predictable in bash: only comma separated lists are supported.
+      # Spec currently only uses this for ENSHROUDED_TAGS.
+      if ! spec_apply__jq_set "$file" --arg val "$value" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))"; then
+        any_fail="true"
+      fi
+      continue
+    fi
+
+    type="$(validation_var_type "$var" 2>/dev/null || echo "string")"
+    case "$type" in
+      bool|int|number) jq_arg="--argjson" ;;
+      *) jq_arg="--arg" ;;
+    esac
+
+    if ! spec_apply__jq_set "$file" "$jq_arg" val "$value" "$json_path = \$val"; then
+      any_fail="true"
+    fi
+  done < <(validation_list_vars_by_meta_field_ordered "$meta_field" "$order_field")
+
+  if [[ "$any_fail" == "true" ]]; then
+    return 1
+  fi
+  return 0
+}
+
+spec_apply__template_default_object_json() {
+  # Build a default JSON object for a template driven by vars.json.
+  #
+  # - bool -> false
+  # - int/number -> min (if set) else 0
+  # - string -> "" (NAME defaults to "Default" for convenience)
+  #
+  # Usage: spec_apply__template_default_object_json <template_name> <env_prefix>
+  local template env_prefix out first field var rule type min json_key value
+  template="$1"
+  env_prefix="$2"
+
+  out="{"
+  first="true"
+  while IFS= read -r field; do
+    [[ -z "$field" ]] && continue
+
+    var="${env_prefix}_0_${field}"
+    rule="$(validation_rule_json "$var" 2>/dev/null || true)"
+    [[ -z "$rule" ]] && continue
+
+    type="$(jq -r '.type // "string"' <<<"$rule" 2>/dev/null || echo "string")"
+    [[ "$type" == "null" || -z "$type" ]] && type="string"
+
+    json_key="$(validation_snake_to_lower_camel "$field")"
+    case "$type" in
+      bool)
+        value="false"
+        ;;
+      int|number)
+        min="$(jq -r '.min // empty' <<<"$rule" 2>/dev/null || true)"
+        [[ "$min" == "null" ]] && min=""
+        if [[ -n "$min" ]]; then
+          value="$min"
+        else
+          value="0"
+        fi
+        ;;
+      *)
+        if [[ "$field" == "NAME" ]]; then
+          value="\"Default\""
+        else
+          value="\"\""
+        fi
+        ;;
+    esac
+
+    if [[ "$first" == "true" ]]; then
+      first="false"
+    else
+      out="${out},"
+    fi
+    out="${out}\"${json_key}\":${value}"
+  done < <(validation_list_template_fields "$template")
+  out="${out}}"
+
+  printf "%s" "$out"
+}
+
+apply_env_template_to_json_array() {
+  # Apply template-driven environment variables to a JSON array of objects.
+  #
+  # ENV schema:
+  #   <ENV_PREFIX>_<index>_<FIELD>
+  #
+  # The template fields/rules come from:
+  #   .templates[template].fields[FIELD]
+  #
+  # Usage:
+  #   apply_env_template_to_json_array --file <path> --template <template> --envPrefix <ENV_PREFIX> --arrayPath <jq_path>
+  #                                   [--applyEmpty true|false]
+  #
+  # Notes:
+  # - By default, empty values are skipped (env is for overrides, not "clear").
+  # - If --applyEmpty true is used and a var is set but empty:
+  #   - list vars are set to [] (cleared)
+  #   - scalar vars are set to null
+  local file template env_prefix array_path apply_empty
+  file=""
+  template=""
+  env_prefix=""
+  array_path=""
+  apply_empty="false"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --file)
+        file="${2-}"
+        shift 2
+        ;;
+      --template)
+        template="${2-}"
+        shift 2
+        ;;
+      --envPrefix|--env-prefix)
+        env_prefix="${2-}"
+        shift 2
+        ;;
+      --arrayPath|--array-path)
+        array_path="${2-}"
+        shift 2
+        ;;
+      --applyEmpty|--apply-empty)
+        apply_empty="${2-true}"
+        shift 2
+        ;;
+      *)
+        echo "apply_env_template_to_json_array: unknown arg: $1" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$file" || -z "$template" || -z "$env_prefix" || -z "$array_path" ]]; then
+    echo "apply_env_template_to_json_array: missing --file/--template/--envPrefix/--arrayPath" >&2
+    return 1
+  fi
+  if [[ ! -f "$file" ]]; then
+    echo "apply_env_template_to_json_array: file not found: $file" >&2
+    return 1
+  fi
+
+  # Ensure the array exists (and is an array).
+  if ! jq -e "$array_path | type == \"array\"" "$file" >/dev/null 2>&1; then
+    if ! spec_apply__jq_set "$file" "$array_path = []"; then
+      return 1
+    fi
+  fi
+
+  # Find highest index referenced by any template env var (prefix match).
+  local max_idx var idx
+  max_idx="-1"
+  for var in $(compgen -A variable "${env_prefix}_"); do
+    if [[ "$var" =~ ^${env_prefix}_([0-9]+)_.+ ]]; then
+      idx="${BASH_REMATCH[1]}"
+      if [[ "$idx" =~ ^[0-9]+$ ]] && ((idx > max_idx)); then
+        max_idx="$idx"
+      fi
+    fi
+  done
+
+  # Ensure array entries exist up to max_idx by appending a default object derived from the template.
+  if ((max_idx >= 0)); then
+    local default_obj i
+    default_obj="$(spec_apply__template_default_object_json "$template" "$env_prefix")"
+    for i in $(seq 0 "$max_idx"); do
+      if ! jq -e --argjson idx "$i" "$array_path | has($idx)" "$file" >/dev/null 2>&1; then
+        spec_apply__jq_set "$file" --argjson obj "$default_obj" "$array_path += [\$obj]" || true
+      fi
+    done
+  fi
+
+  local any_fail value field json_key json_path rule type jq_arg
+  any_fail="false"
+
+  for var in $(compgen -A variable "${env_prefix}_"); do
+    if [[ ! "$var" =~ ^${env_prefix}_([0-9]+)_(.+)$ ]]; then
+      continue
+    fi
+    idx="${BASH_REMATCH[1]}"
+    field="${BASH_REMATCH[2]}"
+
+    # Default: only apply non-empty values (preserves existing override semantics).
+    if [[ "$apply_empty" == "true" ]]; then
+      [[ -z "${!var+x}" ]] && continue
+    else
+      value="${!var-}"
+      [[ -z "$value" ]] && continue
+    fi
+
+    value="${!var-}"
+
+    # Skip unknown fields (also avoids accidental JSON injection from env var names).
+    if ! validation_rule_json "$var" >/dev/null 2>&1; then
+      continue
+    fi
+
+    json_key="$(validation_snake_to_lower_camel "$field")"
+    json_path="${array_path}[\$idx].${json_key}"
+    rule="$(validation_rule_json "$var" 2>/dev/null || true)"
+
+    # If the value is empty but explicitly set, apply a clear behavior.
+    if [[ -z "$value" ]]; then
+      if [[ "$apply_empty" != "true" ]]; then
+        continue
+      fi
+      if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+        if ! spec_apply__jq_set "$file" --argjson idx "$idx" "$json_path = []"; then
+          any_fail="true"
+        fi
+      else
+        if ! spec_apply__jq_set "$file" --argjson idx "$idx" "$json_path = null"; then
+          any_fail="true"
+        fi
+      fi
+      continue
+    fi
+
+    # List vars (CSV) -> JSON array.
+    if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+      if ! spec_apply__jq_set "$file" --argjson idx "$idx" --arg val "$value" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))"; then
+        any_fail="true"
+      fi
+      continue
+    fi
+
+    type="$(validation_var_type "$var" 2>/dev/null || echo "string")"
+    case "$type" in
+      bool|int|number) jq_arg="--argjson" ;;
+      *) jq_arg="--arg" ;;
+    esac
+
+    if ! spec_apply__jq_set "$file" --argjson idx "$idx" "$jq_arg" val "$value" "$json_path = \$val"; then
+      any_fail="true"
+    fi
+  done
+
+  if [[ "$any_fail" == "true" ]]; then
+    return 1
+  fi
+  return 0
+}

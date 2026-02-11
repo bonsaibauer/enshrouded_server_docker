@@ -17,8 +17,8 @@
         "managerJsonPath": ".backupCron",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Backup",
+        "menuOrder": 19
       }
     },
     "BACKUP_DIR": {
@@ -37,8 +37,8 @@
         "managerJsonPath": ".backupDir",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Backup",
+        "menuOrder": 17
       }
     },
     "BACKUP_MAX_COUNT": {
@@ -57,8 +57,8 @@
         "managerJsonPath": ".backupMaxCount",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Backup",
+        "menuOrder": 18
       }
     },
     "BACKUP_POST_HOOK": {
@@ -77,8 +77,8 @@
         "managerJsonPath": ".backupPostHook",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Backup",
+        "menuOrder": 21
       }
     },
     "BACKUP_PRE_HOOK": {
@@ -97,8 +97,8 @@
         "managerJsonPath": ".backupPreHook",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Backup",
+        "menuOrder": 20
       }
     },
     "BOOTSTRAP_HOOK": {
@@ -117,8 +117,8 @@
         "managerJsonPath": ".bootstrapHook",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Hooks",
+        "menuOrder": 22
       }
     },
     "ENSHROUDED_ENABLE_TEXT_CHAT": {
@@ -180,10 +180,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.aggroPoolAmount",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 25
       }
     },
     "ENSHROUDED_GS_BOSS_DAMAGE_FACTOR": {
@@ -200,10 +200,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.bossDamageFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 30
       }
     },
     "ENSHROUDED_GS_BOSS_HEALTH_FACTOR": {
@@ -220,10 +220,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.bossHealthFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 31
       }
     },
     "ENSHROUDED_GS_CURSE_MODIFIER": {
@@ -244,10 +244,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.curseModifier",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Advanced",
+        "menuOrder": 37
       }
     },
     "ENSHROUDED_GS_DAY_TIME_DURATION": {
@@ -264,10 +264,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.dayTimeDuration",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Time",
+        "menuOrder": 35
       }
     },
     "ENSHROUDED_GS_ENABLE_DURABILITY": {
@@ -284,10 +284,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.enableDurability",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Survival / World",
+        "menuOrder": 6
       }
     },
     "ENSHROUDED_GS_ENABLE_GLIDER_TURBULENCES": {
@@ -304,10 +304,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.enableGliderTurbulences",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Survival / World",
+        "menuOrder": 12
       }
     },
     "ENSHROUDED_GS_ENABLE_STARVING_DEBUFF": {
@@ -324,10 +324,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.enableStarvingDebuff",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Survival / World",
+        "menuOrder": 7
       }
     },
     "ENSHROUDED_GS_ENEMY_DAMAGE_FACTOR": {
@@ -344,10 +344,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.enemyDamageFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 26
       }
     },
     "ENSHROUDED_GS_ENEMY_HEALTH_FACTOR": {
@@ -364,10 +364,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.enemyHealthFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 27
       }
     },
     "ENSHROUDED_GS_ENEMY_PERCEPTION_RANGE_FACTOR": {
@@ -384,10 +384,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.enemyPerceptionRangeFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 29
       }
     },
     "ENSHROUDED_GS_ENEMY_STAMINA_FACTOR": {
@@ -404,10 +404,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.enemyStaminaFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 28
       }
     },
     "ENSHROUDED_GS_EXPERIENCE_COMBAT_FACTOR": {
@@ -424,10 +424,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.experienceCombatFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Economy / Progress",
+        "menuOrder": 21
       }
     },
     "ENSHROUDED_GS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR": {
@@ -444,10 +444,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.experienceExplorationQuestsFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Economy / Progress",
+        "menuOrder": 23
       }
     },
     "ENSHROUDED_GS_EXPERIENCE_MINING_FACTOR": {
@@ -464,10 +464,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.experienceMiningFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Economy / Progress",
+        "menuOrder": 22
       }
     },
     "ENSHROUDED_GS_FACTORY_PRODUCTION_SPEED_FACTOR": {
@@ -484,10 +484,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.factoryProductionSpeedFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Economy / Progress",
+        "menuOrder": 18
       }
     },
     "ENSHROUDED_GS_FISHING_DIFFICULTY": {
@@ -510,10 +510,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.fishingDifficulty",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Survival / World",
+        "menuOrder": 14
       }
     },
     "ENSHROUDED_GS_FOOD_BUFF_DURATION_FACTOR": {
@@ -530,10 +530,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.foodBuffDurationFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Survival / World",
+        "menuOrder": 8
       }
     },
     "ENSHROUDED_GS_FROM_HUNGER_TO_STARVING": {
@@ -550,10 +550,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.fromHungerToStarving",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Survival / World",
+        "menuOrder": 9
       }
     },
     "ENSHROUDED_GS_MINING_DAMAGE_FACTOR": {
@@ -570,10 +570,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.miningDamageFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Economy / Progress",
+        "menuOrder": 15
       }
     },
     "ENSHROUDED_GS_NIGHT_TIME_DURATION": {
@@ -590,10 +590,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.nightTimeDuration",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Time",
+        "menuOrder": 36
       }
     },
     "ENSHROUDED_GS_PACIFY_ALL_ENEMIES": {
@@ -610,10 +610,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.pacifyAllEnemies",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 33
       }
     },
     "ENSHROUDED_GS_PERK_COST_FACTOR": {
@@ -630,10 +630,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.perkCostFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Economy / Progress",
+        "menuOrder": 20
       }
     },
     "ENSHROUDED_GS_PERK_UPGRADE_RECYCLING_FACTOR": {
@@ -650,10 +650,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.perkUpgradeRecyclingFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Economy / Progress",
+        "menuOrder": 19
       }
     },
     "ENSHROUDED_GS_PLANT_GROWTH_SPEED_FACTOR": {
@@ -670,10 +670,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.plantGrowthSpeedFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Economy / Progress",
+        "menuOrder": 16
       }
     },
     "ENSHROUDED_GS_PLAYER_BODY_HEAT_FACTOR": {
@@ -695,10 +695,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.playerBodyHeatFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Player",
+        "menuOrder": 4
       }
     },
     "ENSHROUDED_GS_PLAYER_DIVING_TIME_FACTOR": {
@@ -715,10 +715,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.playerDivingTimeFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Player",
+        "menuOrder": 5
       }
     },
     "ENSHROUDED_GS_PLAYER_HEALTH_FACTOR": {
@@ -735,10 +735,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.playerHealthFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Player",
+        "menuOrder": 1
       }
     },
     "ENSHROUDED_GS_PLAYER_MANA_FACTOR": {
@@ -755,10 +755,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.playerManaFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Player",
+        "menuOrder": 2
       }
     },
     "ENSHROUDED_GS_PLAYER_STAMINA_FACTOR": {
@@ -775,10 +775,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.playerStaminaFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Player",
+        "menuOrder": 3
       }
     },
     "ENSHROUDED_GS_PRESET": {
@@ -801,7 +801,7 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettingsPreset",
         "enshroudedMenuJsonPath": ".gameSettingsPreset",
         "menuGroup": "Game",
         "menuOrder": 11
@@ -826,10 +826,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.randomSpawnerAmount",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 24
       }
     },
     "ENSHROUDED_GS_RESOURCE_DROP_STACK_AMOUNT_FACTOR": {
@@ -846,10 +846,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.resourceDropStackAmountFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Economy / Progress",
+        "menuOrder": 17
       }
     },
     "ENSHROUDED_GS_SHROUD_TIME_FACTOR": {
@@ -866,10 +866,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.shroudTimeFactor",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Survival / World",
+        "menuOrder": 10
       }
     },
     "ENSHROUDED_GS_TAMING_STARTLE_REPERCUSSION": {
@@ -890,10 +890,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.tamingStartleRepercussion",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 34
       }
     },
     "ENSHROUDED_GS_THREAT_BONUS": {
@@ -910,10 +910,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.threatBonus",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Enemies",
+        "menuOrder": 32
       }
     },
     "ENSHROUDED_GS_TOMBSTONE_MODE": {
@@ -934,10 +934,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.tombstoneMode",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Survival / World",
+        "menuOrder": 11
       }
     },
     "ENSHROUDED_GS_WEATHER_FREQUENCY": {
@@ -959,10 +959,10 @@
       "allowed": "",
       "meta": {
         "managerJsonPath": null,
-        "enshroudedJsonPath": null,
+        "enshroudedJsonPath": ".gameSettings.weatherFrequency",
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Survival / World",
+        "menuOrder": 13
       }
     },
     "ENSHROUDED_IP": {
@@ -1169,8 +1169,8 @@
         "managerJsonPath": ".gameBranch",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Steam",
+        "menuOrder": 6
       }
     },
     "LOG_COLOR": {
@@ -1189,8 +1189,8 @@
         "managerJsonPath": ".logColor",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Core",
+        "menuOrder": 3
       }
     },
     "MANAGER_PROFILE": {
@@ -1229,8 +1229,8 @@
         "managerJsonPath": ".pgid",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Core",
+        "menuOrder": 2
       }
     },
     "PUID": {
@@ -1249,8 +1249,8 @@
         "managerJsonPath": ".puid",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Core",
+        "menuOrder": 1
       }
     },
     "RESTART_CHECK_PLAYERS": {
@@ -1269,8 +1269,8 @@
         "managerJsonPath": ".restartCheckPlayers",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Restart",
+        "menuOrder": 13
       }
     },
     "RESTART_CRON": {
@@ -1289,8 +1289,8 @@
         "managerJsonPath": ".restartCron",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Restart",
+        "menuOrder": 14
       }
     },
     "RESTART_POST_HOOK": {
@@ -1309,8 +1309,8 @@
         "managerJsonPath": ".restartPostHook",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Restart",
+        "menuOrder": 16
       }
     },
     "RESTART_PRE_HOOK": {
@@ -1329,8 +1329,8 @@
         "managerJsonPath": ".restartPreHook",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Restart",
+        "menuOrder": 15
       }
     },
     "SAVEFILE_NAME": {
@@ -1349,8 +1349,8 @@
         "managerJsonPath": ".savefileName",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Core",
+        "menuOrder": 4
       }
     },
     "STEAMCMD_ARGS": {
@@ -1369,8 +1369,8 @@
         "managerJsonPath": ".steamcmdArgs",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Steam",
+        "menuOrder": 7
       }
     },
     "STEAM_APP_ID": {
@@ -1389,8 +1389,8 @@
         "managerJsonPath": ".steamAppId",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Steam",
+        "menuOrder": 5
       }
     },
     "UPDATE_CHECK_PLAYERS": {
@@ -1409,8 +1409,8 @@
         "managerJsonPath": ".updateCheckPlayers",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Update",
+        "menuOrder": 9
       }
     },
     "UPDATE_CRON": {
@@ -1429,8 +1429,8 @@
         "managerJsonPath": ".updateCron",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Update",
+        "menuOrder": 10
       }
     },
     "UPDATE_POST_HOOK": {
@@ -1449,8 +1449,8 @@
         "managerJsonPath": ".updatePostHook",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Update",
+        "menuOrder": 12
       }
     },
     "UPDATE_PRE_HOOK": {
@@ -1469,8 +1469,8 @@
         "managerJsonPath": ".updatePreHook",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Update",
+        "menuOrder": 11
       }
     },
     "WINEDEBUG": {
@@ -1489,8 +1489,8 @@
         "managerJsonPath": ".winedebug",
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
+        "menuGroup": "Steam",
+        "menuOrder": 8
       }
     }
   },
@@ -1513,8 +1513,8 @@
             "managerJsonPath": null,
             "enshroudedJsonPath": null,
             "enshroudedMenuJsonPath": null,
-            "menuGroup": null,
-            "menuOrder": null
+            "menuGroup": "Permissions",
+            "menuOrder": 5
           }
         },
         "CAN_EDIT_BASE": {
@@ -1533,8 +1533,8 @@
             "managerJsonPath": null,
             "enshroudedJsonPath": null,
             "enshroudedMenuJsonPath": null,
-            "menuGroup": null,
-            "menuOrder": null
+            "menuGroup": "Permissions",
+            "menuOrder": 7
           }
         },
         "CAN_EDIT_WORLD": {
@@ -1553,8 +1553,8 @@
             "managerJsonPath": null,
             "enshroudedJsonPath": null,
             "enshroudedMenuJsonPath": null,
-            "menuGroup": null,
-            "menuOrder": null
+            "menuGroup": "Permissions",
+            "menuOrder": 6
           }
         },
         "CAN_EXTEND_BASE": {
@@ -1573,8 +1573,8 @@
             "managerJsonPath": null,
             "enshroudedJsonPath": null,
             "enshroudedMenuJsonPath": null,
-            "menuGroup": null,
-            "menuOrder": null
+            "menuGroup": "Permissions",
+            "menuOrder": 8
           }
         },
         "CAN_KICK_BAN": {
@@ -1593,8 +1593,8 @@
             "managerJsonPath": null,
             "enshroudedJsonPath": null,
             "enshroudedMenuJsonPath": null,
-            "menuGroup": null,
-            "menuOrder": null
+            "menuGroup": "Permissions",
+            "menuOrder": 4
           }
         },
         "NAME": {
@@ -1613,8 +1613,8 @@
             "managerJsonPath": null,
             "enshroudedJsonPath": null,
             "enshroudedMenuJsonPath": null,
-            "menuGroup": null,
-            "menuOrder": null
+            "menuGroup": "Basics",
+            "menuOrder": 1
           }
         },
         "PASSWORD": {
@@ -1633,8 +1633,8 @@
             "managerJsonPath": null,
             "enshroudedJsonPath": null,
             "enshroudedMenuJsonPath": null,
-            "menuGroup": null,
-            "menuOrder": null
+            "menuGroup": "Basics",
+            "menuOrder": 2
           }
         },
         "RESERVED_SLOTS": {
@@ -1653,8 +1653,8 @@
             "managerJsonPath": null,
             "enshroudedJsonPath": null,
             "enshroudedMenuJsonPath": null,
-            "menuGroup": null,
-            "menuOrder": null
+            "menuGroup": "Basics",
+            "menuOrder": 3
           }
         }
       }

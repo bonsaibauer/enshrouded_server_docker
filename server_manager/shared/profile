@@ -27,6 +27,29 @@ MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${install_path}/pr
 EN_PROFILE_TEMPLATE_DIR="${EN_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT}/profiles/enshrouded}"
 EN_PROFILE_DIR="${EN_PROFILE_DIR:-${install_path}/profiles/enshrouded}"
 
+# Profile catalog listing helpers (used by the interactive menu).
+profiles_list_enshrouded() {
+  local f name
+  shopt -s nullglob
+  for f in "$EN_PROFILE_DIR"/*_enshrouded_server.json; do
+    name="$(basename "$f")"
+    name="${name%_enshrouded_server.json}"
+    echo "$name"
+  done
+  shopt -u nullglob
+}
+
+profiles_list_manager() {
+  local f name
+  shopt -s nullglob
+  for f in "$MANAGER_PROFILE_TEMPLATE_DIR"/*_server_manager.json; do
+    name="$(basename "$f")"
+    name="${name%_server_manager.json}"
+    echo "$name"
+  done
+  shopt -u nullglob
+}
+
 # Profile selection persistence (single source of truth):
 # Stored in server_manager.json as top-level keys:
 #   actualProfilManager       (selected Server Manager profile name)
@@ -543,7 +566,8 @@ manager_json_get() {
     echo ""
     return 0
   fi
-  jq -r "$path // empty" "$file" 2>/dev/null || true
+  # Keep `false` visible (jq's `// empty` treats false as empty).
+  jq -r "$path | if . == null then empty else tostring end" "$file" 2>/dev/null || true
 }
 
 manager_value_is_valid() {
@@ -738,7 +762,7 @@ load_enshrouded_env_from_profile() {
       [[ -n "${!var-}" ]] && continue
       path="$(validation_var_meta_field "$var" "enshroudedJsonPath" 2>/dev/null || true)"
       [[ -z "$path" ]] && continue
-      candidate="$(jq -r "$path // empty" "$config_file" 2>/dev/null || true)"
+      candidate="$(jq -r "$path | if . == null then empty else tostring end" "$config_file" 2>/dev/null || true)"
       profiles_env_set_if_empty_validated "$var" "$candidate" "$config_file" || true
     done < <(validation_list_vars_by_meta_field "enshroudedJsonPath")
   fi
@@ -764,7 +788,7 @@ load_enshrouded_env_from_profile() {
     [[ -n "${!var-}" ]] && continue
     path="$(validation_var_meta_field "$var" "enshroudedJsonPath" 2>/dev/null || true)"
     [[ -z "$path" ]] && continue
-    candidate="$(jq -r "$path // empty" "$profile_file" 2>/dev/null || true)"
+    candidate="$(jq -r "$path | if . == null then empty else tostring end" "$profile_file" 2>/dev/null || true)"
     profiles_env_set_if_empty_validated "$var" "$candidate" "$profile_file" || true
   done < <(validation_list_vars_by_meta_field "enshroudedJsonPath")
 

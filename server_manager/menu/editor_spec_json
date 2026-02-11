@@ -1,0 +1,849 @@
+#!/usr/bin/env bash
+
+# Generic, spec-driven JSON editor helpers for the interactive menu.
+# Driven by `server_manager/shared/validation/vars.json` meta mappings.
+
+menu_spec_editor__json_get_scalar() {
+  # Prints the scalar as a string, but keeps `false` and `0` visible.
+  local file path
+  file="$1"
+  path="$2"
+  jq -r "$path | if . == null then empty else tostring end" "$file" 2>/dev/null || echo ""
+}
+
+menu_spec_editor__json_get_csv_list() {
+  # Prints a CSV representation of a JSON array (used for list vars).
+  local file path
+  file="$1"
+  path="$2"
+  jq -r "$path // [] | if type == \"array\" then join(\",\") else empty end" "$file" 2>/dev/null || echo ""
+}
+
+menu_spec_editor__session_backup_if_needed() {
+  # Create exactly one config backup per edit session (first write wins).
+  # Uses dynamic scope: the calling editor sets `backed_up=false` locally.
+  local backup_job timeout
+  backup_job="${1-}"
+  timeout="${2:-30}"
+
+  if [[ -z "$backup_job" ]]; then
+    return 0
+  fi
+  if [[ "${backed_up:-false}" == "true" ]]; then
+    return 0
+  fi
+  if ! declare -F menu_run_config_backup_job >/dev/null 2>&1; then
+    backed_up="true"
+    return 0
+  fi
+
+  ui_note "Creating config backup (logged via Supervisor)..."
+  menu_run_config_backup_job "$backup_job" "$timeout" || true
+  backed_up="true"
+  return 0
+}
+
+menu_spec_editor__set_jq() {
+  # Apply a jq transform to $file atomically.
+  local file tmp
+  file="$1"
+  shift
+
+  tmp="$(mktemp)"
+  if jq "$@" "$file" >"$tmp"; then
+    mv "$tmp" "$file"
+    chmod 600 "$file" 2>/dev/null || true
+    chown enshrouded:enshrouded "$file" 2>/dev/null || true
+    return 0
+  fi
+  rm -f "$tmp" 2>/dev/null || true
+  return 1
+}
+
+menu_spec_editor__block_if_env_locked() {
+  # Returns 0 if editable, 1 if locked by external env override.
+  local env_var env_value
+  env_var="$1"
+
+  if ! declare -F menu_env_override_is_set >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! menu_env_override_is_set "$env_var"; then
+    return 0
+  fi
+
+  env_value="$(menu_env_override_value "$env_var")"
+  ui_warn_line "This setting is controlled by an environment variable and cannot be edited here."
+  ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
+  ui_note "Remove it from your docker-compose/container environment to edit this value."
+  ui_pause
+  return 1
+}
+
+menu_spec_editor__display_value_for_var() {
+  local file env_var json_path empty_label rule
+  file="$1"
+  env_var="$2"
+  json_path="$3"
+  empty_label="${4:-<empty>}"
+
+  if menu_env_override_is_set "$env_var"; then
+    local raw
+    raw="$(menu_env_override_value "$env_var")"
+    if [[ -z "$raw" ]]; then
+      printf "%s" "${C_DIM}${empty_label}${C_RESET}"
+    else
+      printf "%s%s%s" "${C_RED}" "$raw" "${C_RESET}"
+    fi
+    return 0
+  fi
+
+  rule="$(validation_rule_json "$env_var" 2>/dev/null || true)"
+  if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+    local csv
+    csv="$(menu_spec_editor__json_get_csv_list "$file" "$json_path")"
+    if [[ -z "$csv" ]]; then
+      printf "%s" "${C_DIM}${empty_label}${C_RESET}"
+    else
+      printf "%s%s%s" "${C_GREEN}" "$csv" "${C_RESET}"
+    fi
+    return 0
+  fi
+
+  local raw
+  raw="$(menu_spec_editor__json_get_scalar "$file" "$json_path")"
+  if [[ -z "$raw" ]]; then
+    printf "%s" "${C_DIM}${empty_label}${C_RESET}"
+  else
+    printf "%s%s%s" "${C_GREEN}" "$raw" "${C_RESET}"
+  fi
+}
+
+menu_spec_editor__prompt_value() {
+  # Prompts for a new value. Prints the raw input to stdout.
+  local env_var label current empty_action bool_toggle
+  env_var="$1"
+  label="$2"
+  current="$3"
+  empty_action="${4:-cancel}"   # cancel|null|clear_list
+  bool_toggle="${5:-false}"
+
+  local type desc hint required allow_empty
+  type="$(validation_var_type "$env_var" 2>/dev/null || true)"
+  [[ -z "$type" ]] && type="string"
+
+  echo
+  ui_kv "Field" "$label"
+  ui_kv "Current" "${current:-<empty>}"
+  desc="$(validation_var_description "$env_var" 2>/dev/null || true)"
+  hint="$(validation_var_allowed_hint "$env_var" 2>/dev/null || true)"
+  [[ -n "$desc" ]] && ui_note "$desc"
+  [[ -n "$hint" ]] && ui_note "$hint"
+
+  required="$(validation_var_required "$env_var" 2>/dev/null || true)"
+  allow_empty="$(validation_var_allow_empty "$env_var" 2>/dev/null || echo "true")"
+  if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
+    ui_note "Enter = toggle"
+  else
+    if [[ "$required" == "true" ]]; then
+      ui_note "Empty is not allowed"
+    else
+      case "$empty_action" in
+        null)
+          if [[ "$allow_empty" == "true" ]]; then
+            ui_note "Empty = null"
+          else
+            ui_note "Empty is not allowed"
+          fi
+          ;;
+        clear_list)
+          if [[ "$allow_empty" == "true" ]]; then
+            ui_note "Empty = clear"
+          else
+            ui_note "Empty is not allowed"
+          fi
+          ;;
+        *)
+          ui_note "Empty = cancel"
+          ;;
+      esac
+    fi
+  fi
+  echo
+
+  local value normalized
+  value="$(ui_read "New value: ")"
+  value="$(echo "$value" | xargs)"
+
+  # Normalize booleans for convenience.
+  if [[ "$type" == "bool" ]]; then
+    normalized="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+      1|ja|j|y|yes) value="true" ;;
+      0|nein|n|no) value="false" ;;
+      true|false) value="$normalized" ;;
+    esac
+  fi
+
+  printf "%s" "$value"
+}
+
+menu_spec_editor__edit_var() {
+  # Edit a single mapped var using the validation spec for type, description and allowed hints.
+  local file meta_field env_var json_path label empty_action backup_job bool_toggle
+  file="$1"
+  meta_field="$2"
+  env_var="$3"
+  label="$4"
+  empty_action="${5:-cancel}"
+  backup_job="${6-}"
+  bool_toggle="${7:-false}"
+
+  if ! menu_spec_editor__block_if_env_locked "$env_var"; then
+    return 0
+  fi
+
+  json_path="$(validation_var_meta_field "$env_var" "$meta_field" 2>/dev/null || true)"
+  if [[ -z "$json_path" ]]; then
+    ui_warn_line "No config mapping for: $env_var"
+    ui_pause
+    return 0
+  fi
+
+  local rule type current v normalized
+  rule="$(validation_rule_json "$env_var" 2>/dev/null || true)"
+  type="$(validation_var_type "$env_var" 2>/dev/null || echo "string")"
+  [[ -z "$type" ]] && type="string"
+
+  if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+    current="$(menu_spec_editor__json_get_csv_list "$file" "$json_path")"
+    v="$(menu_spec_editor__prompt_value "$env_var" "$label" "$current" "clear_list" "false")"
+    if [[ -z "$v" ]]; then
+      if ! validation_check "$env_var" ""; then
+        ui_warn_line "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
+        ui_pause
+        return 0
+      fi
+      menu_spec_editor__session_backup_if_needed "$backup_job" 30 || true
+      menu_spec_editor__set_jq "$file" "$json_path = []" || true
+      return 0
+    fi
+    if ! validation_check "$env_var" "$v"; then
+      ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value}"
+      ui_pause
+      return 0
+    fi
+    menu_spec_editor__session_backup_if_needed "$backup_job" 30 || true
+    menu_spec_editor__set_jq "$file" --arg val "$v" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))" || true
+    return 0
+  fi
+
+  current="$(menu_spec_editor__json_get_scalar "$file" "$json_path")"
+
+  if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
+    [[ -z "$current" ]] && current="false"
+  fi
+
+  v="$(menu_spec_editor__prompt_value "$env_var" "$label" "$current" "$empty_action" "$bool_toggle")"
+  if [[ -z "$v" ]]; then
+    if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
+      if [[ "$current" == "true" ]]; then
+        v="false"
+      else
+        v="true"
+      fi
+    else
+      if [[ "$empty_action" == "null" ]]; then
+        if ! validation_check "$env_var" ""; then
+          ui_warn_line "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
+          ui_pause
+          return 0
+        fi
+        menu_spec_editor__session_backup_if_needed "$backup_job" 30 || true
+        menu_spec_editor__set_jq "$file" "$json_path = null" || true
+      fi
+      return 0
+    fi
+  fi
+
+  if ! validation_check "$env_var" "$v"; then
+    ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value}"
+    ui_pause
+    return 0
+  fi
+
+  local jq_arg
+  case "$type" in
+    bool|int|number) jq_arg="--argjson" ;;
+    *) jq_arg="--arg" ;;
+  esac
+
+  menu_spec_editor__session_backup_if_needed "$backup_job" 30 || true
+  menu_spec_editor__set_jq "$file" "$jq_arg" val "$v" "$json_path = \$val" || true
+}
+
+menu_spec_editor__edit_var_at_path() {
+  # Like menu_spec_editor__edit_var, but takes an explicit JSON path instead of a meta mapping.
+  local file env_var json_path label empty_action backup_job bool_toggle
+  file="$1"
+  env_var="$2"
+  json_path="$3"
+  label="$4"
+  empty_action="${5:-cancel}"
+  backup_job="${6-}"
+  bool_toggle="${7:-false}"
+
+  if ! menu_spec_editor__block_if_env_locked "$env_var"; then
+    return 0
+  fi
+  if [[ -z "$json_path" ]]; then
+    ui_warn_line "No config mapping for: $env_var"
+    ui_pause
+    return 0
+  fi
+
+  local rule type current v
+  rule="$(validation_rule_json "$env_var" 2>/dev/null || true)"
+  type="$(validation_var_type "$env_var" 2>/dev/null || echo "string")"
+  [[ -z "$type" ]] && type="string"
+
+  if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+    current="$(menu_spec_editor__json_get_csv_list "$file" "$json_path")"
+    v="$(menu_spec_editor__prompt_value "$env_var" "$label" "$current" "clear_list" "false")"
+    if [[ -z "$v" ]]; then
+      if ! validation_check "$env_var" ""; then
+        ui_warn_line "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
+        ui_pause
+        return 0
+      fi
+      menu_spec_editor__session_backup_if_needed "$backup_job" 30 || true
+      menu_spec_editor__set_jq "$file" "$json_path = []" || true
+      return 0
+    fi
+    if ! validation_check "$env_var" "$v"; then
+      ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value}"
+      ui_pause
+      return 0
+    fi
+    menu_spec_editor__session_backup_if_needed "$backup_job" 30 || true
+    menu_spec_editor__set_jq "$file" --arg val "$v" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))" || true
+    return 0
+  fi
+
+  current="$(menu_spec_editor__json_get_scalar "$file" "$json_path")"
+  if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
+    [[ -z "$current" ]] && current="false"
+  fi
+
+  v="$(menu_spec_editor__prompt_value "$env_var" "$label" "$current" "$empty_action" "$bool_toggle")"
+  if [[ -z "$v" ]]; then
+    if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
+      if [[ "$current" == "true" ]]; then
+        v="false"
+      else
+        v="true"
+      fi
+    else
+      if [[ "$empty_action" == "null" ]]; then
+        if ! validation_check "$env_var" ""; then
+          ui_warn_line "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
+          ui_pause
+          return 0
+        fi
+        menu_spec_editor__session_backup_if_needed "$backup_job" 30 || true
+        menu_spec_editor__set_jq "$file" "$json_path = null" || true
+      fi
+      return 0
+    fi
+  fi
+
+  if ! validation_check "$env_var" "$v"; then
+    ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value}"
+    ui_pause
+    return 0
+  fi
+
+  local jq_arg
+  case "$type" in
+    bool|int|number) jq_arg="--argjson" ;;
+    *) jq_arg="--arg" ;;
+  esac
+
+  menu_spec_editor__session_backup_if_needed "$backup_job" 30 || true
+  menu_spec_editor__set_jq "$file" "$jq_arg" val "$v" "$json_path = \$val" || true
+}
+
+menu_spec_editor__template_index_locked_badge() {
+  # Prints a group-level [ENV] badge if any field in the template is controlled by ENV.
+  local template env_prefix idx field env_var
+  template="$1"
+  env_prefix="$2"
+  idx="$3"
+
+  if ! declare -F menu_env_override_is_set >/dev/null 2>&1; then
+    return 0
+  fi
+
+  while IFS= read -r field; do
+    [[ -z "$field" ]] && continue
+    env_var="${env_prefix}_${idx}_${field}"
+    if menu_env_override_is_set "$env_var"; then
+      printf " %s" "${C_RED}[ENV]${C_RESET}"
+      return 0
+    fi
+  done < <(validation_list_template_fields "$template")
+
+  return 0
+}
+
+menu_spec_editor__user_groups_edit_group() {
+  local file g template env_prefix backup_job empty_label
+  file="$1"
+  g="$2"
+  template="${3:-ENSHROUDED_ROLE}"
+  env_prefix="${4:-ENSHROUDED_ROLE}"
+  backup_job="${5:-enshrouded-backup-config}"
+  empty_label="${6:-<empty>}"
+
+  local base
+  base=".userGroups[$g]"
+
+  while :; do
+    if menu_nav_is_set; then
+      return 0
+    fi
+
+    local current_name
+    current_name="$(jq -r "$base.name | if . == null or . == \"\" then \"Group $g\" else . end" "$file" 2>/dev/null || echo "Group $g")"
+
+    ui_header "User Group: $current_name"
+    ui_note "Changes are written immediately."
+    ui_note "[ENV] = controlled by container environment (locked)"
+    echo
+
+    local field_count last_group field env_var json_key json_path group label
+    local -a fields
+    fields=()
+    field_count=0
+    last_group=""
+
+    while IFS= read -r field; do
+      [[ -z "$field" ]] && continue
+
+      env_var="${env_prefix}_${g}_${field}"
+      json_key="$(validation_snake_to_lower_camel "$field")"
+      json_path="${base}.${json_key}"
+      label="$json_key"
+
+      group="$(validation_var_meta_field "$env_var" "menuGroup" 2>/dev/null || true)"
+      if [[ "$group" != "$last_group" ]]; then
+        [[ -n "$last_group" ]] && echo
+        echo "${C_DIM}== ${group:-Settings} ==${C_RESET}"
+        last_group="$group"
+      fi
+
+      fields+=("$field")
+      field_count=$((field_count + 1))
+
+      printf "%s[%s]%s %-22s %s%s\n" \
+        "${C_MAGENTA}" "$field_count" "${C_RESET}" "$label" \
+        "$(menu_spec_editor__display_value_for_var "$file" "$env_var" "$json_path" "$empty_label")" \
+        "$(menu_env_locked_badge "$env_var")"
+    done < <(validation_list_template_fields "$template")
+
+    if [[ "$field_count" -le 0 ]]; then
+      ui_warn_line "No role fields found in validation spec."
+      ui_pause
+      return 0
+    fi
+
+    echo
+    ui_actions_bar "0 Back" "m Main" "x Exit"
+    echo
+
+    local choice
+    choice="$(ui_prompt_choice "Field")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$choice" in
+      0) return 0 ;;
+      m) menu_nav_set "main"; return 0 ;;
+      x|q) menu_nav_set "exit"; return 0 ;;
+    esac
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 || "$choice" -gt "$field_count" ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    field="${fields[$((choice - 1))]}"
+    env_var="${env_prefix}_${g}_${field}"
+    json_key="$(validation_snake_to_lower_camel "$field")"
+    json_path="${base}.${json_key}"
+    label="$json_key"
+
+    local type empty_action bool_toggle
+    type="$(validation_var_type "$env_var" 2>/dev/null || echo "string")"
+    empty_action="cancel"
+    bool_toggle="false"
+    if [[ "$type" == "bool" ]]; then
+      bool_toggle="true"
+    fi
+    if [[ "$field" == "PASSWORD" ]]; then
+      empty_action="null"
+      bool_toggle="false"
+    fi
+
+    menu_spec_editor__edit_var_at_path "$file" "$env_var" "$json_path" "$label" "$empty_action" "$backup_job" "$bool_toggle" || true
+  done
+}
+
+menu_edit_user_groups_from_spec() {
+  # Spec-driven editor for `.userGroups` driven by `templates.ENSHROUDED_ROLE`.
+  local file template env_prefix backup_job empty_label
+  file=""
+  template="ENSHROUDED_ROLE"
+  env_prefix="ENSHROUDED_ROLE"
+  backup_job="enshrouded-backup-config"
+  empty_label="<empty>"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --file)
+        file="${2-}"
+        shift 2
+        ;;
+      --template)
+        template="${2-}"
+        shift 2
+        ;;
+      --envPrefix|--env-prefix)
+        env_prefix="${2-}"
+        shift 2
+        ;;
+      --backupJob|--backup-job)
+        backup_job="${2-}"
+        shift 2
+        ;;
+      --emptyLabel|--empty-label)
+        empty_label="${2-}"
+        shift 2
+        ;;
+      *)
+        ui_warn_line "Unknown arg: $1"
+        ui_pause
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$file" ]]; then
+    ui_warn_line "menu_edit_user_groups_from_spec: missing --file"
+    ui_pause
+    return 1
+  fi
+
+  local choice count idx name
+  while :; do
+    if menu_nav_is_set; then
+      return 0
+    fi
+
+    ui_header "Edit User Groups"
+    ui_note "[ENV] = controlled by container environment (locked)"
+
+    count="$(jq -r '(.userGroups // []) | if type == "array" then length else 0 end' "$file" 2>/dev/null || echo 0)"
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+      count=0
+    fi
+
+    if [[ "$count" -le 0 ]]; then
+      ui_warn_line "No userGroups found."
+      echo
+      ui_actions_bar "0 Back" "m Main" "x Exit"
+      echo
+      choice="$(ui_prompt_choice "Choice")"
+      choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
+      case "$choice" in
+        0) return 0 ;;
+        m) menu_nav_set "main"; return 0 ;;
+        x|q) menu_nav_set "exit"; return 0 ;;
+      esac
+      continue
+    fi
+
+    local -a options
+    options=()
+
+    for idx in $(seq 0 $((count - 1))); do
+      name="$(jq -r ".userGroups[$idx].name | if . == null or . == \"\" then \"Group $idx\" else . end" "$file" 2>/dev/null || echo "Group $idx")"
+      options+=("$idx")
+      printf "%s[%s]%s %s%s%s\n" \
+        "${C_MAGENTA}" "$((idx + 1))" "${C_RESET}" \
+        "${C_GREEN}" "$name" "${C_RESET}$(menu_spec_editor__template_index_locked_badge "$template" "$env_prefix" "$idx")"
+    done
+
+    echo
+    ui_actions_bar "0 Back" "m Main" "x Exit"
+    echo
+
+    choice="$(ui_prompt_choice "Group")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$choice" in
+      0) return 0 ;;
+      m) menu_nav_set "main"; return 0 ;;
+      x|q) menu_nav_set "exit"; return 0 ;;
+    esac
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    local g
+    g=$((choice - 1))
+    if [[ "$g" -lt 0 || "$g" -ge "$count" ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    menu_spec_editor__user_groups_edit_group "$file" "$g" "$template" "$env_prefix" "$backup_job" "$empty_label" || true
+  done
+}
+
+menu_edit_json_from_spec() {
+  # Interactive spec-driven editor.
+  #
+  # Required args:
+  #   --title <title>
+  #   --file <json_file>
+  #   --metaField <meta_field>         # e.g. managerJsonPath, enshroudedMenuJsonPath, enshroudedJsonPath
+  #
+  # Optional args:
+  #   --labelMode var|path             # how to render field labels (default: var)
+  #   --labelStripPrefix <prefix>      # when labelMode=path, strip this prefix from the JSON path
+  #   --filterPrefix <jsonPathPrefix>  # only include vars where jsonPath starts with this prefix
+  #   --backupJob <supervisor_job>     # create one backup per edit session on first write
+  #   --emptyAction cancel|null        # empty input behavior for scalar values (default: cancel)
+  #   --boolToggle true|false          # allow empty input to toggle bools (default: false)
+  #   --emptyLabel <text>              # placeholder for empty values (default: <empty>)
+  #   --extra <token> <label> <group> <callback_fn>
+  local title file meta_field label_mode label_strip_prefix filter_prefix backup_job empty_action bool_toggle empty_label
+  title=""
+  file=""
+  meta_field=""
+  label_mode="var"
+  label_strip_prefix=""
+  filter_prefix=""
+  backup_job=""
+  empty_action="cancel"
+  bool_toggle="false"
+  empty_label="<empty>"
+
+  local -a extra_tokens extra_labels extra_groups extra_callbacks
+  extra_tokens=()
+  extra_labels=()
+  extra_groups=()
+  extra_callbacks=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)
+        title="${2-}"
+        shift 2
+        ;;
+      --file)
+        file="${2-}"
+        shift 2
+        ;;
+      --metaField|--meta-field|--meta)
+        meta_field="${2-}"
+        shift 2
+        ;;
+      --labelMode|--label-mode)
+        label_mode="${2-}"
+        shift 2
+        ;;
+      --labelStripPrefix|--label-strip-prefix)
+        label_strip_prefix="${2-}"
+        shift 2
+        ;;
+      --filterPrefix|--filter-prefix)
+        filter_prefix="${2-}"
+        shift 2
+        ;;
+      --backupJob|--backup-job)
+        backup_job="${2-}"
+        shift 2
+        ;;
+      --emptyAction|--empty-action)
+        empty_action="${2-}"
+        shift 2
+        ;;
+      --boolToggle|--bool-toggle)
+        bool_toggle="${2-}"
+        shift 2
+        ;;
+      --emptyLabel|--empty-label)
+        empty_label="${2-}"
+        shift 2
+        ;;
+      --extra)
+        extra_tokens+=("${2-}")
+        extra_labels+=("${3-}")
+        extra_groups+=("${4-}")
+        extra_callbacks+=("${5-}")
+        shift 5
+        ;;
+      *)
+        ui_warn_line "Unknown arg: $1"
+        ui_pause
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$file" || -z "$meta_field" ]]; then
+    ui_warn_line "menu_edit_json_from_spec: missing --file or --metaField"
+    ui_pause
+    return 1
+  fi
+
+  while :; do
+    if menu_nav_is_set; then
+      return 0
+    fi
+
+    ui_header "${title:-Edit Settings}"
+    if declare -F menu_display_path >/dev/null 2>&1; then
+      ui_kv "File" "$(menu_display_path "$file")"
+    else
+      ui_kv "File" "$file"
+    fi
+    ui_note "Changes are written immediately."
+    ui_note "[ENV] = controlled by container environment (locked)"
+    echo
+
+    local field_count last_group var json_path group label
+    local -a options
+    options=()
+    field_count=0
+    last_group=""
+
+    while IFS= read -r var; do
+      [[ -z "$var" ]] && continue
+      json_path="$(validation_var_meta_field "$var" "$meta_field" 2>/dev/null || true)"
+      [[ -z "$json_path" ]] && continue
+
+      if [[ -n "$filter_prefix" ]]; then
+        case "$json_path" in
+          "${filter_prefix}"*) ;;
+          *) continue ;;
+        esac
+      fi
+
+      group="$(validation_var_meta_field "$var" "menuGroup" 2>/dev/null || true)"
+      case "$label_mode" in
+        path)
+          label="$json_path"
+          if [[ -n "$label_strip_prefix" ]]; then
+            label="${label#${label_strip_prefix}}"
+          fi
+          label="${label#.}"
+          ;;
+        *)
+          label="$var"
+          ;;
+      esac
+
+      if [[ "$group" != "$last_group" ]]; then
+        [[ -n "$last_group" ]] && echo
+        echo "${C_DIM}== ${group:-Settings} ==${C_RESET}"
+        last_group="$group"
+      fi
+
+      options+=("$var")
+      field_count=$((field_count + 1))
+      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$label" "$(menu_spec_editor__display_value_for_var "$file" "$var" "$json_path" "$empty_label")" "$(menu_env_locked_badge "$var")"
+    done < <(validation_list_vars_by_meta_field_ordered "$meta_field" "menuOrder")
+
+    local i token extra_label extra_group cb
+    for i in "${!extra_tokens[@]}"; do
+      token="${extra_tokens[$i]}"
+      extra_label="${extra_labels[$i]}"
+      extra_group="${extra_groups[$i]}"
+      cb="${extra_callbacks[$i]}"
+      [[ -z "$token" || -z "$extra_label" || -z "$cb" ]] && continue
+
+      if [[ "$extra_group" != "$last_group" ]]; then
+        [[ -n "$last_group" ]] && echo
+        echo "${C_DIM}== ${extra_group:-Settings} ==${C_RESET}"
+        last_group="$extra_group"
+      fi
+
+      options+=("$token")
+      field_count=$((field_count + 1))
+      printf "%s[%s]%s %-26s %s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$extra_label" "${C_DIM}<enter>${C_RESET}"
+    done
+
+    if [[ "$field_count" -le 0 ]]; then
+      ui_warn_line "No settings found in validation spec."
+      ui_pause
+      return 0
+    fi
+
+    echo
+    ui_actions_bar "0 Back" "m Main" "x Exit"
+    echo
+
+    local choice
+    choice="$(ui_prompt_choice "Choice")"
+    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$choice" in
+      0) return 0 ;;
+      m) menu_nav_set "main"; return 0 ;;
+      x|q) menu_nav_set "exit"; return 0 ;;
+    esac
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 || "$choice" -gt "$field_count" ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    local selected
+    selected="${options[$((choice - 1))]}"
+
+    # Extra entry?
+    cb=""
+    for i in "${!extra_tokens[@]}"; do
+      if [[ "${extra_tokens[$i]}" == "$selected" ]]; then
+        cb="${extra_callbacks[$i]}"
+        break
+      fi
+    done
+
+    if [[ -n "$cb" ]]; then
+      "$cb" "$file" || true
+      continue
+    fi
+
+    # Spec var.
+    json_path="$(validation_var_meta_field "$selected" "$meta_field" 2>/dev/null || true)"
+    case "$label_mode" in
+      path)
+        label="$json_path"
+        if [[ -n "$label_strip_prefix" ]]; then
+          label="${label#${label_strip_prefix}}"
+        fi
+        label="${label#.}"
+        ;;
+      *)
+        label="$selected"
+        ;;
+    esac
+    menu_spec_editor__edit_var "$file" "$meta_field" "$selected" "$label" "$empty_action" "$backup_job" "$bool_toggle" || true
+  done
+}

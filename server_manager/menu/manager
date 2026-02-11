@@ -1,5 +1,38 @@
 #!/usr/bin/env bash
 
+editor_manager_json() {
+  # Thin wrapper around the generic spec-driven JSON editor.
+  local config_file backed_up
+  config_file="$(manager_config_path)"
+  backed_up="false"
+
+  # Ensure config exists and is valid.
+  if [[ ! -f "$config_file" ]] || ! jq -e 'type == "object"' "$config_file" >/dev/null 2>&1; then
+    ui_warn_line "server_manager.json is missing or invalid. Initializing..."
+    update_or_create_manager_config || true
+  fi
+
+  if [[ ! -f "$config_file" ]]; then
+    ui_error "Could not find server_manager.json: $config_file"
+    ui_pause
+    return 1
+  fi
+
+  if ! menu_stop_server_for_config_change "edit Server Manager settings"; then
+    return 0
+  fi
+
+  menu_edit_json_from_spec \
+    --title "Edit Server Manager Settings" \
+    --file "$config_file" \
+    --metaField "managerJsonPath" \
+    --labelMode "var" \
+    --backupJob "server-manager-backup-config" \
+    --emptyAction "null" \
+    --boolToggle "false" \
+    --emptyLabel "<null>"
+}
+
 manager_select_profile_flow() {
   local mode config_file profiles profile_count idx selected profile
   mode="${1:-select}"

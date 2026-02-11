@@ -54,7 +54,7 @@ validation__split_csv() {
 validation_rule_json() {
   # Prints the rule JSON (compact) to stdout.
   # Returns: 0 ok, 2 unknown/unavailable.
-  local var field rule
+  local var template field rule
   var="$1"
 
   validation__clear_error
@@ -74,14 +74,17 @@ validation_rule_json() {
     return 0
   fi
 
-  if [[ "$var" =~ ^ENSHROUDED_ROLE_[0-9]+_(.+)$ ]]; then
-    field="${BASH_REMATCH[1]}"
-    rule="$(jq -c --arg field "$field" '.templates.ENSHROUDED_ROLE.fields[$field] // empty' "$VALIDATION_SPEC_FILE" 2>/dev/null || true)"
+  # Template vars follow ENV schema: <TEMPLATE>_<index>_<FIELD>
+  # Example: ENSHROUDED_ROLE_0_PASSWORD
+  if [[ "$var" =~ ^([A-Z0-9_]+)_[0-9]+_(.+)$ ]]; then
+    template="${BASH_REMATCH[1]}"
+    field="${BASH_REMATCH[2]}"
+    rule="$(jq -c --arg t "$template" --arg field "$field" '.templates[$t].fields[$field] // empty' "$VALIDATION_SPEC_FILE" 2>/dev/null || true)"
     if [[ -n "$rule" && "$rule" != "null" ]]; then
       printf "%s" "$rule"
       return 0
     fi
-    validation__set_error "Unknown role field: $field"
+    validation__set_error "Unknown template field: ${template}.${field}"
     return 2
   fi
 
@@ -98,6 +101,17 @@ validation_list_vars() {
     return 0
   fi
   jq -r '.vars | keys[]' "$VALIDATION_SPEC_FILE" 2>/dev/null || true
+}
+
+validation_list_templates() {
+  # Prints all known template names from .templates.
+  if [[ ! -f "$VALIDATION_SPEC_FILE" ]]; then
+    return 0
+  fi
+  if ! validation__has_jq; then
+    return 0
+  fi
+  jq -r '.templates | keys[]' "$VALIDATION_SPEC_FILE" 2>/dev/null || true
 }
 
 validation_list_vars_by_meta_field() {
@@ -174,7 +188,12 @@ validation_list_template_fields() {
     return 0
   fi
 
-  jq -r --arg t "$template" '.templates[$t].fields | keys[]' "$VALIDATION_SPEC_FILE" 2>/dev/null || true
+  jq -r --arg t "$template" '
+    .templates[$t].fields
+    | to_entries
+    | sort_by((.value.meta.menuOrder // 999999999))
+    | .[].key
+  ' "$VALIDATION_SPEC_FILE" 2>/dev/null || true
 }
 
 validation_var_type() {
@@ -213,6 +232,23 @@ validation_var_required() {
   required="$(jq -r '.required // false' <<<"$rule" 2>/dev/null || echo "false")"
   [[ "$required" == "null" || -z "$required" ]] && required="false"
   printf "%s" "$required"
+}
+
+validation_var_allow_empty() {
+  # Returns "true" or "false" based on the rule (true if not set).
+  local var rule allow_empty
+  var="$1"
+  rule="$(validation_rule_json "$var")" || return $?
+  allow_empty="$(jq -r '.allowEmpty // true' <<<"$rule" 2>/dev/null || echo "true")"
+  [[ "$allow_empty" == "null" || -z "$allow_empty" ]] && allow_empty="true"
+  printf "%s" "$allow_empty"
+}
+
+validation_snake_to_lower_camel() {
+  # Convert UPPER_SNAKE_CASE to lowerCamelCase (e.g. RESERVED_SLOTS -> reservedSlots).
+  local in
+  in="$1"
+  echo "$in" | tr '[:upper:]' '[:lower:]' | awk -F_ '{for(i=1;i<=NF;i++){if(i==1){out=$i}else{out=out toupper(substr($i,1,1)) substr($i,2)}}}END{print out}'
 }
 
 validation_var_allowed_hint() {
