@@ -140,8 +140,8 @@ Differences (vs `dev_2.1.2`):
 Refs: `origin/dev_2.2.0`, `dev_2.2.0`
 
 Differences (vs `dev_2.1.3`):
-- refactor: new `server_manager/lib/env.sh` + `server_manager/lib/profile.sh`
-- `server_manager/lib/config.sh` heavily reduced/refactored
+- refactor (legacy): runtime/env/profile helpers were centralized (old path `server_manager/lib/*`, now removed)
+- config helper layer heavily reduced/refactored
 - renamed changelog to `docs/changelog/dev_2.2.0.md`
 - updates to Supervisor config, docs, and `Dockerfile`
 

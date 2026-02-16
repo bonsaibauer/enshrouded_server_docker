@@ -1,8 +1,108 @@
-#!/bin/bash
-. "$(dirname "$0")/../shared/common"
-. "$(dirname "$0")/../shared/profile"
-. "$(dirname "$0")/../shared/env"
-init_runtime_env
+#!/usr/bin/env bash
+
+install_path="${INSTALL_PATH:-/home/enshrouded/server}"
+MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-${install_path}/server_manager}"
+manager_config_file="${MANAGER_DATA_DIR}/server_manager.json"
+enshrouded_config_file="${install_path}/enshrouded_server.json"
+
+log_level="${LOG_LEVEL:-40}"
+
+debug() { [[ "$log_level" -ge 50 ]] && echo "DEBUG - $*" || true; }
+info() { [[ "$log_level" -ge 40 ]] && echo "INFO - $*" || true; }
+warn() { [[ "$log_level" -ge 30 ]] && echo "WARN - $*" || true; }
+error() { [[ "$log_level" -ge 20 ]] && echo "ERROR - $*" >&2 || true; }
+fatal() { echo "FATAL - $*" >&2; exit 1; }
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fatal "Missing required command: $1"
+}
+
+manager_get() {
+  local path
+  path="$1"
+  if [[ ! -f "$manager_config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path | if . == null then empty else tostring end" "$manager_config_file" 2>/dev/null || true
+}
+
+resolve_from_env_or_manager() {
+  local var_name path default_value env_value cfg_value
+  var_name="$1"
+  path="$2"
+  default_value="$3"
+
+  env_value="${!var_name-}"
+  if [[ -n "$env_value" ]]; then
+    printf "%s" "$env_value"
+    return 0
+  fi
+
+  cfg_value="$(manager_get "$path")"
+  if [[ -n "$cfg_value" ]]; then
+    printf "%s" "$cfg_value"
+    return 0
+  fi
+
+  printf "%s" "$default_value"
+}
+
+load_runtime_values() {
+  require_cmd jq
+  require_cmd zip
+  require_cmd tar
+  require_cmd python3
+  require_cmd supervisorctl
+
+  RESTORE_PRE_HOOK="$(resolve_from_env_or_manager "RESTORE_PRE_HOOK" ".restorePreHook" "")"
+  RESTORE_POST_HOOK="$(resolve_from_env_or_manager "RESTORE_POST_HOOK" ".restorePostHook" "")"
+  BACKUP_DIR="$(resolve_from_env_or_manager "BACKUP_DIR" ".backupDir" "backups")"
+  SAVEFILE_NAME="$(resolve_from_env_or_manager "SAVEFILE_NAME" ".savefileName" "savegame")"
+  ENSHROUDED_SAVE_DIR="${ENSHROUDED_SAVE_DIR:-}"
+  if [[ -z "$ENSHROUDED_SAVE_DIR" && -f "$enshrouded_config_file" ]]; then
+    ENSHROUDED_SAVE_DIR="$(jq -r '.saveDirectory // empty' "$enshrouded_config_file" 2>/dev/null || true)"
+  fi
+  [[ -n "$ENSHROUDED_SAVE_DIR" ]] || ENSHROUDED_SAVE_DIR="./savegame"
+}
+
+manager_config_path() {
+  printf "%s/server_manager.json" "$MANAGER_DATA_DIR"
+}
+
+profiles_ensure_schema() {
+  local file tmp
+  file="$(manager_config_path)"
+
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  if ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  tmp="$(mktemp)"
+  jq '
+    .MANAGER_PROFILE = (if (.MANAGER_PROFILE == null or .MANAGER_PROFILE == "") then "default" else .MANAGER_PROFILE end)
+    | .EN_PROFILE = (if (.EN_PROFILE == null or .EN_PROFILE == "") then "default" else .EN_PROFILE end)
+    | .actualProfilManager = (if (.actualProfilManager == null or .actualProfilManager == "") then "default" else .actualProfilManager end)
+    | .actualProfilEnshrouded = (if (.actualProfilEnshrouded == null or .actualProfilEnshrouded == "") then "default" else .actualProfilEnshrouded end)
+    | del(.profiles)
+  ' "$file" >"$tmp" || {
+    rm -f "$tmp" 2>/dev/null || true
+    return 0
+  }
+  mv "$tmp" "$file"
+  chmod 600 "$file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$file" 2>/dev/null || true
+}
+
+checkRunning() {
+  local proc status
+  proc="$1"
+  status="$(supervisorctl status "${proc}" 2>&1 || true)"
+  [[ "$status" == *RUNNING* ]]
+}
 
 request_dir="${MANAGER_DATA_DIR}/requests"
 request_file="${request_dir}/backup_restore.json"
@@ -74,18 +174,18 @@ run_restore_hook() {
 stop_server_now() {
   local deadline now
 
-  if ! checkRunning "enshrouded-server"; then
+  if ! checkRunning "server"; then
     return 0
   fi
 
-  info "Stopping enshrouded-server"
-  supervisorctl stop enshrouded-server >/dev/null 2>&1 || true
+  info "Stopping server"
+  supervisorctl stop server >/dev/null 2>&1 || true
 
   deadline=$(( $(date +%s) + 90 ))
-  while checkRunning "enshrouded-server"; do
+  while checkRunning "server"; do
     now="$(date +%s)"
     if [[ "$now" -ge "$deadline" ]]; then
-      fatal "Timeout while stopping enshrouded-server"
+      fatal "Timeout while stopping server"
     fi
     sleep 1
   done
@@ -93,10 +193,17 @@ stop_server_now() {
 
 save_dir_resolve() {
   local dir
-  if [[ -z "$ENSHROUDED_SAVE_DIR" ]]; then
-    ENSHROUDED_SAVE_DIR="$(jq -r '.saveDirectory // "./savegame"' "${install_path}/enshrouded_server.json" 2>/dev/null || echo "./savegame")"
-  fi
   dir="${ENSHROUDED_SAVE_DIR:-./savegame}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
+
+backup_dir_resolve() {
+  local dir
+  dir="${BACKUP_DIR:-backups}"
   if [[ "$dir" == /* ]]; then
     printf "%s" "$dir"
   else
@@ -148,9 +255,72 @@ run_safety_backup_if_requested() {
   fi
 
   info "Creating safety backup before restore"
-  if ! "$(dirname "$0")/backup" --mode manual --ignore-request --no-cleanup; then
-    fatal "Safety backup failed. Restore aborted."
+  create_safety_backup_archive || fatal "Safety backup failed. Restore aborted."
+}
+
+create_safety_backup_archive() {
+  local stage_dir backup_root target_dir ts archive_path n
+  local save_dir ens_config manager_config
+
+  stage_dir="$(mktemp -d)"
+  backup_root="$(backup_dir_resolve)"
+  target_dir="${backup_root}/manual"
+  save_dir="$(save_dir_resolve)"
+  ens_config="${install_path}/enshrouded_server.json"
+  manager_config="$(manager_config_path)"
+
+  mkdir -p "$target_dir" 2>/dev/null || true
+  chmod 700 "$backup_root" "$target_dir" 2>/dev/null || true
+  chown enshrouded:enshrouded "$backup_root" "$target_dir" 2>/dev/null || true
+
+  if [[ -d "$save_dir" ]]; then
+    copy_tree "$save_dir" "${stage_dir}/savegame"
   fi
+  if [[ -f "$ens_config" ]]; then
+    mkdir -p "${stage_dir}/config" 2>/dev/null || true
+    cp "$ens_config" "${stage_dir}/config/enshrouded_server.json"
+  fi
+  if [[ -f "$manager_config" ]]; then
+    mkdir -p "${stage_dir}/config" 2>/dev/null || true
+    cp "$manager_config" "${stage_dir}/config/server_manager.json"
+  fi
+
+  jq -n \
+    --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg saveDirectory "$save_dir" \
+    --arg savefileName "$SAVEFILE_NAME" \
+    '{
+      version: 1,
+      mode: "manual",
+      createdAt: $createdAt,
+      saveDirectory: $saveDirectory,
+      savefileName: $savefileName,
+      includes: {
+        savegame: true,
+        enshroudedConfig: true,
+        serverManagerConfig: true
+      }
+    }' >"${stage_dir}/manifest.json"
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  archive_path="${target_dir}/${ts}-manual-safety-backup.zip"
+  if [[ -e "$archive_path" ]]; then
+    n=1
+    while [[ -e "${target_dir}/${ts}-manual-safety-backup-${n}.zip" ]]; do
+      n=$((n + 1))
+    done
+    archive_path="${target_dir}/${ts}-manual-safety-backup-${n}.zip"
+  fi
+
+  (cd "$stage_dir" && zip -qr "$archive_path" .) || {
+    rm -rf "$stage_dir" 2>/dev/null || true
+    return 1
+  }
+
+  chmod 600 "$archive_path" 2>/dev/null || true
+  chown enshrouded:enshrouded "$archive_path" 2>/dev/null || true
+  rm -rf "$stage_dir" 2>/dev/null || true
+  return 0
 }
 
 extract_zip() {
@@ -249,6 +419,7 @@ restore_manager_config_from_zip() {
 }
 
 main() {
+  load_runtime_values
   claim_request
   parse_request
 

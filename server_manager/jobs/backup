@@ -1,8 +1,96 @@
-#!/bin/bash
-. "$(dirname "$0")/../shared/common"
-. "$(dirname "$0")/../shared/profile"
-. "$(dirname "$0")/../shared/env"
-init_runtime_env
+#!/usr/bin/env bash
+
+install_path="${INSTALL_PATH:-/home/enshrouded/server}"
+MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-${install_path}/server_manager}"
+manager_config_file="${MANAGER_DATA_DIR}/server_manager.json"
+enshrouded_config_file="${install_path}/enshrouded_server.json"
+enshrouded_backup_pidfile="${ENSHROUDED_BACKUP_PIDFILE:-/var/run/enshrouded/backup.pid}"
+
+log_level="${LOG_LEVEL:-40}"
+
+debug() { [[ "$log_level" -ge 50 ]] && echo "DEBUG - $*" || true; }
+info() { [[ "$log_level" -ge 40 ]] && echo "INFO - $*" || true; }
+warn() { [[ "$log_level" -ge 30 ]] && echo "WARN - $*" || true; }
+error() { [[ "$log_level" -ge 20 ]] && echo "ERROR - $*" >&2 || true; }
+fatal() { echo "FATAL - $*" >&2; exit 1; }
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fatal "Missing required command: $1"
+}
+
+manager_get() {
+  local path
+  path="$1"
+  if [[ ! -f "$manager_config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path | if . == null then empty else tostring end" "$manager_config_file" 2>/dev/null || true
+}
+
+enshrouded_get() {
+  local path
+  path="$1"
+  if [[ ! -f "$enshrouded_config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path | if . == null then empty else tostring end" "$enshrouded_config_file" 2>/dev/null || true
+}
+
+resolve_from_env_or_manager() {
+  local var_name path default_value env_value cfg_value
+  var_name="$1"
+  path="$2"
+  default_value="$3"
+
+  env_value="${!var_name-}"
+  if [[ -n "$env_value" ]]; then
+    printf "%s" "$env_value"
+    return 0
+  fi
+
+  cfg_value="$(manager_get "$path")"
+  if [[ -n "$cfg_value" ]]; then
+    printf "%s" "$cfg_value"
+    return 0
+  fi
+
+  printf "%s" "$default_value"
+}
+
+load_runtime_values() {
+  require_cmd jq
+  require_cmd zip
+  require_cmd tar
+
+  SAVEFILE_NAME="$(resolve_from_env_or_manager "SAVEFILE_NAME" ".savefileName" "savegame")"
+  BACKUP_DIR="$(resolve_from_env_or_manager "BACKUP_DIR" ".backupDir" "backups")"
+  BACKUP_MAX_COUNT="$(resolve_from_env_or_manager "BACKUP_MAX_COUNT" ".backupMaxCount" "0")"
+  BACKUP_PRE_HOOK="$(resolve_from_env_or_manager "BACKUP_PRE_HOOK" ".backupPreHook" "")"
+  BACKUP_POST_HOOK="$(resolve_from_env_or_manager "BACKUP_POST_HOOK" ".backupPostHook" "")"
+  BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG="$(resolve_from_env_or_manager "BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG" ".backupScheduledIncludeEnshroudedConfig" "true")"
+  BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG="$(resolve_from_env_or_manager "BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG" ".backupScheduledIncludeServerManagerConfig" "true")"
+
+  ENSHROUDED_SAVE_DIR="${ENSHROUDED_SAVE_DIR:-$(enshrouded_get ".saveDirectory")}"
+  if [[ -z "$ENSHROUDED_SAVE_DIR" ]]; then
+    ENSHROUDED_SAVE_DIR="./savegame"
+  fi
+}
+
+manager_config_path() {
+  printf "%s/server_manager.json" "$MANAGER_DATA_DIR"
+}
+
+backup_dir_resolve() {
+  local dir
+  dir="${BACKUP_DIR:-backups}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
 
 pidfile="$enshrouded_backup_pidfile"
 request_dir="${MANAGER_DATA_DIR}/requests"
@@ -184,9 +272,6 @@ apply_request_overrides() {
 
 save_dir_resolve() {
   local dir
-  if [[ -z "$ENSHROUDED_SAVE_DIR" ]]; then
-    ENSHROUDED_SAVE_DIR="$(jq -r '.saveDirectory // "./savegame"' "${install_path}/enshrouded_server.json" 2>/dev/null || echo "./savegame")"
-  fi
   dir="${ENSHROUDED_SAVE_DIR:-./savegame}"
   if [[ "$dir" == /* ]]; then
     printf "%s" "$dir"
@@ -295,7 +380,7 @@ prepare_stage_content() {
     --arg mode "$mode" \
     --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg saveDirectory "$save_dir" \
-    --arg savefileName "$savefile_name" \
+    --arg savefileName "$SAVEFILE_NAME" \
     --argjson includeSavegame "$added_savegame" \
     --argjson includeEnshroudedConfig "$added_enshrouded" \
     --argjson includeServerManagerConfig "$added_manager" \
@@ -368,6 +453,7 @@ cleanup_old_scheduled_backups() {
 
 main() {
   parse_args "$@"
+  load_runtime_values
   acquire_lock
   claim_request_if_present
   apply_request_overrides

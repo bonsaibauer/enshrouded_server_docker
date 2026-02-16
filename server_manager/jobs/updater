@@ -1,0 +1,2390 @@
+#!/bin/bash
+# --- inlined standalone support: common runtime ---
+install_path=/home/enshrouded/server
+version_file_path=/home/enshrouded/current_version
+steamcmd_path=/usr/bin/steamcmd
+steam_app_id=""
+enshrouded_binary_path=enshrouded_server.exe
+savefile_name=""
+steamapp_path=steamapps
+
+# trap SIGUSR1 as it is being used to check
+# for process aliveness when an existing
+# pidfile is found
+trap ':' USR1
+
+# Collection of PID files
+enshrouded_server_pidfile=/var/run/enshrouded/server.pid
+enshrouded_updater_pidfile=/var/run/enshrouded/updater.pid
+enshrouded_backup_pidfile=/var/run/enshrouded/backup.pid
+
+# Syslog supervisor config file
+supervisor_syslog_conf=/usr/local/etc/supervisor/conf.d/syslog.conf
+rsyslog_conf=/etc/rsyslog.d/stdout.conf
+
+# WINE
+WINEPREFIX=/home/enshrouded/
+WINEARCH=win64
+WINEPATH=$install_path
+
+# Proton
+PROTONPREFIX=""
+
+# log levels
+debug=50
+info=40
+warn=30
+error=20
+critical=10
+fatal=5
+log_level=${log_level:-$info}
+
+init_colors() {
+  if [[ "${LOG_COLOR:-}" != "true" && "${LOG_COLOR:-}" != "TRUE" ]]; then
+    C_RESET=""
+    C_DIM=""
+    C_RED=""
+    C_YELLOW=""
+    C_GREEN=""
+    C_MAGENTA=""
+  elif [[ -t 1 ]]; then
+    C_RESET=$'\033[0m'
+    C_DIM=$'\033[2m'
+    C_RED=$'\033[31m'
+    C_YELLOW=$'\033[33m'
+    C_GREEN=$'\033[32m'
+    C_MAGENTA=$'\033[35m'
+  else
+    C_RESET=""
+    C_DIM=""
+    C_RED=""
+    C_YELLOW=""
+    C_GREEN=""
+    C_MAGENTA=""
+  fi
+}
+
+level_tag() {
+  case "$1" in
+    DEBUG) echo "${C_DIM}DEBUG${C_RESET}" ;;
+    INFO) echo "${C_GREEN}INFO${C_RESET}" ;;
+    WARN) echo "${C_YELLOW}WARN${C_RESET}" ;;
+    ERROR) echo "${C_RED}ERROR${C_RESET}" ;;
+    CRITIAL) echo "${C_MAGENTA}CRITIAL${C_RESET}" ;;
+    FATAL) echo "${C_RED}FATAL${C_RESET}" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+init_colors
+
+debug() { logstd $debug "$(level_tag DEBUG) - [$$] - $*"; }
+info() { logstd $info "$(level_tag INFO) - $*"; }
+warn() { logstd $warn "$(level_tag WARN) - $*"; }
+error() { logerr $error "$(level_tag ERROR) - $*"; }
+critical() { logerr $critical "$(level_tag CRITIAL) - $*"; }
+fatal() {
+  logerr $fatal "$(level_tag FATAL) - $*"
+  exit 1
+}
+
+logstd() {
+  local log_at_level
+  log_at_level="$1"
+  shift
+  printline "$log_at_level" "$*"
+}
+
+logerr() {
+  local log_at_level
+  log_at_level="$1"
+  shift
+  printline "$log_at_level" "$*" >&2
+}
+
+printline() {
+  local log_at_level
+  local log_data
+  log_at_level="$1"
+  shift
+  log_data="$*"
+
+  if [ "$log_at_level" -le "$log_level" ]; then
+    echo "$log_data"
+  fi
+}
+
+checkLock() {
+  local pidfile
+  local predecessor_pid
+  local numre
+  pidfile=$1
+  predecessor_pid=$(<"$pidfile")
+  numre='^[0-9]+$'
+  if [[ "$predecessor_pid" =~ $numre ]]; then
+    debug "Sending SIGUSR1 to PID $predecessor_pid"
+    if kill -USR1 "$predecessor_pid" &>/dev/null; then
+      fatal "Process with PID $predecessor_pid already running - exiting"
+    else
+      info "Removing stale PID file and starting run"
+      clearLockAndRun "$pidfile"
+    fi
+  else
+    warn "Predecessor PID is corrupt - clearing lock and running"
+    clearLockAndRun "$pidfile"
+  fi
+}
+
+clearLockAndRun() {
+  local pidfile
+  pidfile=$1
+  clearLock "$pidfile"
+  main
+}
+
+clearLock() {
+  local pidfile
+  pidfile=$1
+  info "Releasing PID file $pidfile"
+  kill -SIGTERM $pidfile 2>/dev/null
+  rm -f "$1"
+}
+
+checkRunning() {
+  local proc
+  local status
+  proc=$1
+  status=$(supervisorctl status "${proc}" 2>&1)
+  if [[ "$status" == *RUNNING* ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# --- inlined standalone support: validation engine ---
+# Validation engine driven by:
+# - server_manager/env/env_server_manager.json
+# - server_manager/env/env_enshrouded_server.json
+# Usage:
+#   validation_check <VAR_NAME> <VALUE>
+#   if validation_check ...; then ... else echo "$VALIDATION_LAST_ERROR"; fi
+
+VALIDATION_LAST_ERROR=""
+
+_validation_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+VALIDATION_SERVER_MANAGER_SPEC_FILE="${VALIDATION_SERVER_MANAGER_SPEC_FILE:-${_validation_dir}/../env/env_server_manager.json}"
+VALIDATION_ENSHROUDED_SPEC_FILE="${VALIDATION_ENSHROUDED_SPEC_FILE:-${_validation_dir}/../env/env_enshrouded_server.json}"
+
+validation__set_error() {
+  VALIDATION_LAST_ERROR="$1"
+}
+
+validation__clear_error() {
+  VALIDATION_LAST_ERROR=""
+}
+
+validation__has_jq() {
+  command -v jq >/dev/null 2>&1
+}
+
+validation__is_bool() {
+  case "$1" in
+    true|false) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+validation__is_int() {
+  [[ "$1" =~ ^-?[0-9]+$ ]]
+}
+
+validation__is_number() {
+  [[ "$1" =~ ^[+-]?[0-9]+([.][0-9]+)?$ ]]
+}
+
+validation__number_in_range() {
+  local value min max
+  value="$1"
+  min="$2"
+  max="$3"
+  awk -v v="$value" -v min="$min" -v max="$max" 'BEGIN { exit !(v >= min && v <= max) }'
+}
+
+validation__split_csv() {
+  local value
+  value="$1"
+  IFS=',' read -r -a _validation_split_csv_out <<<"$value"
+}
+
+validation__spec_files() {
+  # Print available spec files, one per line.
+  [[ -f "$VALIDATION_SERVER_MANAGER_SPEC_FILE" ]] && echo "$VALIDATION_SERVER_MANAGER_SPEC_FILE"
+  [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] && echo "$VALIDATION_ENSHROUDED_SPEC_FILE"
+}
+
+validation__has_spec_files() {
+  [[ -n "$(validation__spec_files)" ]]
+}
+
+validation__rule_for_var_from_specs() {
+  local var rule
+  var="$1"
+
+  if [[ "$var" == ENSHROUDED_* ]]; then
+    [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 1
+    rule="$(jq -c --arg var "$var" '.env[$var] // empty' "$VALIDATION_ENSHROUDED_SPEC_FILE" 2>/dev/null || true)"
+  else
+    [[ -f "$VALIDATION_SERVER_MANAGER_SPEC_FILE" ]] || return 1
+    rule="$(jq -c --arg var "$var" '.env[$var] // empty' "$VALIDATION_SERVER_MANAGER_SPEC_FILE" 2>/dev/null || true)"
+  fi
+
+  if [[ -n "$rule" && "$rule" != "null" ]]; then
+    printf "%s" "$rule"
+    return 0
+  fi
+
+  return 1
+}
+
+validation__template_field_rule_from_specs() {
+  local template field rule
+  template="$1"
+  field="$2"
+
+  [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 1
+  rule="$(jq -c --arg t "$template" --arg field "$field" '.templates[$t].fields[$field] // empty' "$VALIDATION_ENSHROUDED_SPEC_FILE" 2>/dev/null || true)"
+  if [[ -n "$rule" && "$rule" != "null" ]]; then
+    printf "%s" "$rule"
+    return 0
+  fi
+
+  return 1
+}
+
+validation_rule_json() {
+  # Prints the rule JSON (compact) to stdout.
+  # Returns: 0 ok, 2 unknown/unavailable.
+  local var template field rule
+  var="$1"
+
+  validation__clear_error
+
+  if ! validation__has_spec_files; then
+    validation__set_error "Validation spec not found (expected: $VALIDATION_SERVER_MANAGER_SPEC_FILE, $VALIDATION_ENSHROUDED_SPEC_FILE)"
+    return 2
+  fi
+  if ! validation__has_jq; then
+    validation__set_error "jq not found: cannot read validation spec"
+    return 2
+  fi
+
+  rule="$(validation__rule_for_var_from_specs "$var" 2>/dev/null || true)"
+  if [[ -n "$rule" && "$rule" != "null" ]]; then
+    printf "%s" "$rule"
+    return 0
+  fi
+
+  # Template env entries follow ENV schema: <TEMPLATE>_<index>_<FIELD>
+  # Example: ENSHROUDED_ROLE_0_PASSWORD
+  if [[ "$var" =~ ^([A-Z0-9_]+)_[0-9]+_(.+)$ ]]; then
+    template="${BASH_REMATCH[1]}"
+    field="${BASH_REMATCH[2]}"
+    rule="$(validation__template_field_rule_from_specs "$template" "$field" 2>/dev/null || true)"
+    if [[ -n "$rule" && "$rule" != "null" ]]; then
+      printf "%s" "$rule"
+      return 0
+    fi
+    validation__set_error "Unknown template field: ${template}.${field}"
+    return 2
+  fi
+
+  validation__set_error "No validation rule for: $var"
+  return 2
+}
+
+validation_list_envs() {
+  # Prints all known environment names from .env.
+  local -a files
+  mapfile -t files < <(validation__spec_files)
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  if ! validation__has_jq; then
+    return 0
+  fi
+  jq -s -r '[.[].env // {} | keys[]] | unique[]' "${files[@]}" 2>/dev/null || true
+}
+
+validation_list_templates() {
+  # Prints all known template names from .templates.
+  local -a files
+  mapfile -t files < <(validation__spec_files)
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  if ! validation__has_jq; then
+    return 0
+  fi
+  jq -s -r '[.[].templates | keys[]?] | unique[]' "${files[@]}" 2>/dev/null || true
+}
+
+validation_list_envs_by_meta_field() {
+  # Prints variable names from .env where .meta[field] is set (non-null/non-empty).
+  local field
+  field="$1"
+
+  local -a files
+  mapfile -t files < <(validation__spec_files)
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  if ! validation__has_jq; then
+    return 0
+  fi
+
+  jq -s -r --arg f "$field" '
+    [.[].env // {} | to_entries[]]
+    | .[]
+    | select(.value.meta != null)
+    | select((.value.meta[$f] // null) != null)
+    | select((.value.meta[$f] // "") != "")
+    | .key
+  ' "${files[@]}" 2>/dev/null | sort -u || true
+}
+
+validation_list_envs_by_meta_field_ordered() {
+  # Usage: validation_list_envs_by_meta_field_ordered <filter_meta_field> <order_meta_field>
+  # Example:
+  #   validation_list_envs_by_meta_field_ordered enshroudedMenuJsonPath menuOrder
+  #
+  # Sorts by .meta[order_meta_field] (numeric) and falls back to file order.
+  local filter_field order_field
+  filter_field="$1"
+  order_field="${2:-menuOrder}"
+
+  local -a files
+  mapfile -t files < <(validation__spec_files)
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  if ! validation__has_jq; then
+    return 0
+  fi
+
+  jq -s -r --arg f "$filter_field" --arg o "$order_field" '
+    [.[].env // {} | to_entries[]]
+    | map(select(.value.meta != null))
+    | map(select((.value.meta[$f] // null) != null))
+    | map(select((.value.meta[$f] // "") != ""))
+    | sort_by((.value.meta[$o] // 999999999))
+    | .[].key
+  ' "${files[@]}" 2>/dev/null | awk '!seen[$0]++' || true
+}
+
+validation_env_meta_field() {
+  # Usage: validation_env_meta_field <VAR_NAME> <field>
+  local var field rule value
+  var="$1"
+  field="$2"
+  rule="$(validation_rule_json "$var")" || return $?
+  value="$(jq -r --arg f "$field" '.meta[$f] // empty' <<<"$rule" 2>/dev/null || true)"
+  [[ "$value" == "null" ]] && value=""
+  printf "%s" "$value"
+}
+
+validation_list_template_fields() {
+  # Usage: validation_list_template_fields <template_name>
+  # Example: validation_list_template_fields ENSHROUDED_ROLE
+  local template
+  template="$1"
+
+  local -a files
+  mapfile -t files < <(validation__spec_files)
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    return 0
+  fi
+  if ! validation__has_jq; then
+    return 0
+  fi
+
+  jq -s -r --arg t "$template" '
+    [.[].templates[$t].fields | to_entries[]?]
+    | sort_by((.value.meta.menuOrder // 999999999))
+    | .[].key
+  ' "${files[@]}" 2>/dev/null | awk '!seen[$0]++' || true
+}
+
+validation_env_type() {
+  local var rule type
+  var="$1"
+  rule="$(validation_rule_json "$var")" || return $?
+  type="$(jq -r '.type // "string"' <<<"$rule" 2>/dev/null || echo "string")"
+  [[ "$type" == "null" || -z "$type" ]] && type="string"
+  printf "%s" "$type"
+}
+
+validation_env_description() {
+  local var rule desc
+  var="$1"
+  rule="$(validation_rule_json "$var")" || return $?
+  desc="$(jq -r '.description // empty' <<<"$rule" 2>/dev/null || true)"
+  [[ "$desc" == "null" ]] && desc=""
+  printf "%s" "$desc"
+}
+
+validation_env_mode() {
+  # Returns "hard" or "soft" if defined in the rule (empty if not set).
+  local var rule mode
+  var="$1"
+  rule="$(validation_rule_json "$var")" || return $?
+  mode="$(jq -r '.envMode // empty' <<<"$rule" 2>/dev/null || true)"
+  [[ "$mode" == "null" ]] && mode=""
+  printf "%s" "$mode"
+}
+
+validation_env_required() {
+  # Returns "true" or "false" based on the rule (false if not set).
+  local var rule required
+  var="$1"
+  rule="$(validation_rule_json "$var")" || return $?
+  required="$(jq -r '.required // false' <<<"$rule" 2>/dev/null || echo "false")"
+  [[ "$required" == "null" || -z "$required" ]] && required="false"
+  printf "%s" "$required"
+}
+
+validation_env_allow_empty() {
+  # Returns "true" or "false" based on the rule (true if not set).
+  local var rule allow_empty
+  var="$1"
+  rule="$(validation_rule_json "$var")" || return $?
+  allow_empty="$(jq -r '.allowEmpty // true' <<<"$rule" 2>/dev/null || echo "true")"
+  [[ "$allow_empty" == "null" || -z "$allow_empty" ]] && allow_empty="true"
+  printf "%s" "$allow_empty"
+}
+
+validation_snake_to_lower_camel() {
+  # Convert UPPER_SNAKE_CASE to lowerCamelCase (e.g. RESERVED_SLOTS -> reservedSlots).
+  local in
+  in="$1"
+  echo "$in" | tr '[:upper:]' '[:lower:]' | awk -F_ '{for(i=1;i<=NF;i++){if(i==1){out=$i}else{out=out toupper(substr($i,1,1)) substr($i,2)}}}END{print out}'
+}
+
+validation_env_allowed_hint() {
+  local var rule type hint min max
+  var="$1"
+  rule="$(validation_rule_json "$var")" || return $?
+
+  hint="$(jq -r '.allowed // empty' <<<"$rule" 2>/dev/null || true)"
+  [[ "$hint" == "null" ]] && hint=""
+  if [[ -n "$hint" ]]; then
+    printf "%s" "$hint"
+    return 0
+  fi
+
+  # Enum hint (string-join).
+  hint="$(jq -r 'if (.enum|type) == \"array\" then \"Allowed: \" + (.enum | map(tostring) | join(\" | \")) else empty end' <<<"$rule" 2>/dev/null || true)"
+  [[ "$hint" == "null" ]] && hint=""
+  if [[ -n "$hint" ]]; then
+    printf "%s" "$hint"
+    return 0
+  fi
+
+  type="$(jq -r '.type // \"string\"' <<<"$rule" 2>/dev/null || echo "string")"
+  [[ "$type" == "null" || -z "$type" ]] && type="string"
+
+  case "$type" in
+    bool)
+      printf "%s" "Allowed: true | false"
+      return 0
+      ;;
+    int)
+      min="$(jq -r '.min // empty' <<<"$rule" 2>/dev/null || true)"
+      max="$(jq -r '.max // empty' <<<"$rule" 2>/dev/null || true)"
+      if [[ -n "$min" && -n "$max" ]]; then
+        printf "%s" "Allowed: integer $min..$max"
+      elif [[ -n "$min" ]]; then
+        printf "%s" "Allowed: integer >= $min"
+      elif [[ -n "$max" ]]; then
+        printf "%s" "Allowed: integer <= $max"
+      else
+        printf "%s" "Allowed: integer"
+      fi
+      return 0
+      ;;
+    number)
+      min="$(jq -r '.min // empty' <<<"$rule" 2>/dev/null || true)"
+      max="$(jq -r '.max // empty' <<<"$rule" 2>/dev/null || true)"
+      if [[ -n "$min" && -n "$max" ]]; then
+        printf "%s" "Allowed: number $min..$max"
+      elif [[ -n "$min" ]]; then
+        printf "%s" "Allowed: number >= $min"
+      elif [[ -n "$max" ]]; then
+        printf "%s" "Allowed: number <= $max"
+      else
+        printf "%s" "Allowed: number"
+      fi
+      return 0
+      ;;
+    *)
+      hint="$(jq -r '.regex // empty' <<<"$rule" 2>/dev/null || true)"
+      [[ "$hint" == "null" ]] && hint=""
+      if [[ -n "$hint" ]]; then
+        if [[ "$hint" == "^[^\\r\\n]*$" ]]; then
+          printf "%s" "Allowed: single-line string"
+        else
+          printf "%s" "Allowed format: $hint"
+        fi
+      else
+        printf "%s" "String"
+      fi
+      return 0
+      ;;
+  esac
+}
+
+validation_check() {
+  # Returns: 0 valid, 1 invalid, 2 unknown/unavailable.
+  local var value rule required allow_empty type regex min max
+  var="$1"
+  value="${2-}"
+
+  validation__clear_error
+  rule="$(validation_rule_json "$var")" || return $?
+
+  required="$(jq -r '.required // false' <<<"$rule" 2>/dev/null || echo "false")"
+  [[ "$required" == "null" || -z "$required" ]] && required="false"
+
+  allow_empty="$(jq -r '.allowEmpty // true' <<<"$rule" 2>/dev/null || echo "true")"
+  [[ "$allow_empty" == "null" || -z "$allow_empty" ]] && allow_empty="true"
+
+  if [[ -z "$value" ]]; then
+    if [[ "$required" == "true" ]]; then
+      validation__set_error "$var must be set"
+      return 1
+    fi
+    if [[ "$allow_empty" == "true" ]]; then
+      return 0
+    fi
+    validation__set_error "$var must not be empty"
+    return 1
+  fi
+
+  type="$(jq -r '.type // \"string\"' <<<"$rule" 2>/dev/null || echo "string")"
+  [[ "$type" == "null" || -z "$type" ]] && type="string"
+
+  case "$type" in
+    bool)
+      if ! validation__is_bool "$value"; then
+        validation__set_error "$var must be true or false (actual: $value)"
+        return 1
+      fi
+      ;;
+    int)
+      if ! validation__is_int "$value"; then
+        validation__set_error "$var must be an integer (actual: $value)"
+        return 1
+      fi
+      min="$(jq -r '.min // empty' <<<"$rule" 2>/dev/null || true)"
+      max="$(jq -r '.max // empty' <<<"$rule" 2>/dev/null || true)"
+      if [[ -n "$min" && "$value" -lt "$min" ]]; then
+        validation__set_error "$var must be an integer >= $min (actual: $value)"
+        return 1
+      fi
+      if [[ -n "$max" && "$value" -gt "$max" ]]; then
+        validation__set_error "$var must be an integer <= $max (actual: $value)"
+        return 1
+      fi
+      ;;
+    number)
+      if ! validation__is_number "$value"; then
+        validation__set_error "$var must be numeric (actual: $value)"
+        return 1
+      fi
+      min="$(jq -r '.min // empty' <<<"$rule" 2>/dev/null || true)"
+      max="$(jq -r '.max // empty' <<<"$rule" 2>/dev/null || true)"
+      if [[ -n "$min" && -n "$max" ]]; then
+        if ! validation__number_in_range "$value" "$min" "$max"; then
+          validation__set_error "$var must be between $min and $max (actual: $value)"
+          return 1
+        fi
+      elif [[ -n "$min" ]]; then
+        if ! awk -v v="$value" -v min="$min" 'BEGIN { exit !(v >= min) }'; then
+          validation__set_error "$var must be >= $min (actual: $value)"
+          return 1
+        fi
+      elif [[ -n "$max" ]]; then
+        if ! awk -v v="$value" -v max="$max" 'BEGIN { exit !(v <= max) }'; then
+          validation__set_error "$var must be <= $max (actual: $value)"
+          return 1
+        fi
+      fi
+      ;;
+    *)
+      regex="$(jq -r '.regex // empty' <<<"$rule" 2>/dev/null || true)"
+      [[ "$regex" == "null" ]] && regex=""
+      if [[ -n "$regex" ]] && ! [[ "$value" =~ $regex ]]; then
+        validation__set_error "$var has invalid format (actual: $value)"
+        return 1
+      fi
+      ;;
+  esac
+
+  # Enum constraint (after base type validation).
+  if jq -e '(.enum|type) == "array"' <<<"$rule" >/dev/null 2>&1; then
+    local allowed ok
+    ok="false"
+    while IFS= read -r allowed; do
+      [[ "$value" == "$allowed" ]] && ok="true" && break
+    done < <(jq -r '.enum[] | tostring' <<<"$rule" 2>/dev/null || true)
+
+    if [[ "$ok" != "true" ]]; then
+      allowed="$(jq -r '.enum | map(tostring) | join(\" \")' <<<"$rule" 2>/dev/null || true)"
+      validation__set_error "$var must be one of: $allowed (actual: $value)"
+      return 1
+    fi
+  fi
+
+  # CSV/list constraint (after base type validation).
+  if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+    local sep trim no_empty item_regex item item_trimmed
+    sep="$(jq -r '.list.separator // \",\"' <<<"$rule" 2>/dev/null || echo ",")"
+    trim="$(jq -r '.list.trim // false' <<<"$rule" 2>/dev/null || echo "false")"
+    no_empty="$(jq -r '.list.itemNoEmpty // false' <<<"$rule" 2>/dev/null || echo "false")"
+    item_regex="$(jq -r '.list.itemRegex // empty' <<<"$rule" 2>/dev/null || true)"
+    [[ "$item_regex" == "null" ]] && item_regex=""
+
+    # Only comma is supported right now (keeps behavior predictable in bash).
+    if [[ "$sep" != "," ]]; then
+      validation__set_error "$var: unsupported list separator in spec (separator: $sep)"
+      return 2
+    fi
+
+    validation__split_csv "$value"
+    for item in "${_validation_split_csv_out[@]}"; do
+      item_trimmed="$item"
+      if [[ "$trim" == "true" ]]; then
+        item_trimmed="$(echo "$item_trimmed" | xargs)"
+      fi
+
+      if [[ "$no_empty" == "true" && -z "$item_trimmed" ]]; then
+        validation__set_error "$var contains an empty item"
+        return 1
+      fi
+
+      if [[ -n "$item_regex" && -n "$item_trimmed" ]] && ! [[ "$item_trimmed" =~ $item_regex ]]; then
+        validation__set_error "$var contains invalid item: $item_trimmed"
+        return 1
+      fi
+    done
+  fi
+
+  return 0
+}
+
+# --- inlined standalone support: profile/runtime logic ---
+# Consolidated manager runtime library.
+# Includes spec-apply, profile/env bootstrapping and validation helpers.
+
+
+#
+# Spec-driven helpers powered by server_manager/env/*.json.
+#
+# Currently used for applying ENV values into JSON config files based on a meta-field mapping
+# (e.g. meta.managerJsonPath / meta.enshroudedMenuJsonPath / meta.enshroudedJsonPath).
+
+_spec_apply_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+spec_apply__jq_set() {
+  # Apply a jq transform to $file atomically (tmp+mv).
+  local file tmp
+  file="$1"
+  shift
+
+  tmp="$(mktemp)"
+  if jq "$@" "$file" >"$tmp"; then
+    mv "$tmp" "$file"
+    return 0
+  fi
+  rm -f "$tmp" 2>/dev/null || true
+  return 1
+}
+
+apply_env_to_json() {
+  # Apply environment variables to a JSON file based on validation spec meta mapping.
+  #
+  # Usage:
+  #   apply_env_to_json --file <path> --metaField <metaField> [--orderField <metaOrderField>]
+  #                    [--filterPrefix <jsonPathPrefix>] [--applyEmpty true|false]
+  #
+  # Notes:
+  # - By default, empty values are skipped (keeps existing behavior: env is for overrides, not "clear").
+  # - If --applyEmpty true is used and a var is set but empty:
+  #   - list env entries are set to [] (cleared)
+  #   - scalar env values are set to null
+  local file meta_field order_field filter_prefix apply_empty
+  file=""
+  meta_field=""
+  order_field="menuOrder"
+  filter_prefix=""
+  apply_empty="false"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --file)
+        file="${2-}"
+        shift 2
+        ;;
+      --metaField|--meta-field|--meta)
+        meta_field="${2-}"
+        shift 2
+        ;;
+      --orderField|--order-field)
+        order_field="${2-}"
+        shift 2
+        ;;
+      --filterPrefix|--filter-prefix)
+        filter_prefix="${2-}"
+        shift 2
+        ;;
+      --applyEmpty|--apply-empty)
+        apply_empty="${2-true}"
+        shift 2
+        ;;
+      *)
+        echo "apply_env_to_json: unknown arg: $1" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$file" || -z "$meta_field" ]]; then
+    echo "apply_env_to_json: missing --file or --metaField" >&2
+    return 1
+  fi
+  if [[ ! -f "$file" ]]; then
+    echo "apply_env_to_json: file not found: $file" >&2
+    return 1
+  fi
+
+  local any_fail var json_path rule type jq_arg value
+  any_fail="false"
+  while IFS= read -r var; do
+    [[ -z "$var" ]] && continue
+    json_path="$(validation_env_meta_field "$var" "$meta_field" 2>/dev/null || true)"
+    [[ -z "$json_path" ]] && continue
+
+    if [[ -n "$filter_prefix" ]]; then
+      case "$json_path" in
+        "${filter_prefix}"*) ;;
+        *) continue ;;
+      esac
+    fi
+
+    # Default: only apply non-empty values (preserves existing override semantics).
+    if [[ "$apply_empty" == "true" ]]; then
+      [[ -z "${!var+x}" ]] && continue
+    else
+      value="${!var-}"
+      [[ -z "$value" ]] && continue
+    fi
+
+    value="${!var-}"
+    rule="$(validation_rule_json "$var" 2>/dev/null || true)"
+
+    # If the value is empty but explicitly set, apply a clear behavior.
+    if [[ -z "$value" ]]; then
+      if [[ "$apply_empty" != "true" ]]; then
+        continue
+      fi
+      if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+        if ! spec_apply__jq_set "$file" "$json_path = []"; then
+          any_fail="true"
+        fi
+      else
+        if ! spec_apply__jq_set "$file" "$json_path = null"; then
+          any_fail="true"
+        fi
+      fi
+      continue
+    fi
+
+    # List env values (CSV) -> JSON array.
+    if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+      # Keep behavior predictable in bash: only comma separated lists are supported.
+      # Spec currently only uses this for ENSHROUDED_TAGS.
+      if ! spec_apply__jq_set "$file" --arg val "$value" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))"; then
+        any_fail="true"
+      fi
+      continue
+    fi
+
+    type="$(validation_env_type "$var" 2>/dev/null || echo "string")"
+    case "$type" in
+      bool|int|number) jq_arg="--argjson" ;;
+      *) jq_arg="--arg" ;;
+    esac
+
+    if ! spec_apply__jq_set "$file" "$jq_arg" val "$value" "$json_path = \$val"; then
+      any_fail="true"
+    fi
+  done < <(validation_list_envs_by_meta_field_ordered "$meta_field" "$order_field")
+
+  if [[ "$any_fail" == "true" ]]; then
+    return 1
+  fi
+  return 0
+}
+
+spec_apply__template_default_object_json() {
+  # Build a default JSON object for a template driven by env/*.json.
+  #
+  # - bool -> false
+  # - int/number -> min (if set) else 0
+  # - string -> "" (NAME defaults to "Default" for convenience)
+  #
+  # Usage: spec_apply__template_default_object_json <template_name> <env_prefix>
+  local template env_prefix out first field var rule type min json_key value
+  template="$1"
+  env_prefix="$2"
+
+  out="{"
+  first="true"
+  while IFS= read -r field; do
+    [[ -z "$field" ]] && continue
+
+    var="${env_prefix}_0_${field}"
+    rule="$(validation_rule_json "$var" 2>/dev/null || true)"
+    [[ -z "$rule" ]] && continue
+
+    type="$(jq -r '.type // "string"' <<<"$rule" 2>/dev/null || echo "string")"
+    [[ "$type" == "null" || -z "$type" ]] && type="string"
+
+    json_key="$(validation_snake_to_lower_camel "$field")"
+    case "$type" in
+      bool)
+        value="false"
+        ;;
+      int|number)
+        min="$(jq -r '.min // empty' <<<"$rule" 2>/dev/null || true)"
+        [[ "$min" == "null" ]] && min=""
+        if [[ -n "$min" ]]; then
+          value="$min"
+        else
+          value="0"
+        fi
+        ;;
+      *)
+        if [[ "$field" == "NAME" ]]; then
+          value="\"Default\""
+        else
+          value="\"\""
+        fi
+        ;;
+    esac
+
+    if [[ "$first" == "true" ]]; then
+      first="false"
+    else
+      out="${out},"
+    fi
+    out="${out}\"${json_key}\":${value}"
+  done < <(validation_list_template_fields "$template")
+  out="${out}}"
+
+  printf "%s" "$out"
+}
+
+apply_env_template_to_json_array() {
+  # Apply template-driven environment variables to a JSON array of objects.
+  #
+  # ENV schema:
+  #   <ENV_PREFIX>_<index>_<FIELD>
+  #
+  # The template fields/rules come from:
+  #   .templates[template].fields[FIELD]
+  #
+  # Usage:
+  #   apply_env_template_to_json_array --file <path> --template <template> --envPrefix <ENV_PREFIX> --arrayPath <jq_path>
+  #                                   [--applyEmpty true|false]
+  #
+  # Notes:
+  # - By default, empty values are skipped (env is for overrides, not "clear").
+  # - If --applyEmpty true is used and a var is set but empty:
+  #   - list env entries are set to [] (cleared)
+  #   - scalar env values are set to null
+  local file template env_prefix array_path apply_empty
+  file=""
+  template=""
+  env_prefix=""
+  array_path=""
+  apply_empty="false"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --file)
+        file="${2-}"
+        shift 2
+        ;;
+      --template)
+        template="${2-}"
+        shift 2
+        ;;
+      --envPrefix|--env-prefix)
+        env_prefix="${2-}"
+        shift 2
+        ;;
+      --arrayPath|--array-path)
+        array_path="${2-}"
+        shift 2
+        ;;
+      --applyEmpty|--apply-empty)
+        apply_empty="${2-true}"
+        shift 2
+        ;;
+      *)
+        echo "apply_env_template_to_json_array: unknown arg: $1" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$file" || -z "$template" || -z "$env_prefix" || -z "$array_path" ]]; then
+    echo "apply_env_template_to_json_array: missing --file/--template/--envPrefix/--arrayPath" >&2
+    return 1
+  fi
+  if [[ ! -f "$file" ]]; then
+    echo "apply_env_template_to_json_array: file not found: $file" >&2
+    return 1
+  fi
+
+  # Ensure the array exists (and is an array).
+  if ! jq -e "$array_path | type == \"array\"" "$file" >/dev/null 2>&1; then
+    if ! spec_apply__jq_set "$file" "$array_path = []"; then
+      return 1
+    fi
+  fi
+
+  # Find highest index referenced by any template env var (prefix match).
+  local max_idx var idx
+  max_idx="-1"
+  for var in $(compgen -A variable "${env_prefix}_"); do
+    if [[ "$var" =~ ^${env_prefix}_([0-9]+)_.+ ]]; then
+      idx="${BASH_REMATCH[1]}"
+      if [[ "$idx" =~ ^[0-9]+$ ]] && ((idx > max_idx)); then
+        max_idx="$idx"
+      fi
+    fi
+  done
+
+  # Ensure array entries exist up to max_idx by appending a default object derived from the template.
+  if ((max_idx >= 0)); then
+    local default_obj i
+    default_obj="$(spec_apply__template_default_object_json "$template" "$env_prefix")"
+    for i in $(seq 0 "$max_idx"); do
+      if ! jq -e --argjson idx "$i" "$array_path | has($idx)" "$file" >/dev/null 2>&1; then
+        spec_apply__jq_set "$file" --argjson obj "$default_obj" "$array_path += [\$obj]" || true
+      fi
+    done
+  fi
+
+  local any_fail value field json_key json_path rule type jq_arg
+  any_fail="false"
+
+  for var in $(compgen -A variable "${env_prefix}_"); do
+    if [[ ! "$var" =~ ^${env_prefix}_([0-9]+)_(.+)$ ]]; then
+      continue
+    fi
+    idx="${BASH_REMATCH[1]}"
+    field="${BASH_REMATCH[2]}"
+
+    # Default: only apply non-empty values (preserves existing override semantics).
+    if [[ "$apply_empty" == "true" ]]; then
+      [[ -z "${!var+x}" ]] && continue
+    else
+      value="${!var-}"
+      [[ -z "$value" ]] && continue
+    fi
+
+    value="${!var-}"
+
+    # Skip unknown fields (also avoids accidental JSON injection from env var names).
+    if ! validation_rule_json "$var" >/dev/null 2>&1; then
+      continue
+    fi
+
+    json_key="$(validation_snake_to_lower_camel "$field")"
+    json_path="${array_path}[\$idx].${json_key}"
+    rule="$(validation_rule_json "$var" 2>/dev/null || true)"
+
+    # If the value is empty but explicitly set, apply a clear behavior.
+    if [[ -z "$value" ]]; then
+      if [[ "$apply_empty" != "true" ]]; then
+        continue
+      fi
+      if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+        if ! spec_apply__jq_set "$file" --argjson idx "$idx" "$json_path = []"; then
+          any_fail="true"
+        fi
+      else
+        if ! spec_apply__jq_set "$file" --argjson idx "$idx" "$json_path = null"; then
+          any_fail="true"
+        fi
+      fi
+      continue
+    fi
+
+    # List env values (CSV) -> JSON array.
+    if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+      if ! spec_apply__jq_set "$file" --argjson idx "$idx" --arg val "$value" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))"; then
+        any_fail="true"
+      fi
+      continue
+    fi
+
+    type="$(validation_env_type "$var" 2>/dev/null || echo "string")"
+    case "$type" in
+      bool|int|number) jq_arg="--argjson" ;;
+      *) jq_arg="--arg" ;;
+    esac
+
+    if ! spec_apply__jq_set "$file" --argjson idx "$idx" "$jq_arg" val "$value" "$json_path = \$val"; then
+      any_fail="true"
+    fi
+  done
+
+  if [[ "$any_fail" == "true" ]]; then
+    return 1
+  fi
+  return 0
+}
+
+
+EN_PROFILE="${EN_PROFILE:-}"
+MANAGER_PROFILE="${MANAGER_PROFILE:-}"
+
+EN_PROFILE_DEFAULT="default"
+MANAGER_PROFILE_DEFAULT="default"
+
+PROFILE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANAGER_ROOT="${MANAGER_ROOT:-$(cd "$PROFILE_SCRIPT_DIR/.." && pwd)}"
+
+
+MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-${install_path}/server_manager}"
+MANAGER_PROFILE_ROOT="${MANAGER_PROFILE_ROOT:-${install_path}/profile}"
+MANAGER_PROFILE_DIR="$MANAGER_PROFILE_ROOT"
+
+# Server Manager profile templates:
+# - MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR: templates shipped with the image (read-only layer)
+# - MANAGER_PROFILE_TEMPLATE_DIR: runtime profile catalog used by menu/apply/reset (default: persistent volume)
+MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR="${MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR:-${MANAGER_ROOT}/profiles/manager}"
+MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${install_path}/profiles/manager}"
+
+# Enshrouded profile templates:
+# - EN_PROFILE_TEMPLATE_DIR: templates shipped with the image (read-only layer)
+# - EN_PROFILE_DIR: runtime profile catalog used by menu/apply/reset (default: persistent volume)
+EN_PROFILE_TEMPLATE_DIR="${EN_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT}/profiles/enshrouded}"
+EN_PROFILE_DIR="${EN_PROFILE_DIR:-${install_path}/profiles/enshrouded}"
+
+# Profile catalog listing helpers (used by the interactive menu).
+profiles_list_enshrouded() {
+  local f name
+  shopt -s nullglob
+  for f in "$EN_PROFILE_DIR"/*_enshrouded_server.json; do
+    name="$(basename "$f")"
+    name="${name%_enshrouded_server.json}"
+    echo "$name"
+  done
+  shopt -u nullglob
+}
+
+profiles_list_manager() {
+  local f name
+  shopt -s nullglob
+  for f in "$MANAGER_PROFILE_TEMPLATE_DIR"/*_server_manager.json; do
+    name="$(basename "$f")"
+    name="${name%_server_manager.json}"
+    echo "$name"
+  done
+  shopt -u nullglob
+}
+
+# Profile selection persistence (single source of truth):
+# Stored in server_manager.json as top-level keys:
+#   actualProfilManager       (selected Server Manager profile name)
+#   actualProfilEnshrouded    (selected Enshrouded profile name)
+#
+# Additionally, the initial ENV selectors are captured once for transparency:
+#   MANAGER_PROFILE
+#   EN_PROFILE
+
+profiles_config_json_key() {
+  # Map internal selector names to JSON keys.
+  # Usage: profiles_config_json_key manager|enshrouded
+  case "$1" in
+    manager) echo "actualProfilManager" ;;
+    enshrouded) echo "actualProfilEnshrouded" ;;
+    *) echo "" ;;
+  esac
+}
+
+profiles_ensure_schema() {
+  # Ensure the 4 profile selection keys exist (always strings, never null).
+  local file tmp mdef edef
+  file="$(manager_config_path)"
+  mdef="$MANAGER_PROFILE_DEFAULT"
+  edef="$EN_PROFILE_DEFAULT"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  tmp="$(mktemp)"
+  jq --arg mdef "$mdef" --arg edef "$edef" '
+    .MANAGER_PROFILE = (if (.MANAGER_PROFILE == null or .MANAGER_PROFILE == "") then $mdef else .MANAGER_PROFILE end)
+    | .EN_PROFILE = (if (.EN_PROFILE == null or .EN_PROFILE == "") then $edef else .EN_PROFILE end)
+    | .actualProfilManager = (if (.actualProfilManager == null or .actualProfilManager == "") then $mdef else .actualProfilManager end)
+    | .actualProfilEnshrouded = (if (.actualProfilEnshrouded == null or .actualProfilEnshrouded == "") then $edef else .actualProfilEnshrouded end)
+    | del(.profiles)
+  ' "$file" >"$tmp" || {
+    rm -f "$tmp"
+    return 0
+  }
+  mv "$tmp" "$file"
+  chmod 600 "$file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$file" 2>/dev/null || true
+  return 0
+}
+
+profiles_config_get() {
+  # Get a profile selector value from server_manager.json (top-level keys).
+  # Usage: profiles_config_get manager|enshrouded
+  local key json_key file value
+  key="$1"
+  json_key="$(profiles_config_json_key "$key")"
+  if [[ -z "$json_key" ]]; then
+    echo ""
+    return 0
+  fi
+  file="$(manager_config_path)"
+  if ! command -v jq >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+  value="$(jq -r --arg key "$json_key" '.[$key] // empty' "$file" 2>/dev/null || true)"
+  if [[ "$value" == "null" ]]; then
+    value=""
+  fi
+
+  echo "$value"
+}
+
+profiles_env_get() {
+  # Get a captured ENV selector value from server_manager.json (top-level keys).
+  # Usage: profiles_env_get EN_PROFILE|MANAGER_PROFILE
+  local key file value
+  key="$1"
+  file="$(manager_config_path)"
+  if ! command -v jq >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    echo ""
+    return 0
+  fi
+  value="$(jq -r --arg key "$key" '.[$key] // empty' "$file" 2>/dev/null || true)"
+  if [[ "$value" == "null" ]]; then
+    value=""
+  fi
+
+  echo "$value"
+}
+
+profiles_config_set() {
+  # Set a profile selector value in server_manager.json (top-level keys).
+  # Usage: profiles_config_set manager|enshrouded <value>
+  local key json_key value file tmp def
+  key="$1"
+  value="${2-}"
+  json_key="$(profiles_config_json_key "$key")"
+  if [[ -z "$json_key" ]]; then
+    return 0
+  fi
+  file="$(manager_config_path)"
+  case "$key" in
+    enshrouded) def="$EN_PROFILE_DEFAULT" ;;
+    *) def="$MANAGER_PROFILE_DEFAULT" ;;
+  esac
+
+  if ! command -v jq >/dev/null 2>&1; then
+    warn "jq not found: cannot persist profile selection"
+    return 1
+  fi
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    warn "server_manager.json missing/invalid: cannot persist profile selection"
+    return 1
+  fi
+
+  tmp="$(mktemp)"
+  if [[ -z "$value" ]]; then
+    value="$def"
+  fi
+
+  jq --arg key "$json_key" --arg value "$value" '.[$key] = $value | del(.profiles)' "$file" >"$tmp" || {
+    rm -f "$tmp"
+    return 1
+  }
+
+  mv "$tmp" "$file"
+  chmod 600 "$file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$file" 2>/dev/null || true
+  return 0
+}
+
+profiles_env_set_if_missing() {
+  # Capture ENV selector values once (do not overwrite a non-empty existing value).
+  #
+  # If the key exists but is "default"/null/empty (e.g., seeded by a template),
+  # this will set it if the provided value is non-empty.
+  # Usage: profiles_env_set_if_missing EN_PROFILE|MANAGER_PROFILE <value>
+  local key value file tmp current def
+  key="$1"
+  value="${2-}"
+  case "$key" in
+    EN_PROFILE) def="$EN_PROFILE_DEFAULT" ;;
+    *) def="$MANAGER_PROFILE_DEFAULT" ;;
+  esac
+
+  current="$(profiles_env_get "$key")"
+  if [[ -n "$current" && "$current" != "$def" ]]; then
+    return 0
+  fi
+  if [[ -z "$value" ]]; then
+    return 0
+  fi
+
+  file="$(manager_config_path)"
+  if ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ ! -f "$file" ]] || ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  tmp="$(mktemp)"
+  jq --arg key "$key" --arg value "$value" '.[$key] = $value | del(.profiles)' "$file" >"$tmp" || {
+    rm -f "$tmp"
+    return 0
+  }
+  mv "$tmp" "$file"
+  chmod 600 "$file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$file" 2>/dev/null || true
+  return 0
+}
+
+manager_config_path() {
+  printf "%s/server_manager.json" "$MANAGER_DATA_DIR"
+}
+
+backup_dir_resolve() {
+  # Resolve BACKUP_DIR to an absolute path (same behavior as unified backup job).
+  local dir
+  dir="${BACKUP_DIR:-backups}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
+
+manual_backups_dir() {
+  # Store manual backups under BACKUP_DIR/manual.
+  printf "%s/manual" "$(backup_dir_resolve)"
+}
+
+backup_config_file() {
+  # Create a timestamped config-only ZIP backup under BACKUP_DIR/manual.
+  # Usage: backup_config_file <src_file> <label>
+  local src label backup_root ts dest n tmp_dir config_name
+  src="$1"
+  label="$2"
+
+  if [[ -z "$src" || -z "$label" ]]; then
+    warn "backup_config_file: missing arguments"
+    return 1
+  fi
+
+  if [[ ! -f "$src" ]]; then
+    return 0
+  fi
+
+  backup_root="$(manual_backups_dir)"
+  mkdir -p "$backup_root" 2>/dev/null || true
+  chmod 700 "$backup_root" 2>/dev/null || true
+  chown enshrouded:enshrouded "$backup_root" 2>/dev/null || true
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  dest="${backup_root}/${ts}-manual-config-${label}.zip"
+  if [[ -e "$dest" ]]; then
+    n=1
+    while [[ -e "${backup_root}/${ts}-manual-config-${label}-${n}.zip" ]]; do
+      n=$((n + 1))
+    done
+    dest="${backup_root}/${ts}-manual-config-${label}-${n}.zip"
+  fi
+
+  case "$label" in
+    enshrouded_server) config_name="enshrouded_server.json" ;;
+    server_manager) config_name="server_manager.json" ;;
+    *) config_name="${label}.json" ;;
+  esac
+
+  tmp_dir="$(mktemp -d)"
+  mkdir -p "${tmp_dir}/config" 2>/dev/null || true
+
+  if cp "$src" "${tmp_dir}/config/${config_name}" 2>/dev/null \
+    && jq -n \
+      --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg label "$label" \
+      '{
+        version: 1,
+        mode: "manual",
+        createdAt: $createdAt,
+        includes: {
+          savegame: false,
+          enshroudedConfig: ($label == "enshrouded_server"),
+          serverManagerConfig: ($label == "server_manager")
+        }
+      }' >"${tmp_dir}/manifest.json" \
+    && (cd "$tmp_dir" && zip -qr "$dest" .); then
+    rm -rf "$tmp_dir" 2>/dev/null || true
+    chmod 600 "$dest" 2>/dev/null || true
+    chown enshrouded:enshrouded "$dest" 2>/dev/null || true
+    if declare -F ui_success >/dev/null 2>&1; then
+      ui_success "Backup created: $dest"
+    elif declare -F info >/dev/null 2>&1; then
+      info "Backup created: $dest"
+    fi
+    return 0
+  fi
+
+  rm -rf "$tmp_dir" 2>/dev/null || true
+  warn "Failed to create backup: $dest"
+  return 1
+}
+
+manager_profile_path() {
+  local name
+  name="${1:-$MANAGER_PROFILE_DEFAULT}"
+  printf "%s/%s/%s_server_manager.json" "$MANAGER_PROFILE_DIR" "$name" "$name"
+}
+
+manager_profile_template_path() {
+  local name
+  name="${1:-$MANAGER_PROFILE_DEFAULT}"
+  printf "%s/%s_server_manager.json" "$MANAGER_PROFILE_TEMPLATE_DIR" "$name"
+}
+
+manager_profile_template_shipped_path() {
+  local name
+  name="${1:-$MANAGER_PROFILE_DEFAULT}"
+  printf "%s/%s_server_manager.json" "$MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR" "$name"
+}
+
+enshrouded_profile_path() {
+  local name
+  name="${1:-$EN_PROFILE_DEFAULT}"
+  printf "%s/%s_enshrouded_server.json" "$EN_PROFILE_DIR" "$name"
+}
+
+enshrouded_profile_template_path() {
+  local name
+  name="${1:-$EN_PROFILE_DEFAULT}"
+  printf "%s/%s_enshrouded_server.json" "$EN_PROFILE_TEMPLATE_DIR" "$name"
+}
+
+manager_profile_resolve() {
+  local name
+  name="$(profiles_config_get "manager")"
+  if [[ -z "$name" ]]; then
+    # Only used when server_manager.json does not have a persisted selector (bootstrap/new volume).
+    name="${MANAGER_PROFILE:-}"
+  fi
+  if [[ -n "$name" ]]; then
+    if validation_check "MANAGER_PROFILE" "$name"; then
+      :
+    else
+      local rc
+      rc=$?
+      if [[ "$rc" -eq 1 ]]; then
+        warn "Invalid manager profile selector: $name (fallback: $MANAGER_PROFILE_DEFAULT)"
+        name=""
+      fi
+    fi
+  fi
+  if [[ -z "$name" ]]; then
+    echo "$MANAGER_PROFILE_DEFAULT"
+    return 0
+  fi
+  if [[ -f "$(manager_profile_path "$name")" || -f "$(manager_profile_template_path "$name")" || -f "$(manager_profile_template_shipped_path "$name")" ]]; then
+    echo "$name"
+    return 0
+  fi
+  warn "Profile not found: $name (fallback: $MANAGER_PROFILE_DEFAULT)"
+  echo "$MANAGER_PROFILE_DEFAULT"
+}
+
+enshrouded_profile_resolve() {
+  local name
+  name="$(profiles_config_get "enshrouded")"
+  if [[ -z "$name" ]]; then
+    # Only used when server_manager.json does not have a persisted selector (bootstrap/new volume).
+    name="${EN_PROFILE:-}"
+  fi
+  if [[ -n "$name" ]]; then
+    if validation_check "EN_PROFILE" "$name"; then
+      :
+    else
+      local rc
+      rc=$?
+      if [[ "$rc" -eq 1 ]]; then
+        warn "Invalid enshrouded profile selector: $name (fallback: $EN_PROFILE_DEFAULT)"
+        name=""
+      fi
+    fi
+  fi
+  if [[ -z "$name" ]]; then
+    echo "$EN_PROFILE_DEFAULT"
+    return 0
+  fi
+  if [[ -f "$(enshrouded_profile_path "$name")" || -f "$(enshrouded_profile_template_path "$name")" ]]; then
+    echo "$name"
+    return 0
+  fi
+  warn "Enshrouded profile not found: $name (fallback: $EN_PROFILE_DEFAULT)"
+  echo "$EN_PROFILE_DEFAULT"
+}
+
+enshrouded_profile_resolve_from_value() {
+  # Resolve an Enshrouded profile name without reading persisted selectors.
+  # Usage: enshrouded_profile_resolve_from_value <name>
+  local name
+  name="${1-}"
+  if [[ -n "$name" ]]; then
+    if validation_check "EN_PROFILE" "$name"; then
+      :
+    else
+      local rc
+      rc=$?
+      if [[ "$rc" -eq 1 ]]; then
+        warn "Invalid enshrouded profile selector: $name (fallback: $EN_PROFILE_DEFAULT)"
+        name=""
+      fi
+    fi
+  fi
+  if [[ -z "$name" ]]; then
+    echo "$EN_PROFILE_DEFAULT"
+    return 0
+  fi
+  if [[ -f "$(enshrouded_profile_path "$name")" || -f "$(enshrouded_profile_template_path "$name")" ]]; then
+    echo "$name"
+    return 0
+  fi
+  warn "Enshrouded profile not found: $name (fallback: $EN_PROFILE_DEFAULT)"
+  echo "$EN_PROFILE_DEFAULT"
+}
+
+ensure_manager_paths() {
+  mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_ROOT"
+}
+
+ensure_manager_profile_file() {
+  local profile profile_file template_file
+  profile="$1"
+  profile_file="$(manager_profile_path "$profile")"
+  template_file="$(manager_profile_template_path "$profile")"
+
+  if [[ -f "$profile_file" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$template_file" ]]; then
+    # If the persistent template catalog is empty (fresh volume), fall back to shipped templates.
+    local shipped
+    shipped="$(manager_profile_template_shipped_path "$profile")"
+    if [[ -f "$shipped" ]]; then
+      mkdir -p "$(dirname "$template_file")" 2>/dev/null || true
+      if cp "$shipped" "$template_file" 2>/dev/null; then
+        chmod 600 "$template_file" 2>/dev/null || true
+        chown enshrouded:enshrouded "$template_file" 2>/dev/null || true
+      fi
+    fi
+  fi
+  if [[ ! -f "$template_file" ]]; then
+    warn "Server Manager profile template not found: $template_file"
+    return 1
+  fi
+  if ! jq -e '.' "$template_file" >/dev/null 2>&1; then
+    warn "Invalid JSON in server manager profile template: $template_file"
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$profile_file")" 2>/dev/null || true
+  cp "$template_file" "$profile_file"
+  info "Server Manager profile created: $profile_file"
+}
+
+ensure_manager_profile_catalog() {
+  # Seed MANAGER_PROFILE_TEMPLATE_DIR with shipped templates (copy only missing files).
+  local src_dir dest_dir f dest
+  src_dir="${MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR:-}"
+  dest_dir="${MANAGER_PROFILE_TEMPLATE_DIR:-}"
+
+  if [[ -z "$src_dir" || -z "$dest_dir" ]]; then
+    return 0
+  fi
+  if [[ "$src_dir" == "$dest_dir" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$dest_dir" 2>/dev/null || true
+
+  shopt -s nullglob
+  for f in "$src_dir"/*_server_manager.json; do
+    dest="$dest_dir/$(basename "$f")"
+    if [[ -e "$dest" ]]; then
+      continue
+    fi
+    if ! jq -e '.' "$f" >/dev/null 2>&1; then
+      warn "Invalid JSON in server manager profile template: $f (skipping)"
+      continue
+    fi
+    if cp "$f" "$dest" 2>/dev/null; then
+      chmod 600 "$dest" 2>/dev/null || true
+      chown enshrouded:enshrouded "$dest" 2>/dev/null || true
+    else
+      warn "Failed to seed Server Manager profile template: $dest"
+    fi
+  done
+  shopt -u nullglob
+}
+
+ensure_enshrouded_profile_file() {
+  local profile profile_file template_file
+  profile="$1"
+  profile_file="$(enshrouded_profile_path "$profile")"
+  template_file="$(enshrouded_profile_template_path "$profile")"
+
+  if [[ -f "$profile_file" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$template_file" ]]; then
+    warn "Enshrouded profile template not found: $template_file"
+    return 1
+  fi
+  if ! jq -e '.' "$template_file" >/dev/null 2>&1; then
+    warn "Invalid JSON in enshrouded profile template: $template_file"
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$profile_file")" 2>/dev/null || true
+  if cp "$template_file" "$profile_file" 2>/dev/null; then
+    chmod 600 "$profile_file" 2>/dev/null || true
+    chown enshrouded:enshrouded "$profile_file" 2>/dev/null || true
+    info "Enshrouded profile created: $profile_file"
+    return 0
+  fi
+
+  warn "Failed to create Enshrouded profile: $profile_file"
+  return 1
+}
+
+ensure_enshrouded_profile_catalog() {
+  # Seed EN_PROFILE_DIR with shipped templates (copy only missing files).
+  local src_dir dest_dir f dest
+  src_dir="${EN_PROFILE_TEMPLATE_DIR:-}"
+  dest_dir="${EN_PROFILE_DIR:-}"
+
+  if [[ -z "$src_dir" || -z "$dest_dir" ]]; then
+    return 0
+  fi
+  if [[ "$src_dir" == "$dest_dir" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$dest_dir" 2>/dev/null || true
+
+  shopt -s nullglob
+  for f in "$src_dir"/*_enshrouded_server.json; do
+    dest="$dest_dir/$(basename "$f")"
+    if [[ -e "$dest" ]]; then
+      continue
+    fi
+    if ! jq -e '.' "$f" >/dev/null 2>&1; then
+      warn "Invalid JSON in enshrouded profile template: $f (skipping)"
+      continue
+    fi
+    if cp "$f" "$dest" 2>/dev/null; then
+      chmod 600 "$dest" 2>/dev/null || true
+      chown enshrouded:enshrouded "$dest" 2>/dev/null || true
+    else
+      warn "Failed to seed Enshrouded profile template: $dest"
+    fi
+  done
+  shopt -u nullglob
+}
+
+manager_json_get() {
+  local file var path
+  file="$1"
+  var="$2"
+  path="$(validation_env_meta_field "$var" "managerJsonPath" 2>/dev/null || true)"
+  if [[ -z "$path" || ! -f "$file" ]]; then
+    echo ""
+    return 0
+  fi
+  # Keep `false` visible (jq's `// empty` treats false as empty).
+  jq -r "$path | if . == null then empty else tostring end" "$file" 2>/dev/null || true
+}
+
+manager_value_is_valid() {
+  local var value rc
+  var="$1"
+  value="$2"
+
+  if validation_check "$var" "$value"; then
+    return 0
+  fi
+  rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) return 0 ;; # Unknown rule/unavailable validator: do not block bootstrap.
+  esac
+}
+
+manager_config_set() {
+  local file temp_file
+  file="$1"
+  shift
+  temp_file="$(mktemp)"
+  if jq "$@" "$file" >"$temp_file"; then
+    mv "$temp_file" "$file"
+    chmod 600 "$file" 2>/dev/null || true
+    chown enshrouded:enshrouded "$file" 2>/dev/null || true
+  else
+    rm -f "$temp_file"
+    warn "Failed to update $file (jq error)"
+  fi
+}
+
+manager_config_set_value() {
+  local file var value path type
+  file="$1"
+  var="$2"
+  value="${3-}"
+  path="$(validation_env_meta_field "$var" "managerJsonPath" 2>/dev/null || true)"
+  type="$(validation_env_type "$var" 2>/dev/null || true)"
+  [[ -z "$type" ]] && type="string"
+  if [[ -z "$path" ]]; then
+    return 0
+  fi
+  if [[ -z "$value" ]]; then
+    manager_config_set "$file" "$path = null"
+    return 0
+  fi
+  case "$type" in
+    bool|int|number)
+      manager_config_set "$file" --argjson val "$value" "$path = \$val"
+      ;;
+    *)
+      manager_config_set "$file" --arg val "$value" "$path = \$val"
+      ;;
+  esac
+}
+
+profiles_env_set_if_empty_validated() {
+  # Set an env var only if it is currently empty/unset and the candidate is valid.
+  # Usage: profiles_env_set_if_empty_validated <VAR_NAME> <candidate_value> <source_label>
+  local var candidate source rc
+  var="$1"
+  candidate="${2-}"
+  source="${3-}"
+
+  if [[ -n "${!var-}" ]]; then
+    return 0
+  fi
+  if [[ -z "$candidate" ]]; then
+    return 0
+  fi
+
+  if validation_check "$var" "$candidate"; then
+    printf -v "$var" '%s' "$candidate"
+    return 0
+  fi
+
+  rc=$?
+  case "$rc" in
+    1)
+      warn "Invalid $var in $source (actual: $candidate)"
+      return 1
+      ;;
+    *)
+      # Unknown rule/unavailable validator: accept candidate (keeps older behavior).
+      printf -v "$var" '%s' "$candidate"
+      return 0
+      ;;
+  esac
+}
+
+manager_profile_value_for_var() {
+  local profile var file value
+  profile="$1"
+  var="$2"
+  file="$(manager_profile_path "$profile")"
+  value="$(manager_json_get "$file" "$var")"
+  echo "$value"
+}
+
+update_or_create_manager_config() {
+  local config_file profile value env_value var created_config
+  created_config="false"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    warn "jq not found: skipping server_manager.json initialization"
+    return 0
+  fi
+
+  ensure_manager_paths
+  profile="$(manager_profile_resolve)"
+
+  if ! ensure_manager_profile_file "$MANAGER_PROFILE_DEFAULT"; then
+    return 1
+  fi
+  if ! ensure_manager_profile_file "$profile"; then
+    return 1
+  fi
+
+  config_file="$(manager_config_path)"
+  if [[ ! -f "$config_file" ]] || ! jq -e 'type == "object"' "$config_file" >/dev/null 2>&1; then
+    cp "$(manager_profile_path "$profile")" "$config_file"
+    info "server_manager.json initialized from profile: $profile"
+    created_config="true"
+  fi
+
+  # Ensure profile selection keys exist (and drop legacy .profiles if present).
+  profiles_ensure_schema || true
+
+  while IFS= read -r var; do
+    [[ -z "$var" ]] && continue
+    env_value="$(printenv "$var" 2>/dev/null || true)"
+    value=""
+
+    # ENV override (docker-compose/container environment) wins, but should never poison config.
+    if [[ -n "$env_value" ]]; then
+      if manager_value_is_valid "$var" "$env_value"; then
+        value="$env_value"
+      else
+        warn "Invalid ENV value for $var (actual: $env_value) - ignoring"
+      fi
+    fi
+
+    # Fallback: active config -> profile template.
+    if [[ -z "$value" ]]; then
+      value="$(manager_json_get "$config_file" "$var")"
+      if [[ -n "$value" ]] && ! manager_value_is_valid "$var" "$value"; then
+        warn "Invalid server_manager.json value for $var (actual: $value) - resetting to profile/default"
+        value=""
+      fi
+      if [[ -z "$value" ]]; then
+        value="$(manager_profile_value_for_var "$profile" "$var")"
+        if [[ -n "$value" ]] && ! manager_value_is_valid "$var" "$value"; then
+          warn "Invalid manager profile value for $var (profile: $profile, actual: $value)"
+          value=""
+        fi
+      fi
+    fi
+
+    printf -v "$var" '%s' "$value"
+    if [[ -n "$value" ]]; then
+      export "$var"
+    fi
+    manager_config_set_value "$config_file" "$var" "$value"
+  done < <(validation_list_envs_by_meta_field "managerJsonPath")
+
+  # Persist profile selection in server_manager.json (single source of truth).
+  profiles_env_set_if_missing "MANAGER_PROFILE" "${MANAGER_PROFILE:-}" || true
+  profiles_env_set_if_missing "EN_PROFILE" "${EN_PROFILE:-}" || true
+
+  # Keep persisted selectors in sync with resolved profiles.
+  profiles_config_set "manager" "$profile" || true
+  if [[ "$created_config" == "true" ]]; then
+    # On first init, allow EN_PROFILE to seed the persisted Enshrouded profile selection.
+    profiles_config_set "enshrouded" "$(enshrouded_profile_resolve_from_value "${EN_PROFILE:-}")" || true
+  else
+    profiles_config_set "enshrouded" "$(enshrouded_profile_resolve)" || true
+  fi
+}
+
+load_enshrouded_env_from_profile() {
+  local profile profile_file config_file
+  config_file="${install_path}/enshrouded_server.json"
+
+  # Prefer existing runtime config as the source of truth for runtime defaults.
+  # This keeps manual edits (e.g. via ctl menu) consistent across restarts.
+  if command -v jq >/dev/null 2>&1 && [[ -f "$config_file" ]] && jq -e '.' "$config_file" >/dev/null 2>&1; then
+    local var path candidate
+    while IFS= read -r var; do
+      [[ -z "$var" ]] && continue
+      [[ -n "${!var-}" ]] && continue
+      path="$(validation_env_meta_field "$var" "enshroudedJsonPath" 2>/dev/null || true)"
+      [[ -z "$path" ]] && continue
+      candidate="$(jq -r "$path | if . == null then empty else tostring end" "$config_file" 2>/dev/null || true)"
+      profiles_env_set_if_empty_validated "$var" "$candidate" "$config_file" || true
+    done < <(validation_list_envs_by_meta_field "enshroudedJsonPath")
+  fi
+
+  profile="$(enshrouded_profile_resolve)"
+  # Prefer a persisted profile file in EN_PROFILE_DIR, seed from shipped templates if needed.
+  ensure_enshrouded_profile_file "$profile" || true
+  profile_file="$(enshrouded_profile_path "$profile")"
+  if [[ ! -f "$profile_file" ]]; then
+    profile_file="$(enshrouded_profile_template_path "$profile")"
+  fi
+
+  if [[ ! -f "$profile_file" ]]; then
+    return 1
+  fi
+  if ! jq -e '.' "$profile_file" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local var path candidate
+  while IFS= read -r var; do
+    [[ -z "$var" ]] && continue
+    [[ -n "${!var-}" ]] && continue
+    path="$(validation_env_meta_field "$var" "enshroudedJsonPath" 2>/dev/null || true)"
+    [[ -z "$path" ]] && continue
+    candidate="$(jq -r "$path | if . == null then empty else tostring end" "$profile_file" 2>/dev/null || true)"
+    profiles_env_set_if_empty_validated "$var" "$candidate" "$profile_file" || true
+  done < <(validation_list_envs_by_meta_field "enshroudedJsonPath")
+
+  return 0
+}
+
+init_runtime_env() {
+  # Ensure MANAGER_PROFILE_TEMPLATE_DIR contains a persistent copy of shipped Server Manager templates.
+  ensure_manager_profile_catalog || true
+
+  if ! update_or_create_manager_config; then
+    fatal "Failed to initialize server_manager.json from profile"
+  fi
+
+  # Ensure EN_PROFILE_DIR contains a persistent copy of shipped Enshrouded templates.
+  ensure_enshrouded_profile_catalog || true
+
+  if ! load_enshrouded_env_from_profile; then
+    fatal "Failed to load Enshrouded profile defaults"
+  fi
+
+  savefile_name="$SAVEFILE_NAME"
+  steam_app_id="$STEAM_APP_ID"
+}
+
+ensure_enshrouded_config_from_profile() {
+  local profile source_profile config_file temp_file
+
+  config_file="${install_path}/enshrouded_server.json"
+  if [[ -f "$config_file" ]]; then
+    return 0
+  fi
+
+  profile="$(enshrouded_profile_resolve)"
+  source_profile="$(enshrouded_profile_path "$profile")"
+  if [[ ! -f "$source_profile" ]]; then
+    # If EN_PROFILE_DIR is empty (fresh volume), fall back to shipped templates.
+    ensure_enshrouded_profile_file "$profile" || true
+    source_profile="$(enshrouded_profile_path "$profile")"
+  fi
+  if [[ ! -f "$source_profile" ]]; then
+    source_profile="$(enshrouded_profile_template_path "$profile")"
+  fi
+  if [[ ! -f "$source_profile" ]]; then
+    warn "No enshrouded profile file found for '$profile' (searched: $EN_PROFILE_DIR, $EN_PROFILE_TEMPLATE_DIR)"
+    return 1
+  fi
+  if ! jq -e '.' "$source_profile" >/dev/null 2>&1; then
+    warn "Invalid JSON in enshrouded profile: $source_profile"
+    return 1
+  fi
+
+  mkdir -p "$install_path"
+  temp_file="$(mktemp)"
+  if jq 'if has("bans") then . else . + {bans: []} end' "$source_profile" >"$temp_file"; then
+    mv "$temp_file" "$config_file"
+    chmod 600 "$config_file" 2>/dev/null || true
+    chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
+    info "Created enshrouded_server.json from profile: $profile"
+    return 0
+  fi
+
+  rm -f "$temp_file"
+  warn "Failed to create enshrouded_server.json from profile: $profile"
+  return 1
+}
+
+
+ENV_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+validate_template_env_values() {
+  # Validate any template-driven env values declared in env/*.json (.templates).
+  local template var_name value
+  while IFS= read -r template; do
+    [[ -z "$template" ]] && continue
+    for var_name in $(compgen -A variable "${template}_" || true); do
+      [[ "$var_name" =~ ^${template}_[0-9]+_ ]] || continue
+      value="${!var_name-}"
+      env_validate_var_from_spec "$var_name" "$value" || true
+    done
+  done < <(validation_list_templates)
+}
+
+validate_known_env_from_spec() {
+  local var_name value
+  while IFS= read -r var_name; do
+    [[ -z "$var_name" ]] && continue
+    value="${!var_name-}"
+    env_validate_var_from_spec "$var_name" "$value" || true
+  done < <(validation_list_envs)
+}
+
+validate_unknown_game_settings_env_values() {
+  local var_name
+  if ! validation__has_spec_files || ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+  for var_name in $(compgen -A variable | grep '^ENSHROUDED_GS_' || true); do
+    if ! validation_rule_json "$var_name" >/dev/null 2>&1; then
+      warn "Unknown game setting env var detected: $var_name"
+    fi
+  done
+}
+
+env_validate_var() {
+  # Usage: env_validate_var <var_name> <value> hard|soft
+  local var value mode rc
+  var="$1"
+  value="${2-}"
+  mode="$3"
+
+  if validation_check "$var" "$value"; then
+    return 0
+  fi
+  rc=$?
+  case "$rc" in
+    1)
+      if [[ "$mode" == "hard" ]]; then
+        fatal "$VALIDATION_LAST_ERROR"
+      fi
+      warn "$VALIDATION_LAST_ERROR"
+      return 1
+      ;;
+    *)
+      # Unknown rule / unavailable validator: warn but do not block bootstrap.
+      warn "$VALIDATION_LAST_ERROR"
+      return 0
+      ;;
+  esac
+}
+
+env_validate_var_from_spec() {
+  # Usage: env_validate_var_from_spec <var_name> <value>
+  local var value mode required
+  var="$1"
+  value="${2-}"
+  mode="$(validation_env_mode "$var" 2>/dev/null || true)"
+  if [[ "$mode" != "hard" && "$mode" != "soft" ]]; then
+    required="$(validation_env_required "$var" 2>/dev/null || true)"
+    if [[ "$required" == "true" ]]; then
+      mode="hard"
+    else
+      mode="soft"
+    fi
+  fi
+  env_validate_var "$var" "$value" "$mode"
+}
+
+verify_variables() {
+  validate_known_env_from_spec
+  validate_template_env_values
+  validate_unknown_game_settings_env_values
+}
+
+# --- inlined standalone support: enshrouded runtime ---
+# Consolidated Enshrouded runtime helpers (bootstrap + updater).
+
+_enshrouded_bootstrap_shared_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+prepareEnshroudedAppFolders() {
+  mkdir -p "$install_path"
+}
+
+initCrontab() {
+  crontab=$(mktemp)
+
+  if [ -n "$UPDATE_CRON" ]; then
+    debug "creating cron for update checks (schedule: $UPDATE_CRON)"
+    echo "$UPDATE_CRON supervisorctl start updater >/dev/null 2>&1" >>"$crontab"
+  fi
+
+  if [ -n "$BACKUP_CRON" ]; then
+    debug "creating cron for backups (schedule: $BACKUP_CRON)"
+    echo "$BACKUP_CRON supervisorctl start backup >/dev/null 2>&1" >>"$crontab"
+  fi
+
+  if [ -n "$RESTART_CRON" ]; then
+    debug "creating cron for server restarts (schedule: $RESTART_CRON)"
+    echo "$RESTART_CRON supervisorctl start restart >/dev/null 2>&1" >>"$crontab"
+  fi
+
+  crontab "$crontab"
+  rm -f "$crontab"
+}
+
+prepareSteamA2sPythonLibrary() {
+  pip3 install python-a2s==1.3.0 --break-system-packages
+}
+
+bootstrapHook() {
+  local hook_cmd
+  hook_cmd="${BOOTSTRAP_PRE_HOOK:-${BOOTSTRAP_HOOK:-}}"
+  if [ -n "$hook_cmd" ]; then
+    info "Running bootstrap pre hook: $hook_cmd"
+    eval "$hook_cmd"
+  fi
+}
+
+bootstrapPostHook() {
+  if [ -n "${BOOTSTRAP_POST_HOOK:-}" ]; then
+    info "Running bootstrap post hook: $BOOTSTRAP_POST_HOOK"
+    eval "$BOOTSTRAP_POST_HOOK"
+  fi
+}
+
+enshrouded_bootstrap_apply_top_level_env_to_config() {
+  # Applies all known top-level env values (and gameSettingsPreset) based on validation spec.
+  local file
+  file="$1"
+
+  if ! apply_env_to_json --file "$file" --metaField "enshroudedMenuJsonPath" --orderField "menuOrder"; then
+    warn "Failed to apply some top-level ENV values to enshrouded_server.json (jq error)"
+  fi
+}
+
+updateOrCreateEnshroudedServerConfig() {
+  if declare -F ensure_enshrouded_config_from_profile >/dev/null 2>&1; then
+    ensure_enshrouded_config_from_profile || fatal "Failed to initialize enshrouded_server.json from profile"
+  fi
+
+  local config_file
+  config_file="${install_path}/enshrouded_server.json"
+  if [[ ! -e "$config_file" ]]; then
+    fatal "Missing enshrouded_server.json at $config_file"
+  fi
+
+  enshrouded_bootstrap_apply_top_level_env_to_config "$config_file"
+
+  updateUserGroupConfig
+  updateGameSettingsConfig
+}
+
+updateUserGroupConfig() {
+  local config_file
+  config_file="${install_path}/enshrouded_server.json"
+  if ! apply_env_template_to_json_array \
+    --file "$config_file" \
+    --template "ENSHROUDED_ROLE" \
+    --envPrefix "ENSHROUDED_ROLE" \
+    --arrayPath ".userGroups"; then
+    warn "Failed to apply some role ENV values to enshrouded_server.json (jq error)"
+  fi
+
+  ensureUserGroupPasswords
+}
+
+generatePassword() {
+  if [ -r /dev/urandom ]; then
+    # Avoid `tr | head` which can emit a noisy SIGPIPE warning when `head` exits early.
+    # Read bounded random bytes first, then filter and slice in bash.
+    local out=""
+    while [ "${#out}" -lt 12 ]; do
+      out="${out}$(dd if=/dev/urandom bs=64 count=1 2>/dev/null | LC_ALL=C tr -dc 'A-Za-z0-9')"
+    done
+    printf '%s' "${out:0:12}"
+    return 0
+  fi
+  date +%s%N | sha256sum | cut -c1-12
+}
+
+ensureUserGroupPasswords() {
+  local count idx env_var current_password new_password
+
+  if ! jq -e '.userGroups' ${install_path}/enshrouded_server.json >/dev/null 2>&1; then
+    return 0
+  fi
+
+  count=$(jq -r '.userGroups | length' ${install_path}/enshrouded_server.json 2>/dev/null || echo 0)
+  if ! [[ "$count" =~ ^[0-9]+$ ]] || [[ "$count" -le 0 ]]; then
+    return 0
+  fi
+
+  for idx in $(seq 0 $((count - 1))); do
+    env_var="ENSHROUDED_ROLE_${idx}_PASSWORD"
+    if [[ -n "${!env_var-}" ]]; then
+      continue
+    fi
+
+    current_password="$(jq -r ".userGroups[$idx].password // empty" ${install_path}/enshrouded_server.json 2>/dev/null || echo "")"
+    if [[ -n "$current_password" ]]; then
+      continue
+    fi
+
+    new_password="$(generatePassword)"
+    if [[ -z "$new_password" ]]; then
+      warn "Could not generate password for group index $idx"
+      continue
+    fi
+
+    spec_apply__jq_set "${install_path}/enshrouded_server.json" --argjson group_index "$idx" --arg password "$new_password" '.userGroups[$group_index].password = $password' || warn "Failed to set generated password for group index $idx"
+  done
+}
+
+updateGameSettingsConfig() {
+  local config_file
+  config_file="${install_path}/enshrouded_server.json"
+
+  if ! apply_env_to_json --file "$config_file" --metaField "enshroudedJsonPath" --orderField "menuOrder" --filterPrefix ".gameSettings."; then
+    warn "Failed to apply some game settings ENV values to enshrouded_server.json (jq error)"
+  fi
+}
+
+
+pidfile=$enshrouded_updater_pidfile
+latest_version=-1
+
+update() {
+  if [ -f "$pidfile" ]; then
+    info "Found existing PID file - checking process"
+    checkLock $pidfile
+  fi
+  trap shutdown SIGINT SIGTERM
+  if ! checkForUpdates; then
+    if ! checkRunning "server"; then
+      info "Enshrouded server is not running - starting"
+      supervisorctl start server
+    fi
+    return
+  fi
+  if ! checkServerEmpty; then
+    warn "Enshrouded server is not empty - update will not be performed"
+    return
+  fi
+
+  doUpdate &
+  enshrouded_updater_pid=$!
+  echo $enshrouded_updater_pid >"$pidfile"
+  wait $enshrouded_updater_pid
+}
+
+doUpdate() {
+  updatePreHook
+  if checkRunning "server"; then
+    supervisorctl stop server
+  fi
+  verifyCpuMhz
+  if ! downloadEnshrouded; then
+    warn "Download of Enshrouded server failed - retry"
+    debug "Removing $install_path/$steamapp_path"
+    rm -rf $install_path/$steamapp_path
+
+    if ! downloadEnshrouded; then
+      warn "Download of Enshrouded server failed - aborting update"
+      supervisorctl start server
+      clearLock "$pidfile"
+      return
+    fi
+  fi
+  setCurrentVersion
+  supervisorctl start server
+  updatePostHook
+
+  clearLock "$pidfile"
+}
+
+# This works around the `Unable to determine CPU Frequency. Try defining CPU_MHZ.` steamcmd issue.
+verifyCpuMhz() {
+  local float_regex
+  local cpu_mhz
+  float_regex="^([0-9]+\\.?[0-9]*)\$"
+  cpu_mhz=$(grep "^cpu MHz" /proc/cpuinfo | head -1 | cut -d : -f 2 | xargs)
+  if [ -n "$cpu_mhz" ] && [[ "$cpu_mhz" =~ $float_regex ]] && [ "${cpu_mhz%.*}" -gt 0 ]; then
+    debug "Found CPU with $cpu_mhz MHz"
+    unset CPU_MHZ
+  else
+    debug "Unable to determine CPU Frequency - setting a default of 1.5 GHz so steamcmd won't complain"
+    export CPU_MHZ="1500.000"
+  fi
+}
+
+checkServerEmpty() {
+  local connected_players
+
+  if [ "$UPDATE_CHECK_PLAYERS" == "false" ]; then
+    return 0
+  fi
+
+  connected_players=$(python3 -c "
+try:
+    import a2s
+    print(len(a2s.players(('127.0.0.1',$ENSHROUDED_QUERY_PORT))))
+except Exception as e:
+    print('null')
+")
+
+  debug "[checkServerEmpty] connected_players: $connected_players"
+  if [ -n "$connected_players" ] && [ "$connected_players" != "null" ] && [ "$connected_players" -gt 0 ]; then
+    return 1
+  fi
+
+  return 0
+}
+
+setCurrentVersion() {
+  if [ "$latest_version" == "null" ] || [ "$latest_version" == "-1" ]; then
+    warn "Unable to set current version - latest version is unknown"
+    warn "Next update check will restart the server until version can be determined"
+    return 1
+  fi
+  debug "[setCurrentVersion]: $latest_version"
+  echo "$latest_version" >"$version_file_path"
+}
+
+updatePreHook() {
+  if [ -n "$UPDATE_PRE_HOOK" ]; then
+    info "Running update pre hook: $UPDATE_PRE_HOOK"
+    eval "$UPDATE_PRE_HOOK"
+  fi
+}
+
+updatePostHook() {
+  if [ -n "$UPDATE_POST_HOOK" ]; then
+    info "Running update post hook: $UPDATE_POST_HOOK"
+    eval "$UPDATE_POST_HOOK"
+  fi
+}
+
+shutdown() {
+  debug "Received signal to shut down updater"
+  clearLock "$pidfile"
+}
+init_runtime_env
+
+FORCE_UPDATE="false"
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force)
+        FORCE_UPDATE="true"
+        shift
+        ;;
+      --help|-h)
+        echo "Usage: updater [--force]"
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+}
+
+main() {
+  parse_args "$@"
+  info "Running updater"
+  update
+  info "updater complete"
+}
+
+downloadEnshrouded() {
+  debug "Downloading Enshrouded server"
+
+  mkdir -p "$install_path/steamapps/compatdata/$steam_app_id"
+  export WINETRICKS="/usr/local/bin/winetricks"
+  export STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/enshrouded/.steam/steam"
+  export STEAM_COMPAT_DATA_PATH="$install_path/steamapps/compatdata/$steam_app_id"
+  export STEAM_DIR="/home/enshrouded/.steam/steam/"
+
+  $steamcmd_path +@sSteamCmdForcePlatformType windows +force_install_dir "$install_path" +login anonymous +app_update $steam_app_id "$GAME_BRANCH $STEAMCMD_ARGS" +quit
+}
+
+checkForUpdates() {
+  local current_version
+
+  if [[ "$FORCE_UPDATE" == "true" ]]; then
+    info "Force update requested"
+    rm -f "$version_file_path"
+    debug "Removing $install_path/$steamapp_path"
+    rm -rf "$install_path/$steamapp_path"
+    latest_version=$(curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid")
+    return 0
+  fi
+
+  if checkProtonFilesAvailable; then
+    return 0
+  fi
+
+  if [ -f "$version_file_path" ]; then
+    current_version=$(cat "$version_file_path")
+  else
+    current_version="0"
+  fi
+
+  latest_version=$(curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid")
+
+  if [ "$latest_version" == "null" ] || [ "$latest_version" == "-1" ]; then
+    if [ "$current_version" == "0" ]; then
+      warn "Unable to determine latest version of enshrouded server! No version currently installed, update server anyways"
+      return 0
+    fi
+    warn "Unable to determine latest version of enshrouded server! No update will be performed"
+    return 1
+  fi
+
+  if [ "$current_version" != "$latest_version" ]; then
+    info "Enshrouded server needs to be updated"
+    return 0
+  else
+    info "Enshrouded server is already the latest version"
+    return 1
+  fi
+}
+
+checkProtonFilesAvailable() {
+  if [ ! -d "$install_path/steamapps/compatdata/$steam_app_id" ]; then
+    warn "Proton files are not available! Performing Enshrouded update to generate proton files"
+    return 0
+  fi
+  return 1
+}
+
+main "$@"
+
+

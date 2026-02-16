@@ -4,7 +4,7 @@ Current logging behavior in `server_manager`:
 
 ## Format
 
-Logs are implemented in `server_manager/shared/common`:
+Logs are implemented directly inside the standalone jobs:
 - `DEBUG - [pid] - ...`
 - `INFO - ...`
 - `WARN - ...`

@@ -1,246 +1,5 @@
 {
-  "version": 1,
-  "vars": {
-    "BACKUP_CRON": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Cron schedule for scheduled backup job (writes to BACKUP_DIR/scheduled).",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".backupCron",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Backup",
-        "menuOrder": 19
-      }
-    },
-    "BACKUP_DIR": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Base backup directory (scheduled/manual subfolders).",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".backupDir",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Backup",
-        "menuOrder": 17
-      }
-    },
-    "BACKUP_MAX_COUNT": {
-      "type": "int",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": 0,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "Number of savegame zip backups to keep (0 = unlimited).",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".backupMaxCount",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Backup",
-        "menuOrder": 18
-      }
-    },
-    "BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG": {
-      "type": "bool",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "Include enshrouded_server.json in scheduled backups.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".backupScheduledIncludeEnshroudedConfig",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Backup",
-        "menuOrder": 22
-      }
-    },
-    "BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG": {
-      "type": "bool",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "Include server_manager.json in scheduled backups.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".backupScheduledIncludeServerManagerConfig",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Backup",
-        "menuOrder": 23
-      }
-    },
-    "BACKUP_POST_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed after backup job.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".backupPostHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Backup",
-        "menuOrder": 21
-      }
-    },
-    "BACKUP_PRE_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed before backup job.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".backupPreHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Backup",
-        "menuOrder": 20
-      }
-    },
-    "BOOTSTRAP_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed during bootstrap.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".bootstrapHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Hooks",
-        "menuOrder": 24
-      }
-    },
-    "RESTORE_POST_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed after backup restore.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".restorePostHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Hooks",
-        "menuOrder": 26
-      }
-    },
-    "RESTORE_PRE_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed before backup restore.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".restorePreHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Hooks",
-        "menuOrder": 25
-      }
-    },
-    "PROFILE_POST_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed after profile job.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".profilePostHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Hooks",
-        "menuOrder": 28
-      }
-    },
-    "PROFILE_PRE_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed before profile job.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".profilePreHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Hooks",
-        "menuOrder": 27
-      }
-    },
+  "env": {
     "ENSHROUDED_ENABLE_TEXT_CHAT": {
       "type": "bool",
       "required": false,
@@ -279,6 +38,174 @@
         "enshroudedMenuJsonPath": ".enableVoiceChat",
         "menuGroup": "Voice / Text",
         "menuOrder": 9
+      }
+    },
+    "ENSHROUDED_IP": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": null,
+      "max": null,
+      "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$",
+      "enum": null,
+      "list": null,
+      "description": "Server bind IP (IPv4).",
+      "allowed": "IPv4 address, e.g. 0.0.0.0",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".ip",
+        "enshroudedMenuJsonPath": ".ip",
+        "menuGroup": "Server",
+        "menuOrder": 2
+      }
+    },
+    "ENSHROUDED_LOG_DIR": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Log directory (relative to /home/enshrouded/server or absolute path).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".logDirectory",
+        "enshroudedMenuJsonPath": ".logDirectory",
+        "menuGroup": "Server",
+        "menuOrder": 6
+      }
+    },
+    "ENSHROUDED_NAME": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Server name shown in the server browser.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".name",
+        "enshroudedMenuJsonPath": ".name",
+        "menuGroup": "Server",
+        "menuOrder": 1
+      }
+    },
+    "ENSHROUDED_QUERY_PORT": {
+      "type": "int",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": 1,
+      "max": 65535,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "A2S query port.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".queryPort",
+        "enshroudedMenuJsonPath": ".queryPort",
+        "menuGroup": "Server",
+        "menuOrder": 3
+      }
+    },
+    "ENSHROUDED_SAVE_DIR": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Savegame directory (relative to /home/enshrouded/server or absolute path).",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".saveDirectory",
+        "enshroudedMenuJsonPath": ".saveDirectory",
+        "menuGroup": "Server",
+        "menuOrder": 5
+      }
+    },
+    "ENSHROUDED_SLOT_COUNT": {
+      "type": "int",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": 1,
+      "max": 16,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Max player slots.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".slotCount",
+        "enshroudedMenuJsonPath": ".slotCount",
+        "menuGroup": "Server",
+        "menuOrder": 4
+      }
+    },
+    "ENSHROUDED_TAGS": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": {
+        "separator": ",",
+        "trim": true,
+        "itemNoEmpty": true,
+        "itemRegex": "^[A-Za-z0-9._-]+$"
+      },
+      "description": "Comma-separated server tags written to enshrouded_server.json .tags array.",
+      "allowed": "Comma-separated; each tag: A-Z a-z 0-9 . _ - (empty clears all tags)",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": ".tags",
+        "menuGroup": "Server",
+        "menuOrder": 7
+      }
+    },
+    "ENSHROUDED_VOICE_CHAT_MODE": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": "hard",
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": [
+        "Proximity",
+        "Global"
+      ],
+      "list": null,
+      "description": "Voice chat mode.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": null,
+        "enshroudedJsonPath": ".voiceChatMode",
+        "enshroudedMenuJsonPath": ".voiceChatMode",
+        "menuGroup": "Voice / Text",
+        "menuOrder": 8
       }
     },
     "ENSHROUDED_GS_AGGRO_POOL_AMOUNT": {
@@ -1083,534 +1010,6 @@
         "enshroudedMenuJsonPath": null,
         "menuGroup": "Survival / World",
         "menuOrder": 13
-      }
-    },
-    "ENSHROUDED_IP": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": "hard",
-      "min": null,
-      "max": null,
-      "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$",
-      "enum": null,
-      "list": null,
-      "description": "Server bind IP (IPv4).",
-      "allowed": "IPv4 address, e.g. 0.0.0.0",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": ".ip",
-        "enshroudedMenuJsonPath": ".ip",
-        "menuGroup": "Server",
-        "menuOrder": 2
-      }
-    },
-    "ENSHROUDED_LOG_DIR": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Log directory (relative to /home/enshrouded/server or absolute path).",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": ".logDirectory",
-        "enshroudedMenuJsonPath": ".logDirectory",
-        "menuGroup": "Server",
-        "menuOrder": 6
-      }
-    },
-    "ENSHROUDED_NAME": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Server name shown in the server browser.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": ".name",
-        "enshroudedMenuJsonPath": ".name",
-        "menuGroup": "Server",
-        "menuOrder": 1
-      }
-    },
-    "ENSHROUDED_QUERY_PORT": {
-      "type": "int",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": "hard",
-      "min": 1,
-      "max": 65535,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "A2S query port.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": ".queryPort",
-        "enshroudedMenuJsonPath": ".queryPort",
-        "menuGroup": "Server",
-        "menuOrder": 3
-      }
-    },
-    "ENSHROUDED_SAVE_DIR": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Savegame directory (relative to /home/enshrouded/server or absolute path).",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": ".saveDirectory",
-        "enshroudedMenuJsonPath": ".saveDirectory",
-        "menuGroup": "Server",
-        "menuOrder": 5
-      }
-    },
-    "ENSHROUDED_SLOT_COUNT": {
-      "type": "int",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": "hard",
-      "min": 1,
-      "max": 16,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "Max player slots.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": ".slotCount",
-        "enshroudedMenuJsonPath": ".slotCount",
-        "menuGroup": "Server",
-        "menuOrder": 4
-      }
-    },
-    "ENSHROUDED_TAGS": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": {
-        "separator": ",",
-        "trim": true,
-        "itemNoEmpty": true,
-        "itemRegex": "^[A-Za-z0-9._-]+$"
-      },
-      "description": "Comma-separated server tags written to enshrouded_server.json .tags array.",
-      "allowed": "Comma-separated; each tag: A-Z a-z 0-9 . _ - (empty clears all tags)",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": ".tags",
-        "menuGroup": "Server",
-        "menuOrder": 7
-      }
-    },
-    "ENSHROUDED_VOICE_CHAT_MODE": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": "hard",
-      "min": null,
-      "max": null,
-      "regex": null,
-      "enum": [
-        "Proximity",
-        "Global"
-      ],
-      "list": null,
-      "description": "Voice chat mode.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": ".voiceChatMode",
-        "enshroudedMenuJsonPath": ".voiceChatMode",
-        "menuGroup": "Voice / Text",
-        "menuOrder": 8
-      }
-    },
-    "EN_PROFILE": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": "hard",
-      "min": null,
-      "max": null,
-      "regex": "^[A-Za-z0-9._-]+$",
-      "enum": null,
-      "list": null,
-      "description": "Selects the Enshrouded profile template on first bootstrap (fresh volume).",
-      "allowed": "A-Z a-z 0-9 . _ -",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
-      }
-    },
-    "GAME_BRANCH": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Steam branch name.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".gameBranch",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Steam",
-        "menuOrder": 6
-      }
-    },
-    "LOG_COLOR": {
-      "type": "bool",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "Enable colored log levels (TTY only).",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".logColor",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Core",
-        "menuOrder": 3
-      }
-    },
-    "MANAGER_PROFILE": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": "hard",
-      "min": null,
-      "max": null,
-      "regex": "^[A-Za-z0-9._-]+$",
-      "enum": null,
-      "list": null,
-      "description": "Selects the Server Manager profile template on first bootstrap (fresh volume).",
-      "allowed": "A-Z a-z 0-9 . _ -",
-      "meta": {
-        "managerJsonPath": null,
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": null,
-        "menuOrder": null
-      }
-    },
-    "PGID": {
-      "type": "int",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": 1,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "GID for the enshrouded user.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".pgid",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Core",
-        "menuOrder": 2
-      }
-    },
-    "PUID": {
-      "type": "int",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": 1,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "UID for the enshrouded user.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".puid",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Core",
-        "menuOrder": 1
-      }
-    },
-    "RESTART_CHECK_PLAYERS": {
-      "type": "bool",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "Only restart when 0 players are connected.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".restartCheckPlayers",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Restart",
-        "menuOrder": 13
-      }
-    },
-    "RESTART_CRON": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Cron schedule for restart job (crond).",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".restartCron",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Restart",
-        "menuOrder": 14
-      }
-    },
-    "RESTART_POST_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed after restart.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".restartPostHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Restart",
-        "menuOrder": 16
-      }
-    },
-    "RESTART_PRE_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed before restart.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".restartPreHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Restart",
-        "menuOrder": 15
-      }
-    },
-    "SAVEFILE_NAME": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[A-Za-z0-9._-]+$",
-      "enum": null,
-      "list": null,
-      "description": "Base name for save/backup files.",
-      "allowed": "A-Z a-z 0-9 . _ -",
-      "meta": {
-        "managerJsonPath": ".savefileName",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Core",
-        "menuOrder": 4
-      }
-    },
-    "STEAMCMD_ARGS": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Additional SteamCMD args.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".steamcmdArgs",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Steam",
-        "menuOrder": 7
-      }
-    },
-    "STEAM_APP_ID": {
-      "type": "int",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": 1,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "Steam App ID.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".steamAppId",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Steam",
-        "menuOrder": 5
-      }
-    },
-    "UPDATE_CHECK_PLAYERS": {
-      "type": "bool",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": null,
-      "enum": null,
-      "list": null,
-      "description": "Only update when 0 players are connected.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".updateCheckPlayers",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Update",
-        "menuOrder": 9
-      }
-    },
-    "UPDATE_CRON": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Cron schedule for update job (crond).",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".updateCron",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Update",
-        "menuOrder": 10
-      }
-    },
-    "UPDATE_POST_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed after update.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".updatePostHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Update",
-        "menuOrder": 12
-      }
-    },
-    "UPDATE_PRE_HOOK": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Hook executed before update.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".updatePreHook",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Update",
-        "menuOrder": 11
-      }
-    },
-    "WINEDEBUG": {
-      "type": "string",
-      "required": false,
-      "allowEmpty": true,
-      "envMode": null,
-      "min": null,
-      "max": null,
-      "regex": "^[^\\r\\n]*$",
-      "enum": null,
-      "list": null,
-      "description": "Wine debug level.",
-      "allowed": "",
-      "meta": {
-        "managerJsonPath": ".winedebug",
-        "enshroudedJsonPath": null,
-        "enshroudedMenuJsonPath": null,
-        "menuGroup": "Steam",
-        "menuOrder": 8
       }
     }
   },

@@ -31,7 +31,7 @@ docker exec -it enshroudedserver menu
 
 Exit behavior:
 
-- If `enshrouded-server` is `STOPPED` when you exit, the menu will ask whether it should be started before closing.
+- If `server` is `STOPPED` when you exit, the menu will ask whether it should be started before closing.
 
 ## Main Menu
 
@@ -56,7 +56,7 @@ Notes:
 
 1. `Edit current settings`
    - Edits `/home/enshrouded/server/enshrouded_server.json` (persistent volume file)
-   - When entering the editor, the menu will ask to stop `enshrouded-server` first if it is running (required)
+   - When entering the editor, the menu will ask to stop `server` first if it is running (required)
    - Changes are written immediately to the real file (no explicit Save step)
    - Includes submenus for:
       - `gameSettings`
@@ -64,11 +64,11 @@ Notes:
    - Validates inputs (ports, slots, booleans, tags, game setting ranges/enums)
    - After editing, use the main menu (`start/restart`) to apply changes, or exit the menu (`x`) and confirm the start prompt.
 
-2. `Delete current profile`
+2. `Reset current profile`
    - Guided flow to replace the active config with a selected profile
-   - The menu will confirm and stop `enshrouded-server` (if running) before replacing `/home/enshrouded/server/enshrouded_server.json`
+   - The menu will confirm and stop `server` (if running) before replacing `/home/enshrouded/server/enshrouded_server.json`
 
-3. `Select new profile`
+3. `Select and apply profile`
      - Lists profile templates from `EN_PROFILE_DIR` (default: `/home/enshrouded/server/profiles/enshrouded/`, seeded from `/usr/local/etc/enshrouded/profiles/enshrouded/`)
      - If an active config exists, the menu will confirm and then replace it when applying the selected profile
      - Applies the selected template to `/home/enshrouded/server/enshrouded_server.json`
@@ -80,24 +80,24 @@ Notes:
 
 When switching Enshrouded profiles the menu uses the existing Supervisor programs via `supervisorctl`:
 
-- `supervisorctl stop enshrouded-server` (before editing or deleting/replacing the active config)
-- `supervisorctl start|restart enshrouded-server` (after editing/applying, to activate changes)
-- `supervisorctl start enshrouded-bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)
+- `supervisorctl stop server` (before editing or deleting/replacing the active config)
+- `supervisorctl start|restart server` (after editing/applying, to activate changes)
+- `supervisorctl start bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)
 
 ## Server Manager Settings
 
 1. `Edit current settings`
    - Edits `/home/enshrouded/server/server_manager/server_manager.json`
-   - Validates inputs using the existing validation logic from `server_manager/shared/env`
-   - When entering the editor, the menu will ask to stop `enshrouded-server` first if it is running (required)
+   - Validates inputs using the embedded runtime validation logic in `server_manager/jobs/menu`
+   - When entering the editor, the menu will ask to stop `server` first if it is running (required)
    - Changes are written immediately to the real file (no explicit Save step)
    - After editing, use the main menu (`start/restart`) to apply changes, or exit the menu (`x`) and confirm the start prompt.
 
-2. `Delete current profile`
+2. `Reset current profile`
    - Guided flow to replace the active config with a selected profile
-   - The menu will confirm and stop `enshrouded-server` (if running) before replacing `/home/enshrouded/server/server_manager/server_manager.json`
+   - The menu will confirm and stop `server` (if running) before replacing `/home/enshrouded/server/server_manager/server_manager.json`
 
-3. `Select new profile`
+3. `Select and apply profile`
      - Lists profile templates from `MANAGER_PROFILE_TEMPLATE_DIR` (default: `/home/enshrouded/server/profiles/manager/`, seeded from `/usr/local/etc/enshrouded/profiles/manager/`)
      - If an active config exists, the menu will confirm and then replace it when applying the selected profile
      - Copies the selected template into:
@@ -112,9 +112,9 @@ When switching Enshrouded profiles the menu uses the existing Supervisor program
 When switching Server Manager profiles the menu reuses existing profile/init helpers and Supervisor programs:
 
 - `ensure_manager_profile_file` (copies template into the volume profile store)
-- `supervisorctl stop enshrouded-server` (before replacing the active config)
-- `supervisorctl start|restart enshrouded-server` (after editing/applying, to activate changes)
-- `supervisorctl start enshrouded-bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)
+- `supervisorctl stop server` (before replacing the active config)
+- `supervisorctl start|restart server` (after editing/applying, to activate changes)
+- `supervisorctl start bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)
 
 ## Backups
 
@@ -132,17 +132,17 @@ Menu options:
    - If no config backups exist yet, the menu can create a backup of the current config.
    - Before restoring, the menu offers to create a safety backup of the current config.
 3. `Create savegame backup now (.zip)`
-   - Runs `supervisorctl start enshrouded-backup`
+   - Runs `supervisorctl start backup`
 4. `Restore savegame from .zip backup`
    - Lists zip backups from `BACKUP_DIR` (pattern: `*-$SAVEFILE_NAME.zip`)
    - If no zip backups exist yet, the menu can create one first.
-   - Stops `enshrouded-server` first (required)
+   - Stops `server` first (required)
    - Optional: create a backup of the current savegame before restoring
    - Confirms before deleting current save files and extracting the selected backup
 
 Notes:
 
-- Savegame zip backups are always created by the same Supervisor job (`enshrouded-backup`), no matter if you trigger it manually (menu / `ctl backup`), via cron (`BACKUP_CRON`), or as a safety backup before restore.
+- Savegame zip backups are always created by the same Supervisor job (`backup`), no matter if you trigger it manually (menu / `ctl backup`), via cron (`BACKUP_CRON`), or as a safety backup before restore.
 - `BACKUP_MAX_COUNT` keeps the newest N zip backups and deletes older ones (nothing is overwritten). Manual/safety backups count toward the same limit.
 - Config JSON backups under `BACKUP_DIR/profiles` are not affected by `BACKUP_MAX_COUNT`.
 
@@ -159,7 +159,7 @@ This submenu is a convenience wrapper around existing `ctl` commands:
 - `bootstrap`
 - `cron-start`, `cron-stop`, `cron-restart`
 
-Note: reset commands (`server-manager-profil-reset`, `enshrouded-profile-reset`) are intentionally not listed here, because the menu provides profile delete/select flows instead.
+Note: explicit reset commands are intentionally not listed here, because profile reset/apply is handled through the unified `profile` job and menu flows.
 
 ## Profile Selection Persistence
 
@@ -192,8 +192,8 @@ By default (`backupDir = "backups"`), this is:
 Backups are created when you:
 
 - change a value in the JSON editors (exactly one backup per edit session, created on the first write)
-- apply a profile template (`Select new profile`)
-- run the existing reset commands (`ctl server-manager-profil-reset`, `ctl enshrouded-profile-reset`)
+- apply a profile template (`Select and apply profile`)
+- run profile reset/apply via menu flows (internally triggers `ctl profile` with request JSON)
 
 Retention:
 
@@ -205,7 +205,7 @@ Some settings can be provided via container environment variables (see `docs/env
 
 Practical rule:
 
-- If you want the menu-edited JSON to stay in control, avoid setting the same option via container env vars.
+- If you want the menu-edited JSON to stay in control, avoid setting the same option via container environment values.
 
 Behavior in the menu:
 

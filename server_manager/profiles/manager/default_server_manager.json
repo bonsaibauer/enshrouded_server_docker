@@ -30,5 +30,15 @@
   "updatePreHook": null,
   "updatePostHook": null,
   "restartPreHook": null,
-  "restartPostHook": null
+  "restartPostHook": null,
+  "bootstrapPreHook": null,
+  "bootstrapPostHook": null,
+  "serverPreHook": null,
+  "serverPostHook": null,
+  "ctlPreHook": null,
+  "ctlPostHook": null,
+  "menuPreHook": null,
+  "menuPostHook": null,
+  "passwordViewPreHook": null,
+  "passwordViewPostHook": null
 }

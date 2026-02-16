@@ -33,7 +33,7 @@ To add your own profiles without rebuilding the image, drop new `*_enshrouded_se
 Naming rules:
 
 - `<name>` must match `^[A-Za-z0-9._-]+$`
-- `<name>` must match the profile selector regex (default: `^[A-Za-z0-9._-]+$`, configurable via `server_manager/shared/validation/vars.json`)
+- `<name>` must match the profile selector regex (default: `^[A-Za-z0-9._-]+$`, configurable via `server_manager/env/env_server_manager.json`)
 - File names must follow the exact suffix pattern:
   - `*_enshrouded_server.json`
   - `*_server_manager.json`
@@ -77,13 +77,15 @@ The initial ENV selectors are captured once for transparency:
 - `MANAGER_PROFILE`
 - `EN_PROFILE`
 
-## Reset Commands
+## Profile Reset/Apply
 
-- `server-manager-profil-reset`:
-  - resets `/home/enshrouded/server/server_manager/server_manager.json` from the selected manager profile (`actualProfilManager`)
-  - creates a timestamped backup in `BACKUP_DIR/profiles` before replacing the config
-  - stops `supervisord` afterwards for a clean restart
-- `enshrouded-profile-reset`:
-  - resets `/home/enshrouded/server/enshrouded_server.json` from the selected Enshrouded profile (`actualProfilEnshrouded`)
-  - creates a timestamped backup in `BACKUP_DIR/profiles` before replacing the config
-  - stops `supervisord` afterwards for a clean restart
+Profile reset/apply is now handled by the unified `profile` job (request-driven):
+
+- Interactive way (recommended): use `ctl menu` and choose profile reset/apply flows.
+- CLI way: write `server_manager/requests/profile.json` and trigger `ctl profile`.
+
+The job will:
+
+- stop `server` if needed
+- create config backups in `BACKUP_DIR/profiles`
+- apply/reset either `server_manager.json` or `enshrouded_server.json` based on the request payload

@@ -1,4 +1,4 @@
-# Enshrouded Dedicated Server – Docker Hub Notes
+# Enshrouded Dedicated Server - Docker Hub Notes
 
 ## Documentation
 
@@ -33,11 +33,12 @@ docker exec enshroudedserver stop
 docker exec enshroudedserver restart
 docker exec enshroudedserver update
 docker exec enshroudedserver backup
+docker exec enshroudedserver backup-config
+docker exec enshroudedserver restore-backup
+docker exec enshroudedserver profile
 docker exec enshroudedserver password-view
 docker exec enshroudedserver scheduled-restart
 docker exec enshroudedserver force-update
-docker exec enshroudedserver server-manager-profil-reset
-docker exec enshroudedserver enshrouded-profile-reset
 docker exec enshroudedserver bootstrap
 docker exec enshroudedserver cron-start
 docker exec enshroudedserver cron-stop

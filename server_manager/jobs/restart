@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+
+install_path="${INSTALL_PATH:-/home/enshrouded/server}"
+manager_config_file="${MANAGER_DATA_DIR:-${install_path}/server_manager}/server_manager.json"
+enshrouded_config_file="${install_path}/enshrouded_server.json"
+
+log_level="${LOG_LEVEL:-40}"
+
+debug() { [[ "$log_level" -ge 50 ]] && echo "DEBUG - $*" || true; }
+info() { [[ "$log_level" -ge 40 ]] && echo "INFO - $*" || true; }
+warn() { [[ "$log_level" -ge 30 ]] && echo "WARN - $*" || true; }
+fatal() { echo "FATAL - $*" >&2; exit 1; }
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fatal "Missing required command: $1"
+}
+
+manager_get() {
+  local path
+  path="$1"
+  if [[ ! -f "$manager_config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path | if . == null then empty else tostring end" "$manager_config_file" 2>/dev/null || true
+}
+
+enshrouded_get() {
+  local path
+  path="$1"
+  if [[ ! -f "$enshrouded_config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path | if . == null then empty else tostring end" "$enshrouded_config_file" 2>/dev/null || true
+}
+
+load_runtime_values() {
+  require_cmd jq
+  require_cmd python3
+  require_cmd supervisorctl
+
+  RESTART_CHECK_PLAYERS="${RESTART_CHECK_PLAYERS:-$(manager_get ".restartCheckPlayers")}"
+  [[ -n "$RESTART_CHECK_PLAYERS" ]] || RESTART_CHECK_PLAYERS="true"
+
+  RESTART_PRE_HOOK="${RESTART_PRE_HOOK:-$(manager_get ".restartPreHook")}"
+  RESTART_POST_HOOK="${RESTART_POST_HOOK:-$(manager_get ".restartPostHook")}"
+
+  ENSHROUDED_QUERY_PORT="${ENSHROUDED_QUERY_PORT:-$(enshrouded_get ".queryPort")}"
+  [[ -n "$ENSHROUDED_QUERY_PORT" ]] || ENSHROUDED_QUERY_PORT="15637"
+}
+
+checkServerEmpty() {
+  local connected_players
+
+  if [ "$RESTART_CHECK_PLAYERS" == "false" ]; then
+    return 0
+  fi
+
+  connected_players=$(python3 -c "
+try:
+    import a2s
+    print(len(a2s.players(('127.0.0.1',$ENSHROUDED_QUERY_PORT))))
+except Exception:
+    print('null')
+")
+
+  debug "[checkServerEmpty] connected_players: $connected_players"
+  if [ -n "$connected_players" ] && [ "$connected_players" != "null" ] && [ "$connected_players" -gt 0 ]; then
+    return 1
+  fi
+
+  return 0
+}
+
+restartPreHook() {
+  if [ -n "$RESTART_PRE_HOOK" ]; then
+    info "Running restart pre hook: $RESTART_PRE_HOOK"
+    eval "$RESTART_PRE_HOOK"
+  fi
+}
+
+restartPostHook() {
+  if [ -n "$RESTART_POST_HOOK" ]; then
+    info "Running restart post hook: $RESTART_POST_HOOK"
+    eval "$RESTART_POST_HOOK"
+  fi
+}
+
+restart() {
+  restartPreHook
+
+  if ! checkServerEmpty; then
+    warn "Enshrouded server is not empty - restart will not be performed"
+    return
+  fi
+
+  info "Restarting Enshrouded server"
+  supervisorctl restart server >/dev/null 2>&1
+
+  restartPostHook
+}
+
+main() {
+  load_runtime_values
+  info "Running restart"
+  restart
+  info "restart complete"
+}
+
+main "$@"

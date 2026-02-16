@@ -9,15 +9,16 @@ Value resolution order (most settings):
 
 Profile selection is special:
 - The menu persists profile selection in `server_manager.json` under `actualProfilManager` / `actualProfilEnshrouded`.
-- `EN_PROFILE` / `MANAGER_PROFILE` ENV vars are mainly used for the first bootstrap (fresh volume / deleted config).
+- `EN_PROFILE` / `MANAGER_PROFILE` environment values are mainly used for the first bootstrap (fresh volume / deleted config).
 
 ## Validation Rules
 
-ENV input validation and interactive menu validation are driven by a single rule file:
+ENV input validation and interactive menu validation are driven by two rule files:
 
-- `server_manager/shared/validation/vars.json`
+- `server_manager/env/env_server_manager.json`
+- `server_manager/env/env_enshrouded_server.json`
 
-If you want to adjust allowed values, ranges, regex, or the menu hints for a variable, change that JSON.
+If you want to adjust allowed values, ranges, regex, or menu hints, edit the matching file.
 
 The rules support:
 
@@ -26,24 +27,26 @@ The rules support:
 - `envMode`: `hard` will abort bootstrap on invalid values, `soft` will only warn.
 - `allowed`: optional menu hint override (otherwise the hint is derived from `type`/`enum`/`min`/`max`/`regex`/`list`).
 
-## Variable Reference
+## Spec Domains
 
-The authoritative variable reference (descriptions, allowed values, JSON mappings, and menu grouping) is generated from the spec:
+The spec is split by domain under `server_manager/env/`:
 
-- `docs/vars.md`
+- `server_manager.json`
+- `enshrouded_server.json`
 
-Regenerate after changing `server_manager/shared/validation/vars.json`:
+## Environment Reference
 
-```bash
-python scripts/gen_vars_md.py
-```
+The source of truth is the spec itself:
+
+- `server_manager/env/env_server_manager.json`
+- `server_manager/env/env_enshrouded_server.json`
 
 ## Backup Layout
 
 There are two backup types:
 
 1. Savegame backups (zip)
-   - Triggered by `ctl backup` / `supervisorctl start enshrouded-backup`
+   - Triggered by `ctl backup` / `supervisorctl start backup`
    - The same Supervisor job is used for manual backups, cron backups (`BACKUP_CRON`), and safety backups before restore.
    - Stored in `BACKUP_DIR` (default: `/home/enshrouded/server/backups`)
    - Filename pattern: `YYYY-MM-DD_HH-MM-SS-$SAVEFILE_NAME.zip`
