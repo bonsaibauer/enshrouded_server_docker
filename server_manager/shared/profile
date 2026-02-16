@@ -236,7 +236,7 @@ manager_config_path() {
 }
 
 backup_dir_resolve() {
-  # Resolve BACKUP_DIR to an absolute path (same behavior as enshrouded-backup job).
+  # Resolve BACKUP_DIR to an absolute path (same behavior as unified backup job).
   local dir
   dir="${BACKUP_DIR:-backups}"
   if [[ "$dir" == /* ]]; then
@@ -246,15 +246,15 @@ backup_dir_resolve() {
   fi
 }
 
-config_backups_dir() {
-  # Store config backups under BACKUP_DIR/profiles (default: /home/enshrouded/server/backups/profiles).
-  printf "%s/profiles" "$(backup_dir_resolve)"
+manual_backups_dir() {
+  # Store manual backups under BACKUP_DIR/manual.
+  printf "%s/manual" "$(backup_dir_resolve)"
 }
 
 backup_config_file() {
-  # Create a timestamped backup of a config JSON file.
+  # Create a timestamped config-only ZIP backup under BACKUP_DIR/manual.
   # Usage: backup_config_file <src_file> <label>
-  local src label backup_root ts dest n
+  local src label backup_root ts dest n tmp_dir config_name
   src="$1"
   label="$2"
 
@@ -267,22 +267,46 @@ backup_config_file() {
     return 0
   fi
 
-  backup_root="$(config_backups_dir)"
+  backup_root="$(manual_backups_dir)"
   mkdir -p "$backup_root" 2>/dev/null || true
   chmod 700 "$backup_root" 2>/dev/null || true
   chown enshrouded:enshrouded "$backup_root" 2>/dev/null || true
 
   ts="$(date +%Y-%m-%d_%H-%M-%S)"
-  dest="${backup_root}/${ts}_${label}.json"
+  dest="${backup_root}/${ts}-manual-config-${label}.zip"
   if [[ -e "$dest" ]]; then
     n=1
-    while [[ -e "${backup_root}/${ts}_${label}_${n}.json" ]]; do
+    while [[ -e "${backup_root}/${ts}-manual-config-${label}-${n}.zip" ]]; do
       n=$((n + 1))
     done
-    dest="${backup_root}/${ts}_${label}_${n}.json"
+    dest="${backup_root}/${ts}-manual-config-${label}-${n}.zip"
   fi
 
-  if cp "$src" "$dest" 2>/dev/null; then
+  case "$label" in
+    enshrouded_server) config_name="enshrouded_server.json" ;;
+    server_manager) config_name="server_manager.json" ;;
+    *) config_name="${label}.json" ;;
+  esac
+
+  tmp_dir="$(mktemp -d)"
+  mkdir -p "${tmp_dir}/config" 2>/dev/null || true
+
+  if cp "$src" "${tmp_dir}/config/${config_name}" 2>/dev/null \
+    && jq -n \
+      --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg label "$label" \
+      '{
+        version: 1,
+        mode: "manual",
+        createdAt: $createdAt,
+        includes: {
+          savegame: false,
+          enshroudedConfig: ($label == "enshrouded_server"),
+          serverManagerConfig: ($label == "server_manager")
+        }
+      }' >"${tmp_dir}/manifest.json" \
+    && (cd "$tmp_dir" && zip -qr "$dest" .); then
+    rm -rf "$tmp_dir" 2>/dev/null || true
     chmod 600 "$dest" 2>/dev/null || true
     chown enshrouded:enshrouded "$dest" 2>/dev/null || true
     if declare -F ui_success >/dev/null 2>&1; then
@@ -293,6 +317,7 @@ backup_config_file() {
     return 0
   fi
 
+  rm -rf "$tmp_dir" 2>/dev/null || true
   warn "Failed to create backup: $dest"
   return 1
 }

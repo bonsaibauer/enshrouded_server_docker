@@ -1,0 +1,270 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+init_runtime_env
+
+request_dir="${MANAGER_DATA_DIR}/requests"
+request_file="${request_dir}/backup_restore.json"
+run_file=""
+fail_file=""
+request_claimed="false"
+finished="false"
+work_dir=""
+
+zip_path=""
+restore_savegame="false"
+restore_enshrouded_config="false"
+restore_manager_config="false"
+create_safety_backup="false"
+
+to_bool() {
+  local normalized
+  normalized="$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)"
+  case "$normalized" in
+    "") echo "" ;;
+    1|true|yes|y|on) echo "true" ;;
+    0|false|no|n|off) echo "false" ;;
+    *) echo "" ;;
+  esac
+}
+
+read_bool_field() {
+  local field default raw normalized
+  field="$1"
+  default="${2:-false}"
+  raw="$(jq -r --arg field "$field" 'if has($field) then (.[$field] | tostring) else empty end' "$run_file" 2>/dev/null || true)"
+  normalized="$(to_bool "$raw")"
+  if [[ -n "$normalized" ]]; then
+    echo "$normalized"
+  else
+    echo "$default"
+  fi
+}
+
+cleanup_on_exit() {
+  local rc
+  rc=$?
+
+  [[ -n "$work_dir" ]] && rm -rf "$work_dir" 2>/dev/null || true
+
+  if [[ "$request_claimed" == "true" ]]; then
+    if [[ "$rc" -eq 0 && "$finished" == "true" ]]; then
+      rm -f "$run_file" 2>/dev/null || true
+    else
+      mv -f "$run_file" "$fail_file" 2>/dev/null || true
+    fi
+  fi
+}
+
+trap cleanup_on_exit EXIT
+trap 'exit 1' SIGINT SIGTERM
+
+run_restore_hook() {
+  local hook_name hook_cmd
+  hook_name="$1"
+  hook_cmd="$2"
+  if [[ -z "$hook_cmd" ]]; then
+    return 0
+  fi
+  info "Running ${hook_name} hook: $hook_cmd"
+  eval "$hook_cmd"
+}
+
+stop_server_now() {
+  local deadline now
+
+  if ! checkRunning "enshrouded-server"; then
+    return 0
+  fi
+
+  info "Stopping enshrouded-server"
+  supervisorctl stop enshrouded-server >/dev/null 2>&1 || true
+
+  deadline=$(( $(date +%s) + 90 ))
+  while checkRunning "enshrouded-server"; do
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      fatal "Timeout while stopping enshrouded-server"
+    fi
+    sleep 1
+  done
+}
+
+save_dir_resolve() {
+  local dir
+  if [[ -z "$ENSHROUDED_SAVE_DIR" ]]; then
+    ENSHROUDED_SAVE_DIR="$(jq -r '.saveDirectory // "./savegame"' "${install_path}/enshrouded_server.json" 2>/dev/null || echo "./savegame")"
+  fi
+  dir="${ENSHROUDED_SAVE_DIR:-./savegame}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
+
+claim_request() {
+  local ts
+  mkdir -p "$request_dir" 2>/dev/null || true
+
+  if [[ ! -f "$request_file" ]]; then
+    fatal "Missing request file: $request_file"
+  fi
+  if ! jq -e 'type == "object"' "$request_file" >/dev/null 2>&1; then
+    fatal "Invalid request JSON: $request_file"
+  fi
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  run_file="${request_dir}/.backup_restore.${ts}.$$"
+  fail_file="${request_dir}/failed_backup_restore.${ts}.$$.json"
+  if ! mv -f "$request_file" "$run_file" 2>/dev/null; then
+    fatal "Failed to claim request file: $request_file"
+  fi
+  request_claimed="true"
+}
+
+parse_request() {
+  zip_path="$(jq -r '.zipPath // empty' "$run_file" 2>/dev/null || true)"
+  restore_savegame="$(read_bool_field "restoreSavegame" "false")"
+  restore_enshrouded_config="$(read_bool_field "restoreEnshroudedConfig" "false")"
+  restore_manager_config="$(read_bool_field "restoreManagerConfig" "false")"
+  create_safety_backup="$(read_bool_field "createSafetyBackup" "false")"
+
+  if [[ -z "$zip_path" ]]; then
+    fatal "Request missing backup path (.zipPath)"
+  fi
+  if [[ ! -f "$zip_path" ]]; then
+    fatal "Backup source not found: $zip_path"
+  fi
+  if [[ "$restore_savegame" != "true" && "$restore_enshrouded_config" != "true" && "$restore_manager_config" != "true" ]]; then
+    fatal "Nothing selected for restore"
+  fi
+}
+
+run_safety_backup_if_requested() {
+  if [[ "$create_safety_backup" != "true" ]]; then
+    return 0
+  fi
+
+  info "Creating safety backup before restore"
+  if ! "$(dirname "$0")/backup" --mode manual --ignore-request --no-cleanup; then
+    fatal "Safety backup failed. Restore aborted."
+  fi
+}
+
+extract_zip() {
+  work_dir="$(mktemp -d)"
+  python3 - "$zip_path" "$work_dir" <<'PY'
+import pathlib
+import sys
+import zipfile
+
+zip_path = pathlib.Path(sys.argv[1])
+dest = pathlib.Path(sys.argv[2])
+dest.mkdir(parents=True, exist_ok=True)
+
+with zipfile.ZipFile(zip_path, "r") as zf:
+    for member in zf.infolist():
+        target = pathlib.Path(member.filename)
+        if target.is_absolute() or ".." in target.parts:
+            continue
+        zf.extract(member, dest)
+PY
+}
+
+copy_tree() {
+  local src dst
+  src="$1"
+  dst="$2"
+  mkdir -p "$dst" 2>/dev/null || true
+  (cd "$src" && tar -cf - .) | (cd "$dst" && tar -xf -)
+}
+
+restore_savegame_from_zip() {
+  local save_dir
+  save_dir="$(save_dir_resolve)"
+  [[ -n "$save_dir" && "$save_dir" != "/" ]] || fatal "Refusing to restore into unsafe save directory: $save_dir"
+
+  if [[ ! -d "${work_dir}/savegame" ]]; then
+    fatal "Selected backup does not contain savegame data"
+  fi
+
+  mkdir -p "$save_dir" 2>/dev/null || true
+  find "$save_dir" -mindepth 1 -delete 2>/dev/null || true
+  copy_tree "${work_dir}/savegame" "$save_dir"
+
+  find "$save_dir" -type f -exec chmod 600 {} + 2>/dev/null || true
+  chown -R enshrouded:enshrouded "$save_dir" 2>/dev/null || true
+  info "Savegame restored: $save_dir"
+}
+
+restore_json_config() {
+  local src target ensure_bans tmp target_dir
+  src="$1"
+  target="$2"
+  ensure_bans="${3:-false}"
+
+  if [[ ! -f "$src" ]]; then
+    fatal "Config source file not found in backup: $src"
+  fi
+  if ! jq -e 'type == "object"' "$src" >/dev/null 2>&1; then
+    fatal "Invalid JSON in backup config: $src"
+  fi
+
+  target_dir="$(dirname "$target")"
+  mkdir -p "$target_dir" 2>/dev/null || true
+  tmp="$(mktemp "${target_dir}/.restore.XXXXXX")"
+  if [[ "$ensure_bans" == "true" ]]; then
+    jq 'if has("bans") then . else . + {bans: []} end' "$src" >"$tmp" || {
+      rm -f "$tmp" 2>/dev/null || true
+      fatal "Failed to restore config (jq error): $target"
+    }
+  else
+    cp "$src" "$tmp" || {
+      rm -f "$tmp" 2>/dev/null || true
+      fatal "Failed to stage config restore: $target"
+    }
+  fi
+
+  mv -f "$tmp" "$target"
+  chmod 600 "$target" 2>/dev/null || true
+  chown enshrouded:enshrouded "$target" 2>/dev/null || true
+}
+
+restore_enshrouded_config_from_zip() {
+  local src
+  src="${work_dir}/config/enshrouded_server.json"
+  restore_json_config "$src" "${install_path}/enshrouded_server.json" "true"
+  info "Enshrouded config restored"
+}
+
+restore_manager_config_from_zip() {
+  local src target
+  src="${work_dir}/config/server_manager.json"
+  target="$(manager_config_path)"
+  restore_json_config "$src" "$target" "false"
+  profiles_ensure_schema || true
+  info "Server Manager config restored"
+}
+
+main() {
+  claim_request
+  parse_request
+
+  run_restore_hook "restore pre" "${RESTORE_PRE_HOOK:-}"
+  stop_server_now
+  run_safety_backup_if_requested
+
+  extract_zip
+  [[ "$restore_savegame" == "true" ]] && restore_savegame_from_zip
+  [[ "$restore_enshrouded_config" == "true" ]] && restore_enshrouded_config_from_zip
+  [[ "$restore_manager_config" == "true" ]] && restore_manager_config_from_zip
+
+  run_restore_hook "restore post" "${RESTORE_POST_HOOK:-}"
+
+  info "Restore finished from: $zip_path"
+  finished="true"
+}
+
+main "$@"

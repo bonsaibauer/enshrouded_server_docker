@@ -1,0 +1,254 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+. "$(dirname "$0")/../shared/enshrouded-bootstrap-shared"
+init_runtime_env
+
+request_dir="${MANAGER_DATA_DIR}/requests"
+request_file="${request_dir}/profile.json"
+run_file=""
+fail_file=""
+request_claimed="false"
+finished="false"
+
+target=""
+action=""
+profile_name=""
+create_backup="true"
+
+to_bool() {
+  local normalized
+  normalized="$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)"
+  case "$normalized" in
+    "") echo "" ;;
+    1|true|yes|y|on) echo "true" ;;
+    0|false|no|n|off) echo "false" ;;
+    *) echo "" ;;
+  esac
+}
+
+cleanup_on_exit() {
+  local rc
+  rc=$?
+
+  if [[ "$request_claimed" == "true" ]]; then
+    if [[ "$rc" -eq 0 && "$finished" == "true" ]]; then
+      rm -f "$run_file" 2>/dev/null || true
+    else
+      mv -f "$run_file" "$fail_file" 2>/dev/null || true
+    fi
+  fi
+}
+
+trap cleanup_on_exit EXIT
+trap 'exit 1' SIGINT SIGTERM
+
+run_profile_hook() {
+  local hook_name hook_cmd
+  hook_name="$1"
+  hook_cmd="$2"
+  if [[ -z "$hook_cmd" ]]; then
+    return 0
+  fi
+  info "Running ${hook_name} hook: $hook_cmd"
+  eval "$hook_cmd"
+}
+
+stop_server_now() {
+  local deadline now
+
+  if ! checkRunning "enshrouded-server"; then
+    return 0
+  fi
+
+  info "Stopping enshrouded-server"
+  supervisorctl stop enshrouded-server >/dev/null 2>&1 || true
+
+  deadline=$(( $(date +%s) + 90 ))
+  while checkRunning "enshrouded-server"; do
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      fatal "Timeout while stopping enshrouded-server"
+    fi
+    sleep 1
+  done
+}
+
+claim_request() {
+  local ts
+  mkdir -p "$request_dir" 2>/dev/null || true
+
+  if [[ ! -f "$request_file" ]]; then
+    fatal "Missing request file: $request_file"
+  fi
+  if ! jq -e 'type == "object"' "$request_file" >/dev/null 2>&1; then
+    fatal "Invalid request JSON: $request_file"
+  fi
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  run_file="${request_dir}/.profile.${ts}.$$"
+  fail_file="${request_dir}/failed_profile.${ts}.$$.json"
+  if ! mv -f "$request_file" "$run_file" 2>/dev/null; then
+    fatal "Failed to claim request file: $request_file"
+  fi
+  request_claimed="true"
+}
+
+parse_request() {
+  local create_backup_raw
+  target="$(jq -r '.target // empty' "$run_file" 2>/dev/null || true)"
+  action="$(jq -r '.action // empty' "$run_file" 2>/dev/null || true)"
+  profile_name="$(jq -r '.profile // empty' "$run_file" 2>/dev/null || true)"
+  create_backup_raw="$(jq -r 'if has("createBackup") then (.createBackup | tostring) else empty end' "$run_file" 2>/dev/null || true)"
+
+  case "$target" in
+    manager|enshrouded) ;;
+    *) fatal "Invalid request target (expected manager|enshrouded): $target" ;;
+  esac
+
+  case "$action" in
+    apply|reset) ;;
+    *) fatal "Invalid request action (expected apply|reset): $action" ;;
+  esac
+
+  if [[ "$action" == "apply" && -z "$profile_name" ]]; then
+    fatal "Request missing profile for action=apply"
+  fi
+
+  if [[ -n "$create_backup_raw" ]]; then
+    create_backup="$(to_bool "$create_backup_raw")"
+    [[ -n "$create_backup" ]] || fatal "Invalid createBackup value: $create_backup_raw"
+  fi
+}
+
+apply_manager_profile() {
+  local profile source_profile config_file config_dir tmp
+  local old_enshrouded old_env_manager old_env_enshrouded
+
+  profile="$1"
+  source_profile="$(manager_profile_path "$profile")"
+  config_file="$(manager_config_path)"
+  config_dir="$(dirname "$config_file")"
+
+  old_enshrouded="$(profiles_config_get "enshrouded")"
+  old_env_manager="$(profiles_env_get "MANAGER_PROFILE")"
+  old_env_enshrouded="$(profiles_env_get "EN_PROFILE")"
+
+  ensure_manager_paths
+  ensure_manager_profile_file "$profile" || fatal "Server Manager profile template not found: $profile"
+  chown -R enshrouded:enshrouded "$(dirname "$source_profile")" 2>/dev/null || true
+
+  if [[ ! -f "$source_profile" ]]; then
+    fatal "Server Manager profile not found: $source_profile"
+  fi
+  if ! jq -e 'type == "object"' "$source_profile" >/dev/null 2>&1; then
+    fatal "Invalid JSON in server manager profile: $source_profile"
+  fi
+
+  mkdir -p "$config_dir" 2>/dev/null || true
+  tmp="$(mktemp "${config_dir}/.server_manager.json.profile.XXXXXX")"
+  if ! cp "$source_profile" "$tmp"; then
+    rm -f "$tmp" 2>/dev/null || true
+    fatal "Failed to stage Server Manager profile"
+  fi
+
+  if [[ "$create_backup" == "true" ]]; then
+    backup_config_file "$config_file" "server_manager" || true
+  fi
+
+  mv -f "$tmp" "$config_file"
+  chmod 600 "$config_file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
+
+  profiles_ensure_schema || true
+  profiles_config_set "manager" "$profile" || true
+  if [[ -n "$old_enshrouded" ]]; then
+    profiles_config_set "enshrouded" "$old_enshrouded" || true
+  else
+    profiles_config_set "enshrouded" "$(enshrouded_profile_resolve)" || true
+  fi
+  profiles_env_set_if_missing "MANAGER_PROFILE" "$old_env_manager" || true
+  profiles_env_set_if_missing "EN_PROFILE" "$old_env_enshrouded" || true
+
+  info "Server Manager profile ${action} completed: $profile"
+}
+
+resolve_enshrouded_profile_path() {
+  local profile source_profile
+  profile="$1"
+  ensure_enshrouded_profile_file "$profile" || true
+
+  source_profile="$(enshrouded_profile_path "$profile")"
+  if [[ ! -f "$source_profile" ]]; then
+    source_profile="$(enshrouded_profile_template_path "$profile")"
+  fi
+
+  if [[ ! -f "$source_profile" ]]; then
+    fatal "Enshrouded profile not found: $profile (searched: $EN_PROFILE_DIR, $EN_PROFILE_TEMPLATE_DIR)"
+  fi
+  if ! jq -e 'type == "object"' "$source_profile" >/dev/null 2>&1; then
+    fatal "Invalid JSON in enshrouded profile: $source_profile"
+  fi
+
+  printf "%s" "$source_profile"
+}
+
+apply_enshrouded_profile() {
+  local profile source_profile config_file config_dir tmp
+  profile="$1"
+  source_profile="$(resolve_enshrouded_profile_path "$profile")"
+  config_file="${install_path}/enshrouded_server.json"
+  config_dir="$(dirname "$config_file")"
+
+  mkdir -p "$config_dir" 2>/dev/null || true
+  tmp="$(mktemp "${config_dir}/.enshrouded_server.json.profile.XXXXXX")"
+  if ! jq 'if has("bans") then . else . + {bans: []} end' "$source_profile" >"$tmp"; then
+    rm -f "$tmp" 2>/dev/null || true
+    fatal "Failed to prepare Enshrouded profile JSON"
+  fi
+
+  if [[ "$create_backup" == "true" ]]; then
+    backup_config_file "$config_file" "enshrouded_server" || true
+  fi
+
+  mv -f "$tmp" "$config_file"
+  chmod 600 "$config_file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
+
+  ensureUserGroupPasswords || true
+  profiles_ensure_schema || true
+  profiles_config_set "enshrouded" "$profile" || true
+
+  info "Enshrouded profile ${action} completed: $profile"
+}
+
+main() {
+  claim_request
+  parse_request
+
+  if [[ -z "$profile_name" ]]; then
+    if [[ "$target" == "manager" ]]; then
+      profile_name="$(manager_profile_resolve)"
+    else
+      profile_name="$(enshrouded_profile_resolve)"
+    fi
+  fi
+
+  export PROFILE_TARGET="$target"
+  export PROFILE_ACTION="$action"
+  export PROFILE_NAME="$profile_name"
+  run_profile_hook "profile pre" "${PROFILE_PRE_HOOK:-}"
+
+  stop_server_now
+  if [[ "$target" == "manager" ]]; then
+    apply_manager_profile "$profile_name"
+  else
+    apply_enshrouded_profile "$profile_name"
+  fi
+
+  run_profile_hook "profile post" "${PROFILE_POST_HOOK:-}"
+  finished="true"
+}
+
+main "$@"

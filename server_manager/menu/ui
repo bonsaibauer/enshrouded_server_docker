@@ -505,19 +505,66 @@ menu_write_request_json() {
   return 1
 }
 
-menu_run_config_backup_job() {
-  # Trigger a one-shot Supervisor job that creates a config backup.
-  # The job output is logged via Supervisor and visible in `docker logs`.
-  local program timeout
-  program="$1"
+menu_run_backup_job() {
+  # Trigger unified backup job with request payload.
+  # Usage:
+  #   menu_run_backup_job <mode> <timeout> <includeSavegame> <includeEnshroudedConfig> <includeManagerConfig> [cleanup]
+  local mode timeout include_savegame include_ens include_mgr cleanup
+  mode="${1:-manual}"
   timeout="${2:-30}"
+  include_savegame="${3:-true}"
+  include_ens="${4:-true}"
+  include_mgr="${5:-true}"
+  cleanup="${6:-false}"
 
-  supervisorctl start "$program" >/dev/null 2>&1 || true
-  if ! menu_wait_for_program_exit "$program" "$timeout"; then
-    ui_warn_line "Timeout while waiting for $program."
-    ui_note "Check: supervisorctl status $program"
+  if ! menu_write_request_json "backup.json" \
+    --arg mode "$mode" \
+    --argjson includeSavegame "$include_savegame" \
+    --argjson includeEnshroudedConfig "$include_ens" \
+    --argjson includeManagerConfig "$include_mgr" \
+    --argjson cleanup "$cleanup" \
+    '{mode: $mode, includeSavegame: $includeSavegame, includeEnshroudedConfig: $includeEnshroudedConfig, includeManagerConfig: $includeManagerConfig, cleanup: $cleanup}' >/dev/null; then
+    ui_error "Failed to write backup request."
+    return 1
+  fi
+
+  supervisorctl start backup >/dev/null 2>&1 || true
+  if ! menu_wait_for_program_exit "backup" "$timeout"; then
+    ui_warn_line "Timeout while waiting for backup."
+    ui_note "Check: supervisorctl status backup"
     return 1
   fi
 
   return 0
+}
+
+menu_run_config_backup_job() {
+  # Selector wrapper used by editors for config-only backups.
+  # Config-only backups are written under BACKUP_DIR/manual (without savegame files).
+  local selector timeout include_ens include_mgr
+  selector="${1:-manual:all}"
+  timeout="${2:-30}"
+  include_ens="true"
+  include_mgr="true"
+
+  case "$selector" in
+    manual:enshrouded|enshrouded)
+      include_ens="true"
+      include_mgr="false"
+      ;;
+    manual:manager|manager)
+      include_ens="false"
+      include_mgr="true"
+      ;;
+    manual:all|all)
+      include_ens="true"
+      include_mgr="true"
+      ;;
+    *)
+      ui_warn_line "Unknown config backup selector: $selector"
+      return 1
+      ;;
+  esac
+
+  menu_run_backup_job "manual" "$timeout" "false" "$include_ens" "$include_mgr" "false"
 }

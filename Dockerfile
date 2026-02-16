@@ -72,18 +72,12 @@ RUN ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/ctl \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/restart \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/update \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/backup \
-    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/enshrouded-backup-config \
-    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/server-manager-backup-config \
-    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/server-manager-profil-apply \
-    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/enshrouded-profile-apply \
-    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/enshrouded-config-restore \
-    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/server-manager-config-restore \
-    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/enshrouded-backup-restore \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/backup-config \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/restore-backup \
+    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/profile \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/password-view \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/scheduled-restart \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/force-update \
-    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/server-manager-profil-reset \
-    && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/enshrouded-profile-reset \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/bootstrap \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/cron-start \
     && ln -sf /usr/local/etc/enshrouded/entrypoints/ctl /usr/local/bin/cron-stop \

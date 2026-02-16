@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SUPERVISORCTL_BIN="${SUPERVISORCTL_BIN:-supervisorctl}"
+MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-/home/enshrouded/server/server_manager}"
 
 # Resolve this script's directory even when invoked through a symlink under
 # /usr/local/bin (e.g. the `menu` alias). We need the real location so relative
@@ -36,29 +37,14 @@ Commands:
   stop           Stop enshrouded-server
   restart        Restart enshrouded-server
   update         Trigger enshrouded-updater
-  backup         Trigger enshrouded-backup
-  enshrouded-backup-config
-                 Create a backup of enshrouded_server.json under BACKUP_DIR/profiles
-  server-manager-backup-config
-                 Create a backup of server_manager.json under BACKUP_DIR/profiles
-  server-manager-profil-apply
-                 Apply the selected Server Manager profile (menu writes a request file)
-  enshrouded-profile-apply
-                 Apply the selected Enshrouded profile (menu writes a request file)
-  enshrouded-config-restore
-                 Restore enshrouded_server.json from a selected backup (menu writes a request file)
-  server-manager-config-restore
-                 Restore server_manager.json from a selected backup (menu writes a request file)
-  enshrouded-backup-restore
-                 Restore the savegame from a selected .zip backup (menu writes a request file)
+  backup         Trigger manual full backup (BACKUP_DIR/manual/*.zip)
+  backup-config  Trigger config-only backup zip (BACKUP_DIR/manual/*.zip)
+  restore-backup Trigger restore-backup job (expects request file in server_manager/requests)
+  profile        Trigger profile job (expects request file in server_manager/requests)
   password-view  Show user group rights and passwords from enshrouded_server.json
   scheduled-restart
                  Trigger enshrouded-restart job
   force-update   Trigger enshrouded-force-update
-  server-manager-profil-reset
-                 Trigger server-manager-profil-reset
-  enshrouded-profile-reset
-                 Trigger enshrouded-profile-reset
   bootstrap      Trigger enshrouded-bootstrap
   cron-start     Start crond
   cron-stop      Stop crond
@@ -69,6 +55,52 @@ EOF
 
 run_supervisorctl() {
   "$SUPERVISORCTL_BIN" "$@"
+}
+
+write_backup_request() {
+  local mode include_savegame include_enshrouded include_manager cleanup
+  local requests_dir request_file tmp_file
+  mode="$1"
+  include_savegame="$2"
+  include_enshrouded="$3"
+  include_manager="$4"
+  cleanup="${5:-false}"
+
+  requests_dir="${MANAGER_DATA_DIR}/requests"
+  request_file="${requests_dir}/backup.json"
+  mkdir -p "$requests_dir" 2>/dev/null || true
+  tmp_file="$(mktemp "${requests_dir}/.backup.json.XXXXXX")"
+
+  if ! jq -n \
+    --arg mode "$mode" \
+    --argjson includeSavegame "$include_savegame" \
+    --argjson includeEnshroudedConfig "$include_enshrouded" \
+    --argjson includeManagerConfig "$include_manager" \
+    --argjson cleanup "$cleanup" \
+    '{mode: $mode, includeSavegame: $includeSavegame, includeEnshroudedConfig: $includeEnshroudedConfig, includeManagerConfig: $includeManagerConfig, cleanup: $cleanup}' >"$tmp_file"; then
+    rm -f "$tmp_file" 2>/dev/null || true
+    return 1
+  fi
+
+  mv -f "$tmp_file" "$request_file"
+  chmod 600 "$request_file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$request_file" 2>/dev/null || true
+  return 0
+}
+
+trigger_backup() {
+  local mode include_savegame include_enshrouded include_manager cleanup
+  mode="$1"
+  include_savegame="$2"
+  include_enshrouded="$3"
+  include_manager="$4"
+  cleanup="${5:-false}"
+
+  if ! write_backup_request "$mode" "$include_savegame" "$include_enshrouded" "$include_manager" "$cleanup"; then
+    echo "Failed to write backup request file." >&2
+    exit 1
+  fi
+  run_supervisorctl start backup
 }
 
 main() {
@@ -102,28 +134,16 @@ main() {
       run_supervisorctl start enshrouded-updater
       ;;
     backup)
-      run_supervisorctl start enshrouded-backup
+      trigger_backup "manual" "true" "true" "true" "false"
       ;;
-    enshrouded-backup-config)
-      run_supervisorctl start enshrouded-backup-config
+    backup-config)
+      trigger_backup "manual" "false" "true" "true" "false"
       ;;
-    server-manager-backup-config)
-      run_supervisorctl start server-manager-backup-config
+    restore-backup)
+      run_supervisorctl start restore-backup
       ;;
-    server-manager-profil-apply)
-      run_supervisorctl start server-manager-profil-apply
-      ;;
-    enshrouded-profile-apply)
-      run_supervisorctl start enshrouded-profile-apply
-      ;;
-    enshrouded-config-restore)
-      run_supervisorctl start enshrouded-config-restore
-      ;;
-    server-manager-config-restore)
-      run_supervisorctl start server-manager-config-restore
-      ;;
-    enshrouded-backup-restore)
-      run_supervisorctl start enshrouded-backup-restore
+    profile)
+      run_supervisorctl start profile
       ;;
     password-view)
       "${SCRIPT_DIR}/../jobs/enshrouded-password-view" "$@"
@@ -133,12 +153,6 @@ main() {
       ;;
     force-update)
       run_supervisorctl start enshrouded-force-update
-      ;;
-    server-manager-profil-reset)
-      run_supervisorctl start server-manager-profil-reset
-      ;;
-    enshrouded-profile-reset)
-      run_supervisorctl start enshrouded-profile-reset
       ;;
     bootstrap)
       run_supervisorctl start enshrouded-bootstrap

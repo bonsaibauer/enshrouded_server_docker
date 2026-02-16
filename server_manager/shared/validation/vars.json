@@ -11,7 +11,7 @@
       "regex": "^[^\\r\\n]*$",
       "enum": null,
       "list": null,
-      "description": "Cron schedule for savegame backup job (crond).",
+      "description": "Cron schedule for scheduled backup job (writes to BACKUP_DIR/scheduled).",
       "allowed": "",
       "meta": {
         "managerJsonPath": ".backupCron",
@@ -31,7 +31,7 @@
       "regex": "^[^\\r\\n]*$",
       "enum": null,
       "list": null,
-      "description": "Base backup directory (savegame zips in BACKUP_DIR, config backups in BACKUP_DIR/profiles).",
+      "description": "Base backup directory (scheduled/manual subfolders).",
       "allowed": "",
       "meta": {
         "managerJsonPath": ".backupDir",
@@ -61,6 +61,46 @@
         "menuOrder": 18
       }
     },
+    "BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Include enshrouded_server.json in scheduled backups.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".backupScheduledIncludeEnshroudedConfig",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": "Backup",
+        "menuOrder": 22
+      }
+    },
+    "BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG": {
+      "type": "bool",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": null,
+      "enum": null,
+      "list": null,
+      "description": "Include server_manager.json in scheduled backups.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".backupScheduledIncludeServerManagerConfig",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": "Backup",
+        "menuOrder": 23
+      }
+    },
     "BACKUP_POST_HOOK": {
       "type": "string",
       "required": false,
@@ -71,7 +111,7 @@
       "regex": "^[^\\r\\n]*$",
       "enum": null,
       "list": null,
-      "description": "Hook executed after savegame backup.",
+      "description": "Hook executed after backup job.",
       "allowed": "",
       "meta": {
         "managerJsonPath": ".backupPostHook",
@@ -91,7 +131,7 @@
       "regex": "^[^\\r\\n]*$",
       "enum": null,
       "list": null,
-      "description": "Hook executed before savegame backup.",
+      "description": "Hook executed before backup job.",
       "allowed": "",
       "meta": {
         "managerJsonPath": ".backupPreHook",
@@ -118,7 +158,87 @@
         "enshroudedJsonPath": null,
         "enshroudedMenuJsonPath": null,
         "menuGroup": "Hooks",
-        "menuOrder": 22
+        "menuOrder": 24
+      }
+    },
+    "RESTORE_POST_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed after backup restore.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".restorePostHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": "Hooks",
+        "menuOrder": 26
+      }
+    },
+    "RESTORE_PRE_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed before backup restore.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".restorePreHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": "Hooks",
+        "menuOrder": 25
+      }
+    },
+    "PROFILE_POST_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed after profile job.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".profilePostHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": "Hooks",
+        "menuOrder": 28
+      }
+    },
+    "PROFILE_PRE_HOOK": {
+      "type": "string",
+      "required": false,
+      "allowEmpty": true,
+      "envMode": null,
+      "min": null,
+      "max": null,
+      "regex": "^[^\\r\\n]*$",
+      "enum": null,
+      "list": null,
+      "description": "Hook executed before profile job.",
+      "allowed": "",
+      "meta": {
+        "managerJsonPath": ".profilePreHook",
+        "enshroudedJsonPath": null,
+        "enshroudedMenuJsonPath": null,
+        "menuGroup": "Hooks",
+        "menuOrder": 27
       }
     },
     "ENSHROUDED_ENABLE_TEXT_CHAT": {

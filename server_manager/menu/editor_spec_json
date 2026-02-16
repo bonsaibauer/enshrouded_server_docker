@@ -402,7 +402,7 @@ menu_spec_editor__user_groups_edit_group() {
   g="$2"
   template="${3:-ENSHROUDED_ROLE}"
   env_prefix="${4:-ENSHROUDED_ROLE}"
-  backup_job="${5:-enshrouded-backup-config}"
+  backup_job="${5:-manual:enshrouded}"
   empty_label="${6:-<empty>}"
 
   local base
@@ -504,7 +504,7 @@ menu_edit_user_groups_from_spec() {
   file=""
   template="ENSHROUDED_ROLE"
   env_prefix="ENSHROUDED_ROLE"
-  backup_job="enshrouded-backup-config"
+  backup_job="manual:enshrouded"
   empty_label="<empty>"
 
   while [[ $# -gt 0 ]]; do

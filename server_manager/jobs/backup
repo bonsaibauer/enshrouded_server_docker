@@ -1,0 +1,390 @@
+#!/bin/bash
+. "$(dirname "$0")/../shared/common"
+. "$(dirname "$0")/../shared/profile"
+. "$(dirname "$0")/../shared/env"
+init_runtime_env
+
+pidfile="$enshrouded_backup_pidfile"
+request_dir="${MANAGER_DATA_DIR}/requests"
+request_file="${request_dir}/backup.json"
+
+mode="scheduled"
+include_savegame=""
+include_enshrouded_config=""
+include_manager_config=""
+run_cleanup=""
+ignore_request="false"
+
+request_claimed="false"
+run_file=""
+fail_file=""
+finished="false"
+stage_dir=""
+backup_file=""
+
+to_bool() {
+  local normalized
+  normalized="$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)"
+  case "$normalized" in
+    "") echo "" ;;
+    1|true|yes|y|on) echo "true" ;;
+    0|false|no|n|off) echo "false" ;;
+    *) echo "" ;;
+  esac
+}
+
+normalize_bool_with_default() {
+  local value default normalized
+  value="${1-}"
+  default="${2-}"
+  normalized="$(to_bool "$value")"
+  if [[ -n "$normalized" ]]; then
+    echo "$normalized"
+  else
+    echo "$default"
+  fi
+}
+
+cleanup_on_exit() {
+  local rc
+  rc=$?
+
+  rm -f "$pidfile" 2>/dev/null || true
+  [[ -n "$stage_dir" ]] && rm -rf "$stage_dir" 2>/dev/null || true
+
+  if [[ "$request_claimed" == "true" ]]; then
+    if [[ "$rc" -eq 0 && "$finished" == "true" ]]; then
+      rm -f "$run_file" 2>/dev/null || true
+    else
+      mv -f "$run_file" "$fail_file" 2>/dev/null || true
+    fi
+  fi
+}
+
+trap cleanup_on_exit EXIT
+trap 'exit 1' SIGINT SIGTERM
+
+usage() {
+  cat <<'EOF'
+Usage:
+  backup [--mode scheduled|manual] [--ignore-request]
+         [--include-savegame true|false]
+         [--include-enshrouded-config true|false]
+         [--include-manager-config true|false]
+         [--cleanup|--no-cleanup]
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --mode)
+        mode="${2-}"
+        shift 2
+        ;;
+      --include-savegame)
+        include_savegame="${2-}"
+        shift 2
+        ;;
+      --include-enshrouded-config)
+        include_enshrouded_config="${2-}"
+        shift 2
+        ;;
+      --include-manager-config)
+        include_manager_config="${2-}"
+        shift 2
+        ;;
+      --cleanup)
+        run_cleanup="true"
+        shift
+        ;;
+      --no-cleanup)
+        run_cleanup="false"
+        shift
+        ;;
+      --ignore-request)
+        ignore_request="true"
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+}
+
+acquire_lock() {
+  local old_pid
+  if [[ -f "$pidfile" ]]; then
+    old_pid="$(cat "$pidfile" 2>/dev/null || true)"
+    if [[ "$old_pid" =~ ^[0-9]+$ ]] && kill -0 "$old_pid" 2>/dev/null; then
+      fatal "Backup process already running with PID $old_pid"
+    fi
+    warn "Removing stale backup PID file: $pidfile"
+    rm -f "$pidfile" 2>/dev/null || true
+  fi
+  echo "$$" >"$pidfile" || fatal "Failed to create PID file: $pidfile"
+}
+
+claim_request_if_present() {
+  local ts
+
+  if [[ "$ignore_request" == "true" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$request_dir" 2>/dev/null || true
+  if [[ ! -f "$request_file" ]]; then
+    return 0
+  fi
+  if ! jq -e 'type == "object"' "$request_file" >/dev/null 2>&1; then
+    fatal "Invalid request JSON: $request_file"
+  fi
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  run_file="${request_dir}/.backup.${ts}.$$"
+  fail_file="${request_dir}/failed_backup.${ts}.$$.json"
+  if ! mv -f "$request_file" "$run_file" 2>/dev/null; then
+    fatal "Failed to claim request file: $request_file"
+  fi
+  request_claimed="true"
+}
+
+read_request_field() {
+  local field
+  field="$1"
+  jq -r --arg field "$field" 'if has($field) then (.[$field] | tostring) else empty end' "$run_file" 2>/dev/null || true
+}
+
+apply_request_overrides() {
+  local value
+  if [[ "$request_claimed" != "true" ]]; then
+    return 0
+  fi
+
+  value="$(read_request_field "mode")"
+  [[ -n "$value" ]] && mode="$value"
+
+  value="$(read_request_field "includeSavegame")"
+  [[ -n "$value" ]] && include_savegame="$value"
+
+  value="$(read_request_field "includeEnshroudedConfig")"
+  [[ -n "$value" ]] && include_enshrouded_config="$value"
+
+  value="$(read_request_field "includeManagerConfig")"
+  [[ -n "$value" ]] && include_manager_config="$value"
+
+  value="$(read_request_field "cleanup")"
+  [[ -n "$value" ]] && run_cleanup="$value"
+}
+
+save_dir_resolve() {
+  local dir
+  if [[ -z "$ENSHROUDED_SAVE_DIR" ]]; then
+    ENSHROUDED_SAVE_DIR="$(jq -r '.saveDirectory // "./savegame"' "${install_path}/enshrouded_server.json" 2>/dev/null || echo "./savegame")"
+  fi
+  dir="${ENSHROUDED_SAVE_DIR:-./savegame}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
+
+copy_tree() {
+  local src dst
+  src="$1"
+  dst="$2"
+  mkdir -p "$dst" 2>/dev/null || true
+  (cd "$src" && tar -cf - .) | (cd "$dst" && tar -xf -)
+}
+
+run_backup_hook() {
+  local hook_name hook_cmd
+  hook_name="$1"
+  hook_cmd="$2"
+
+  if [[ -z "$hook_cmd" ]]; then
+    return 0
+  fi
+
+  info "Running ${hook_name} hook: $hook_cmd"
+  eval "$hook_cmd"
+}
+
+resolve_mode_defaults() {
+  local mode_lc
+  mode_lc="$(echo "$mode" | tr '[:upper:]' '[:lower:]' | xargs)"
+  case "$mode_lc" in
+    scheduled)
+      mode="scheduled"
+      include_savegame="${include_savegame:-true}"
+      include_enshrouded_config="${include_enshrouded_config:-${BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG:-true}}"
+      include_manager_config="${include_manager_config:-${BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG:-true}}"
+      run_cleanup="${run_cleanup:-true}"
+      ;;
+    manual)
+      mode="manual"
+      include_savegame="${include_savegame:-true}"
+      include_enshrouded_config="${include_enshrouded_config:-true}"
+      include_manager_config="${include_manager_config:-true}"
+      run_cleanup="${run_cleanup:-false}"
+      ;;
+    *)
+      fatal "Unsupported backup mode: $mode"
+      ;;
+  esac
+
+  include_savegame="$(normalize_bool_with_default "$include_savegame" "false")"
+  include_enshrouded_config="$(normalize_bool_with_default "$include_enshrouded_config" "false")"
+  include_manager_config="$(normalize_bool_with_default "$include_manager_config" "false")"
+  run_cleanup="$(normalize_bool_with_default "$run_cleanup" "false")"
+}
+
+prepare_stage_content() {
+  local save_dir config_dir ens_config manager_config
+  local added_savegame added_enshrouded added_manager
+
+  save_dir="$(save_dir_resolve)"
+  ens_config="${install_path}/enshrouded_server.json"
+  manager_config="$(manager_config_path)"
+  config_dir="${stage_dir}/config"
+  added_savegame="false"
+  added_enshrouded="false"
+  added_manager="false"
+
+  if [[ "$include_savegame" == "true" ]]; then
+    if [[ -d "$save_dir" ]]; then
+      info "Including savegame directory: $save_dir"
+      copy_tree "$save_dir" "${stage_dir}/savegame"
+      added_savegame="true"
+    else
+      warn "Savegame directory not found, skipping: $save_dir"
+    fi
+  fi
+
+  if [[ "$include_enshrouded_config" == "true" ]]; then
+    if [[ -f "$ens_config" ]]; then
+      mkdir -p "$config_dir" 2>/dev/null || true
+      cp "$ens_config" "${config_dir}/enshrouded_server.json"
+      added_enshrouded="true"
+    else
+      warn "Enshrouded config not found, skipping: $ens_config"
+    fi
+  fi
+
+  if [[ "$include_manager_config" == "true" ]]; then
+    if [[ -f "$manager_config" ]]; then
+      mkdir -p "$config_dir" 2>/dev/null || true
+      cp "$manager_config" "${config_dir}/server_manager.json"
+      added_manager="true"
+    else
+      warn "Server Manager config not found, skipping: $manager_config"
+    fi
+  fi
+
+  if [[ "$added_savegame" != "true" && "$added_enshrouded" != "true" && "$added_manager" != "true" ]]; then
+    fatal "Nothing to backup (all selected sources missing)"
+  fi
+
+  jq -n \
+    --arg mode "$mode" \
+    --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg saveDirectory "$save_dir" \
+    --arg savefileName "$savefile_name" \
+    --argjson includeSavegame "$added_savegame" \
+    --argjson includeEnshroudedConfig "$added_enshrouded" \
+    --argjson includeServerManagerConfig "$added_manager" \
+    '{
+      version: 1,
+      mode: $mode,
+      createdAt: $createdAt,
+      saveDirectory: $saveDirectory,
+      savefileName: $savefileName,
+      includes: {
+        savegame: $includeSavegame,
+        enshroudedConfig: $includeEnshroudedConfig,
+        serverManagerConfig: $includeServerManagerConfig
+      }
+    }' >"${stage_dir}/manifest.json" || fatal "Failed to write manifest.json"
+}
+
+create_zip() {
+  local backup_root target_dir ts n
+  backup_root="$(backup_dir_resolve)"
+  target_dir="${backup_root}/${mode}"
+
+  mkdir -p "$target_dir" 2>/dev/null || true
+  chmod 700 "$backup_root" "$target_dir" 2>/dev/null || true
+  chown enshrouded:enshrouded "$backup_root" "$target_dir" 2>/dev/null || true
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  backup_file="${target_dir}/${ts}-${mode}-backup.zip"
+  if [[ -e "$backup_file" ]]; then
+    n=1
+    while [[ -e "${target_dir}/${ts}-${mode}-backup-${n}.zip" ]]; do
+      n=$((n + 1))
+    done
+    backup_file="${target_dir}/${ts}-${mode}-backup-${n}.zip"
+  fi
+
+  info "Creating backup zip: $backup_file"
+  (cd "$stage_dir" && zip -qr "$backup_file" .) || fatal "Failed to create zip archive"
+  chmod 600 "$backup_file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$backup_file" 2>/dev/null || true
+}
+
+cleanup_old_scheduled_backups() {
+  local keep target_dir to_delete
+  if [[ "$mode" != "scheduled" || "$run_cleanup" != "true" ]]; then
+    return 0
+  fi
+
+  keep="${BACKUP_MAX_COUNT:-0}"
+  if ! [[ "$keep" =~ ^[0-9]+$ ]]; then
+    warn "Invalid BACKUP_MAX_COUNT value: $keep (skipping cleanup)"
+    return 0
+  fi
+  if [[ "$keep" -eq 0 ]]; then
+    info "Skipping cleanup (BACKUP_MAX_COUNT=0)"
+    return 0
+  fi
+
+  target_dir="$(backup_dir_resolve)/scheduled"
+  to_delete="$(find "$target_dir" -maxdepth 1 -type f -name "*.zip" -printf '%T@\t%p\n' 2>/dev/null \
+    | sort -n \
+    | head -n "-$keep" \
+    | cut -f2-)"
+
+  if [[ -n "$to_delete" ]]; then
+    info "Removing old scheduled backups (keep=$keep)"
+    echo "$to_delete" | xargs -r rm -f --
+  fi
+}
+
+main() {
+  parse_args "$@"
+  acquire_lock
+  claim_request_if_present
+  apply_request_overrides
+  resolve_mode_defaults
+
+  export BACKUP_MODE="$mode"
+  run_backup_hook "backup pre" "${BACKUP_PRE_HOOK:-}"
+
+  stage_dir="$(mktemp -d)"
+  prepare_stage_content
+  create_zip
+  cleanup_old_scheduled_backups
+
+  run_backup_hook "backup post" "${BACKUP_POST_HOOK:-}"
+
+  info "Backup complete: $backup_file"
+  finished="true"
+}
+
+main "$@"

@@ -15,7 +15,7 @@ trap ':' USR1
 # Collection of PID files
 enshrouded_server_pidfile=/var/run/enshrouded/enshrouded-server.pid
 enshrouded_updater_pidfile=/var/run/enshrouded/enshrouded-updater.pid
-enshrouded_backup_pidfile=/var/run/enshrouded/enshrouded-backup.pid
+enshrouded_backup_pidfile=/var/run/enshrouded/backup.pid
 
 # Syslog supervisor config file
 supervisor_syslog_conf=/usr/local/etc/supervisor/conf.d/syslog.conf

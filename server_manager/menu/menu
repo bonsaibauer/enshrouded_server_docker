@@ -40,9 +40,6 @@ menu_capture_external_env() {
 menu_capture_external_env
 init_runtime_env
 
-# Optional helpers we reuse when applying Enshrouded profiles (password generation, etc.)
-. "$MENU_DIR/../shared/enshrouded-bootstrap-shared"
-
 . "$MENU_DIR/ui"
 . "$MENU_DIR/backups"
 . "$MENU_DIR/editor_spec_json"
@@ -131,7 +128,7 @@ menu_main() {
     ui_opt 7 "Update Server"
     ui_opt 8 "Force Update Server"
     ui_opt 9 "View Passwords"
-    ui_opt 10 "Create Savegame Backup (.zip)"
+    ui_opt 10 "Create Manual Backup (.zip)"
     ui_opt 11 "Other ctl Commands"
     echo
 

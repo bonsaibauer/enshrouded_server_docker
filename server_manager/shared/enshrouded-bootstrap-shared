@@ -17,7 +17,7 @@ initCrontab() {
 
   if [ -n "$BACKUP_CRON" ]; then
     debug "creating cron for backups (schedule: $BACKUP_CRON)"
-    echo "$BACKUP_CRON supervisorctl start enshrouded-backup >/dev/null 2>&1" >>"$crontab"
+    echo "$BACKUP_CRON supervisorctl start backup >/dev/null 2>&1" >>"$crontab"
   fi
 
   if [ -n "$RESTART_CRON" ]; then

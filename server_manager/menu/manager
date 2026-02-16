@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 
 editor_manager_json() {
-  # Thin wrapper around the generic spec-driven JSON editor.
   local config_file backed_up
   config_file="$(manager_config_path)"
   backed_up="false"
 
-  # Ensure config exists and is valid.
   if [[ ! -f "$config_file" ]] || ! jq -e 'type == "object"' "$config_file" >/dev/null 2>&1; then
     ui_warn_line "server_manager.json is missing or invalid. Initializing..."
     update_or_create_manager_config || true
@@ -27,15 +25,47 @@ editor_manager_json() {
     --file "$config_file" \
     --metaField "managerJsonPath" \
     --labelMode "var" \
-    --backupJob "server-manager-backup-config" \
+    --backupJob "manual:manager" \
     --emptyAction "null" \
     --boolToggle "false" \
     --emptyLabel "<null>"
 }
 
-manager_select_profile_flow() {
-  local mode config_file profiles profile_count idx selected profile
-  mode="${1:-select}"
+manager_profile_actions_after_change() {
+  echo
+  ui_note "Apply changes:"
+  ui_opt 1 "Start/restart Enshrouded server"
+  ui_opt 2 "Run bootstrap (recommended; updates cron, does not start server)"
+  ui_opt 0 "Back to menu"
+  echo
+
+  case "$(ui_prompt_number "Action")" in
+    1)
+      supervisorctl restart enshrouded-server || true
+      ui_success "Restart requested."
+      ui_pause
+      ;;
+    2)
+      supervisorctl start enshrouded-bootstrap || true
+      ui_success "Bootstrap started."
+      ui_note "Note: bootstrap does not start the server."
+      if menu_wait_for_program_exit "enshrouded-bootstrap" 600; then
+        echo
+        menu_prompt_start_server "Start enshrouded-server now?"
+      else
+        ui_note "Start the server later once bootstrap has finished."
+      fi
+      ui_pause
+      ;;
+    0)
+      ;;
+    *)
+      ;;
+  esac
+}
+
+manager_apply_profile_flow() {
+  local config_file profiles profile_count idx selected profile
   config_file="$(manager_config_path)"
 
   if ! menu_warn_env_overrides_before_manager_profile_selection; then
@@ -69,25 +99,12 @@ manager_select_profile_flow() {
     selected="$(ui_prompt_choice "Profile")"
     selected="$(echo "$selected" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$selected" in
-      0)
-        return 0
-        ;;
-      m)
-        menu_nav_set "main"
-        return 0
-        ;;
-      x|q)
-        menu_nav_set "exit"
-        return 0
-        ;;
+      0) return 0 ;;
+      m) menu_nav_set "main"; return 0 ;;
+      x|q) menu_nav_set "exit"; return 0 ;;
     esac
 
-    if ! [[ "$selected" =~ ^[0-9]+$ ]]; then
-      ui_warn_line "Invalid selection."
-      ui_pause
-      continue
-    fi
-    if [[ "$selected" -lt 1 || "$selected" -gt "$profile_count" ]]; then
+    if ! [[ "$selected" =~ ^[0-9]+$ ]] || [[ "$selected" -lt 1 || "$selected" -gt "$profile_count" ]]; then
       ui_warn_line "Invalid selection."
       ui_pause
       continue
@@ -95,12 +112,8 @@ manager_select_profile_flow() {
 
     profile="${profiles[$((selected - 1))]}"
 
-    # Only ask for confirmation when we'd impact a running server or replace an existing config.
     if checkRunning "enshrouded-server" || [[ -f "$config_file" ]]; then
       ui_warn_line "This will replace the active Server Manager config with the selected profile."
-      if [[ "$mode" == "delete" ]]; then
-        ui_warn_line "Your current config will be deleted (replaced)."
-      fi
       ui_warn_line "All players will be disconnected."
       echo
       ui_kv "Selected Profile" "$profile"
@@ -113,54 +126,70 @@ manager_select_profile_flow() {
       fi
     fi
 
-    if ! menu_write_request_json "manager_profile_apply.json" --arg profile "$profile" '{profile: $profile}' >/dev/null; then
-      ui_error "Failed to create request for server-manager-profil-apply."
+    if ! menu_write_request_json "profile.json" \
+      --arg target "manager" \
+      --arg action "apply" \
+      --arg profile "$profile" \
+      '{target: $target, action: $action, profile: $profile}' >/dev/null; then
+      ui_error "Failed to create request for profile."
       ui_pause
       continue
     fi
 
-    supervisorctl start server-manager-profil-apply >/dev/null 2>&1 || true
-    if ! menu_wait_for_program_exit "server-manager-profil-apply" 600; then
-      ui_warn_line "Timeout while waiting for server-manager-profil-apply."
-      ui_note "Check: supervisorctl status server-manager-profil-apply"
+    supervisorctl start profile >/dev/null 2>&1 || true
+    if ! menu_wait_for_program_exit "profile" 600; then
+      ui_warn_line "Timeout while waiting for profile."
+      ui_note "Check: supervisorctl status profile"
       ui_pause
       continue
     fi
 
     ui_success "Server Manager profile applied: $profile"
-
-    echo
-    ui_note "Apply changes:"
-    ui_opt 1 "Start/restart Enshrouded server"
-    ui_opt 2 "Run bootstrap (recommended; updates cron, does not start server)"
-    ui_opt 0 "Back to menu"
-    echo
-    case "$(ui_prompt_number "Action")" in
-      1)
-        supervisorctl restart enshrouded-server || true
-        ui_success "Restart requested."
-        ui_pause
-        ;;
-      2)
-        supervisorctl start enshrouded-bootstrap || true
-        ui_success "Bootstrap started."
-        ui_note "Note: bootstrap does not start the server."
-        if menu_wait_for_program_exit "enshrouded-bootstrap" 600; then
-          echo
-          menu_prompt_start_server "Start enshrouded-server now?"
-        else
-          ui_note "Start the server later once bootstrap has finished."
-        fi
-        ui_pause
-        ;;
-      0)
-        ;;
-      *)
-        ;;
-    esac
-
+    manager_profile_actions_after_change
     return 0
   done
+}
+
+manager_reset_profile_flow() {
+  local profile config_file
+  config_file="$(manager_config_path)"
+  profile="$(manager_profile_resolve)"
+
+  ui_header "Reset Server Manager Profile"
+  ui_warn_line "This resets server_manager.json from the currently selected profile."
+  ui_warn_line "All players will be disconnected."
+  echo
+  ui_kv "Profile" "$profile"
+  ui_kv "Target File" "$config_file"
+  echo
+
+  if ! ui_confirm_yes_no "Stop server (if running) and reset now?"; then
+    ui_note "Cancelled."
+    ui_pause
+    return 0
+  fi
+
+  if ! menu_write_request_json "profile.json" \
+    --arg target "manager" \
+    --arg action "reset" \
+    --arg profile "$profile" \
+    '{target: $target, action: $action, profile: $profile}' >/dev/null; then
+    ui_error "Failed to create request for profile reset."
+    ui_pause
+    return 1
+  fi
+
+  supervisorctl start profile >/dev/null 2>&1 || true
+  if ! menu_wait_for_program_exit "profile" 600; then
+    ui_warn_line "Timeout while waiting for profile."
+    ui_note "Check: supervisorctl status profile"
+    ui_pause
+    return 1
+  fi
+
+  ui_success "Server Manager profile reset completed: $profile"
+  manager_profile_actions_after_change
+  return 0
 }
 
 menu_manager_settings() {
@@ -172,34 +201,20 @@ menu_manager_settings() {
     ui_header "Server Manager Settings"
 
     ui_opt 1 "Edit current settings"
-    ui_opt 2 "Delete current profile"
-    ui_opt 3 "Select new profile"
+    ui_opt 2 "Reset current profile"
+    ui_opt 3 "Select and apply profile"
     echo
     ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
     choice="$(ui_prompt_choice "Choice")"
     choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
-      1)
-        editor_manager_json
-        ;;
-      2)
-        manager_select_profile_flow "delete" || true
-        ;;
-      3)
-        manager_select_profile_flow "select" || true
-        ;;
-      0)
-        return 0
-        ;;
-      m)
-        menu_nav_set "main"
-        return 0
-        ;;
-      x|q)
-        menu_nav_set "exit"
-        return 0
-        ;;
+      1) editor_manager_json ;;
+      2) manager_reset_profile_flow || true ;;
+      3) manager_apply_profile_flow || true ;;
+      0) return 0 ;;
+      m) menu_nav_set "main"; return 0 ;;
+      x|q) menu_nav_set "exit"; return 0 ;;
       *)
         ui_warn_line "Invalid selection."
         ui_pause
