@@ -179,8 +179,9 @@ checkRunning() {
 VALIDATION_LAST_ERROR=""
 
 _validation_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-VALIDATION_SERVER_MANAGER_SPEC_FILE="${VALIDATION_SERVER_MANAGER_SPEC_FILE:-${_validation_dir}/../env/env_server_manager.json}"
-VALIDATION_ENSHROUDED_SPEC_FILE="${VALIDATION_ENSHROUDED_SPEC_FILE:-${_validation_dir}/../env/env_enshrouded_server.json}"
+ENV_SPEC_DIR="${ENV_SPEC_DIR:-${_validation_dir}/../env}"
+VALIDATION_SERVER_MANAGER_SPEC_FILE="${VALIDATION_SERVER_MANAGER_SPEC_FILE:-${ENV_SPEC_DIR}/env_server_manager.json}"
+VALIDATION_ENSHROUDED_SPEC_FILE="${VALIDATION_ENSHROUDED_SPEC_FILE:-${ENV_SPEC_DIR}/env_enshrouded_server.json}"
 
 validation__set_error() {
   VALIDATION_LAST_ERROR="$1"
@@ -4350,33 +4351,6 @@ menu_run_ctl() {
   ui_pause
 }
 
-menu_default_items_main() {
-  cat <<'EOF'
-1|Enshrouded Server Settings|enshrouded-settings
-2|Server Manager Settings|manager-settings
-3|Backup Menu|backups
-4|Start Server|ctl-start
-5|Stop Server|ctl-stop
-6|Restart Server|ctl-restart
-7|Update Server|ctl-update
-8|Force Update Server|ctl-force-update
-9|View Passwords|ctl-password-view
-10|Create Manual Backup (.zip)|backup-now
-11|Other ctl Commands|other-commands
-EOF
-}
-
-menu_default_items_other() {
-  cat <<'EOF'
-1|Status|ctl-status
-2|Scheduled Restart|ctl-scheduled-restart
-3|Bootstrap|ctl-bootstrap
-4|Cron Start|ctl-cron-start
-5|Cron Stop|ctl-cron-stop
-6|Cron Restart|ctl-cron-restart
-EOF
-}
-
 menu_items_from_spec() {
   local section
   section="$1"
@@ -4396,25 +4370,21 @@ menu_items() {
   local section from_spec
   section="$1"
   from_spec="$(menu_items_from_spec "$section" 2>/dev/null || true)"
-  if [[ -n "$from_spec" ]]; then
-    printf "%s\n" "$from_spec"
-    return 0
-  fi
-
-  case "$section" in
-    main) menu_default_items_main ;;
-    otherCommands) menu_default_items_other ;;
-    *) return 1 ;;
-  esac
+  [[ -n "$from_spec" ]] || return 1
+  printf "%s\n" "$from_spec"
+  return 0
 }
 
 menu_print_options() {
-  local section key label action
+  local section key label action printed
   section="$1"
+  printed="false"
   while IFS='|' read -r key label action; do
     [[ -z "$key" || -z "$action" ]] && continue
     ui_opt "$key" "$label"
+    printed="true"
   done < <(menu_items "$section")
+  [[ "$printed" == "true" ]]
 }
 
 menu_action_for_choice() {
@@ -4466,7 +4436,11 @@ menu_other_commands() {
       return 0
     fi
     ui_header "Other ctl Commands"
-    menu_print_options "otherCommands"
+    if ! menu_print_options "otherCommands"; then
+      ui_error "Menu section 'otherCommands' missing or empty in ${MENU_SPEC_FILE}"
+      ui_pause
+      return 1
+    fi
     echo
     ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
@@ -4499,7 +4473,12 @@ menu_main() {
     fi
 
     ui_header "Main Menu"
-    menu_print_options "main"
+    if ! menu_print_options "main"; then
+      ui_error "Menu section 'main' missing or empty in ${MENU_SPEC_FILE}"
+      ui_pause
+      menu_nav_set "exit"
+      return 1
+    fi
     echo
     ui_actions_bar "x Exit"
     echo

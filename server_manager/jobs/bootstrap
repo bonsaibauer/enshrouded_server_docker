@@ -173,8 +173,9 @@ checkRunning() {
 VALIDATION_LAST_ERROR=""
 
 _validation_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-VALIDATION_SERVER_MANAGER_SPEC_FILE="${VALIDATION_SERVER_MANAGER_SPEC_FILE:-${_validation_dir}/../env/env_server_manager.json}"
-VALIDATION_ENSHROUDED_SPEC_FILE="${VALIDATION_ENSHROUDED_SPEC_FILE:-${_validation_dir}/../env/env_enshrouded_server.json}"
+ENV_SPEC_DIR="${ENV_SPEC_DIR:-${_validation_dir}/../env}"
+VALIDATION_SERVER_MANAGER_SPEC_FILE="${VALIDATION_SERVER_MANAGER_SPEC_FILE:-${ENV_SPEC_DIR}/env_server_manager.json}"
+VALIDATION_ENSHROUDED_SPEC_FILE="${VALIDATION_ENSHROUDED_SPEC_FILE:-${ENV_SPEC_DIR}/env_enshrouded_server.json}"
 
 validation__set_error() {
   VALIDATION_LAST_ERROR="$1"
