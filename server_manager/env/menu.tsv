@@ -3,11 +3,11 @@ action	enshrouded_settings					internal		menu_load_screen							["enshroudedSett
 action	manager_settings					internal		menu_load_screen							["managerSettings","Server Manager Settings"]					
 action	backups_menu					internal		menu_load_screen							["backups","Backups"]					
 action	enshrouded_edit					internal		editor_enshrouded_json												
-action	enshrouded_reset					internal		menu_reset_profile_flow							["enshrouded"]					
-action	enshrouded_apply					internal		menu_apply_profile_flow							["enshrouded"]					
+action	enshrouded_reset					internal		menu_profile_flow							["enshrouded","reset"]					
+action	enshrouded_apply					internal		menu_profile_flow							["enshrouded","apply"]					
 action	manager_edit					internal		editor_manager_json												
-action	manager_reset					internal		menu_reset_profile_flow							["manager"]					
-action	manager_apply					internal		menu_apply_profile_flow							["manager"]					
+action	manager_reset					internal		menu_profile_flow							["manager","reset"]					
+action	manager_apply					internal		menu_profile_flow							["manager","apply"]					
 action	restore_backup					internal		menu_restore_backup												
 action	create_full_backup					internal		menu_run_savegame_backup												
 action	create_config_backup					internal		menu_run_config_backup_now												
@@ -21,9 +21,7 @@ action	open_other_commands					internal		menu_load_screen							["otherCommands"
 action	status					cmd	status													
 action	scheduled_restart					cmd	scheduled-restart													
 action	bootstrap					cmd	bootstrap													
-action	cron_start					cmd	cron-start													
-action	cron_stop					cmd	cron-stop													
-action	cron_restart					cmd	cron-restart													
+action	cron					cmd	cron							["--sync"]							
 screen		main	1	Enshrouded Server Settings	enshrouded_settings															1
 screen		main	2	Server Manager Settings	manager_settings															2
 screen		main	3	Backup Menu	backups_menu															3
@@ -47,9 +45,7 @@ screen		backups	3	Create config backup now	create_config_backup															3
 screen		otherCommands	1	Status	status															1
 screen		otherCommands	2	Scheduled Restart	scheduled_restart															2
 screen		otherCommands	3	Bootstrap	bootstrap															3
-screen		otherCommands	4	Cron Start	cron_start															4
-screen		otherCommands	5	Cron Stop	cron_stop															5
-screen		otherCommands	6	Cron Restart	cron_restart															6
+screen		otherCommands	4	Cron Sync	cron															4
 editor_env		managerJsonPath														PUID	Core		.puid	1
 editor_env		managerJsonPath														PGID	Core		.pgid	2
 editor_env		managerJsonPath														LOG_COLOR	Core		.logColor	3

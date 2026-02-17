@@ -41,7 +41,6 @@ docker exec enshroudedserver cmd env-validation verify
 docker exec enshroudedserver cmd scheduled-restart
 docker exec enshroudedserver cmd force-update
 docker exec enshroudedserver cmd bootstrap
-docker exec enshroudedserver cmd cron-start
-docker exec enshroudedserver cmd cron-stop
-docker exec enshroudedserver cmd cron-restart
+docker exec enshroudedserver cmd cron --sync
+docker exec enshroudedserver cmd cron --service restart
 ```

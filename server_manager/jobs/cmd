@@ -3,10 +3,10 @@
 set -euo pipefail
 
 SUPERVISORCTL_BIN="${SUPERVISORCTL_BIN:-supervisorctl}"
-MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-/home/enshrouded/server/server_manager}"
-manager_config_file="${MANAGER_DATA_DIR}/server_manager.json"
 
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs/profile
+. "${SCRIPT_DIR}/profile"
 
 usage() {
   cat <<'EOF'
@@ -14,6 +14,7 @@ Usage:
   docker exec CONTAINER_NAME cmd <command> [args...]
 
 Commands:
+  hook-run       Internal: execute a named hook command
   status         Show supervisor program status
   menu           Start interactive Server Manager menu
   start          Start server
@@ -29,9 +30,7 @@ Commands:
                  Trigger restart job
   force-update   Trigger updater in force mode
   bootstrap      Trigger bootstrap
-  cron-start     Start crond
-  cron-stop      Stop crond
-  cron-restart   Restart crond
+  cron           Manage cron sync/service (e.g. --sync, --service restart)
   help           Show this help
 EOF
 }
@@ -59,48 +58,50 @@ run_job_or_supervisor_start() {
   fi
 }
 
-manager_get() {
-  local path
-  path="$1"
-  if [[ ! -f "$manager_config_file" ]]; then
-    echo ""
-    return 0
+require_no_args() {
+  local cmd_name
+  cmd_name="$1"
+  shift || true
+  if [[ "$#" -gt 0 ]]; then
+    echo "$cmd_name does not accept arguments" >&2
+    exit 1
   fi
-  jq -r "$path | if . == null then empty else tostring end" "$manager_config_file" 2>/dev/null || true
 }
 
-resolve_from_env_or_manager() {
-  local var_name path default_value env_value cfg_value
-  var_name="$1"
-  path="$2"
-  default_value="$3"
-
-  env_value="${!var_name-}"
-  if [[ -n "$env_value" ]]; then
-    printf "%s" "$env_value"
-    return 0
-  fi
-
-  cfg_value="$(manager_get "$path")"
-  if [[ -n "$cfg_value" ]]; then
-    printf "%s" "$cfg_value"
-    return 0
-  fi
-
-  printf "%s" "$default_value"
-}
-
-run_cmd_hook() {
+run_hook() {
   local hook_name hook_cmd
   hook_name="$1"
   hook_cmd="$2"
-
   if [[ -z "$hook_cmd" ]]; then
     return 0
   fi
-
   echo "INFO - Running ${hook_name} hook: $hook_cmd"
   eval "$hook_cmd"
+}
+
+run_hook_command() {
+  local hook_name hook_cmd
+  hook_name=""
+  hook_cmd=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)
+        hook_name="${2-}"
+        [[ -n "$hook_name" ]] || { echo "Missing value for --name" >&2; exit 1; }
+        shift 2
+        ;;
+      --command)
+        hook_cmd="${2-}"
+        shift 2
+        ;;
+      *)
+        echo "Unknown argument for hook-run: $1" >&2
+        exit 1
+        ;;
+    esac
+  done
+  [[ -n "$hook_name" ]] || { echo "Missing --name" >&2; exit 1; }
+  run_hook "$hook_name" "$hook_cmd"
 }
 
 load_cmd_hooks() {
@@ -113,16 +114,22 @@ run_cmd_command() {
   cmd="$1"
   shift || true
   case "$cmd" in
+    hook-run)
+      run_hook_command "$@"
+      ;;
     status)
+      require_no_args "$cmd" "$@"
       run_supervisorctl status
       ;;
     menu)
       run_job_script "menu" "$@"
       ;;
     start)
+      require_no_args "$cmd" "$@"
       run_supervisorctl start server
       ;;
     stop)
+      require_no_args "$cmd" "$@"
       run_supervisorctl stop server
       ;;
     restart)
@@ -171,14 +178,8 @@ run_cmd_command() {
     bootstrap)
       run_job_or_supervisor_start "bootstrap" "bootstrap" "$@"
       ;;
-    cron-start)
-      run_supervisorctl start crond
-      ;;
-    cron-stop)
-      run_supervisorctl stop crond
-      ;;
-    cron-restart)
-      run_supervisorctl restart crond
+    cron)
+      run_job_script "cron" "$@"
       ;;
     help|--help|-h)
       usage
@@ -196,15 +197,15 @@ main() {
   cmd="${1:-help}"
   shift || true
 
-  load_cmd_hooks
-  if [[ "$cmd" != "help" && "$cmd" != "--help" && "$cmd" != "-h" ]]; then
-    run_cmd_hook "cmd pre" "${CMD_PRE_HOOK:-}"
+  if [[ "$cmd" == "help" || "$cmd" == "--help" || "$cmd" == "-h" || "$cmd" == "hook-run" ]]; then
     run_cmd_command "$cmd" "$@"
-    run_cmd_hook "cmd post" "${CMD_POST_HOOK:-}"
     return 0
   fi
 
+  load_cmd_hooks
+  run_hook "cmd pre" "${CMD_PRE_HOOK:-}"
   run_cmd_command "$cmd" "$@"
+  run_hook "cmd post" "${CMD_POST_HOOK:-}"
 }
 
 main "$@"

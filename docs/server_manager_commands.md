@@ -21,11 +21,9 @@ docker exec enshroudedserver cmd restart
 docker exec enshroudedserver cmd update
 docker exec enshroudedserver cmd password-view
 docker exec enshroudedserver cmd bootstrap
+docker exec enshroudedserver cmd cron
 docker exec enshroudedserver cmd scheduled-restart
 docker exec enshroudedserver cmd force-update
-docker exec enshroudedserver cmd cron-start
-docker exec enshroudedserver cmd cron-stop
-docker exec enshroudedserver cmd cron-restart
 ```
 
 ## Commands With Required Args
@@ -48,6 +46,11 @@ docker exec enshroudedserver cmd profile --target manager --action reset --creat
 docker exec enshroudedserver cmd env-validation verify
 docker exec enshroudedserver cmd env-validation init-runtime
 docker exec enshroudedserver cmd env-validation check ENSHROUDED_SLOT_COUNT 16
+
+# cron sync examples
+docker exec enshroudedserver cmd cron --sync
+docker exec enshroudedserver cmd cron --sync --update-cron "0 */6 * * *" --backup-cron "0 3 * * *" --restart-cron "0 5 * * *"
+docker exec enshroudedserver cmd cron --service restart
 ```
 
 ## Supervisor Program Names (internal)

@@ -1,0 +1,92 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs/env-validation
+. "${SCRIPT_DIR}/env-validation"
+
+update_cron="${UPDATE_CRON:-}"
+backup_cron="${BACKUP_CRON:-}"
+restart_cron="${RESTART_CRON:-}"
+service_action=""
+
+usage() {
+  cat <<'EOF'
+Usage:
+  cron [--sync] [--update-cron "<expr>"] [--backup-cron "<expr>"] [--restart-cron "<expr>"]
+  cron --service <start|stop|restart|status>
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --sync)
+        shift
+        ;;
+      --service)
+        service_action="${2-}"
+        [[ -n "$service_action" ]] || fatal "Missing value for --service"
+        shift 2
+        ;;
+      --update-cron)
+        update_cron="${2-}"
+        shift 2
+        ;;
+      --backup-cron)
+        backup_cron="${2-}"
+        shift 2
+        ;;
+      --restart-cron)
+        restart_cron="${2-}"
+        shift 2
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+}
+
+cron_append() {
+  local out_file schedule cmd label
+  out_file="$1"
+  schedule="$2"
+  cmd="$3"
+  label="$4"
+
+  [[ -n "$schedule" ]] || return 0
+  info "creating cron for ${label} (schedule: $schedule)"
+  printf "%s %s >/dev/null 2>&1\n" "$schedule" "$cmd" >>"$out_file"
+}
+
+sync_crontab() {
+  local crontab_file
+  crontab_file="$(mktemp)"
+
+  cron_append "$crontab_file" "$update_cron" "supervisorctl start updater" "update checks"
+  cron_append "$crontab_file" "$backup_cron" "supervisorctl start backup" "backups"
+  cron_append "$crontab_file" "$restart_cron" "supervisorctl start restart" "server restarts"
+
+  crontab "$crontab_file"
+  rm -f "$crontab_file"
+}
+
+main() {
+  parse_args "$@"
+
+  if [[ -n "$service_action" ]]; then
+    case "$service_action" in
+      start|stop|restart|status) supervisorctl "$service_action" crond ;;
+      *) fatal "Invalid --service action: $service_action" ;;
+    esac
+    return 0
+  fi
+
+  init_runtime_env
+  sync_crontab
+}
+
+main "$@"

@@ -362,6 +362,63 @@ menu_nav_set() { MENU_NAV="$1"; }
 menu_nav_is_set() { [[ -n "${MENU_NAV:-}" ]]; }
 menu_nav_value() { printf "%s" "${MENU_NAV:-}"; }
 
+menu_prompt_nav_choice() {
+  # Prompt and handle shared nav keys (0/m/x).
+  # Prints either the typed choice or a nav token:
+  #   __nav_back__, __nav_main__, __nav_exit__
+  local prompt main_screen choice
+  prompt="${1:-Choice}"
+  main_screen="${2:-false}"
+
+  choice="$(ui_prompt_choice "$prompt")"
+  case "$choice" in
+    x|q)
+      [[ "$main_screen" == "true" ]] && ui_clear
+      menu_nav_set "exit"
+      printf "%s" "__nav_exit__"
+      return 0
+      ;;
+    0)
+      if [[ "$main_screen" == "true" ]]; then
+        ui_clear
+        menu_nav_set "exit"
+        printf "%s" "__nav_exit__"
+      else
+        printf "%s" "__nav_back__"
+      fi
+      return 0
+      ;;
+    m)
+      if [[ "$main_screen" == "true" ]]; then
+        printf "%s" "$choice"
+      else
+        menu_nav_set "main"
+        printf "%s" "__nav_main__"
+      fi
+      return 0
+      ;;
+  esac
+
+  printf "%s" "$choice"
+}
+
+menu_nav_choice_is_handled() {
+  case "$1" in
+    __nav_back__|__nav_main__|__nav_exit__) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+menu_choice_index() {
+  local choice max
+  choice="$1"
+  max="$2"
+  if ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 || "$choice" -gt "$max" ]]; then
+    return 1
+  fi
+  printf "%s" "$((choice - 1))"
+}
+
 menu_mountinfo_decode_path() {
   # /proc/self/mountinfo uses octal escapes for spaces, tabs, etc (e.g. \040).
   # Decode for display only.
@@ -484,19 +541,10 @@ menu_stop_server_now() {
     return 0
   fi
 
-  cmd_run stop >/dev/null 2>&1 || true
-
-  # Best-effort wait until supervisor reports it stopped.
-  local deadline now
-  deadline=$(( $(date +%s) + 30 ))
-  while is_supervisor_running "server"; do
-    now="$(date +%s)"
-    if [[ "$now" -ge "$deadline" ]]; then
-      ui_error "Timeout while stopping server. Aborting."
-      return 1
-    fi
-    sleep 1
-  done
+  if ! "${SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 30 >/dev/null 2>&1; then
+    ui_error "Timeout while stopping server. Aborting."
+    return 1
+  fi
 
   return 0
 }
@@ -764,28 +812,15 @@ menu_run_config_backup_now() {
     ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
-    choice="$(ui_prompt_choice "Choice")"
+    choice="$(menu_prompt_nav_choice "Choice")"
+    if menu_nav_choice_is_handled "$choice"; then
+      return 0
+    fi
+
     case "$choice" in
-      1)
-        selector="manual:enshrouded"
-        ;;
-      2)
-        selector="manual:manager"
-        ;;
-      3)
-        selector="manual:all"
-        ;;
-      0)
-        return 0
-        ;;
-      m)
-        menu_nav_set "main"
-        return 0
-        ;;
-      x|q)
-        menu_nav_set "exit"
-        return 0
-        ;;
+      1) selector="manual:enshrouded" ;;
+      2) selector="manual:manager" ;;
+      3) selector="manual:all" ;;
       *)
         ui_warn_line "Invalid selection."
         ui_pause
@@ -850,28 +885,20 @@ menu_restore_backup() {
     ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
-    choice="$(ui_prompt_choice "Backup")"
-    case "$choice" in
-      0)
-        return 0
-        ;;
-      m)
-        menu_nav_set "main"
-        return 0
-        ;;
-      x|q)
-        menu_nav_set "exit"
-        return 0
-        ;;
-    esac
+    choice="$(menu_prompt_nav_choice "Backup")"
+    if menu_nav_choice_is_handled "$choice"; then
+      return 0
+    fi
 
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 || "$choice" -gt "${#files[@]}" ]]; then
+    local selected_idx
+    selected_idx="$(menu_choice_index "$choice" "${#files[@]}" || true)"
+    if [[ -z "$selected_idx" ]]; then
       ui_warn_line "Invalid selection."
       ui_pause
       continue
     fi
 
-    selected="${files[$((choice - 1))]}"
+    selected="${files[$selected_idx]}"
 
     local has_savegame has_enshrouded has_manager
     read -r has_savegame has_enshrouded has_manager <<<"$(cmd_run restore-backup --inspect --zip "$selected" 2>/dev/null || true)"
@@ -1365,21 +1392,20 @@ menu_spec_editor__user_groups_edit_group() {
     ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
-    local choice
-    choice="$(ui_prompt_choice "Field")"
-    case "$choice" in
-      0) return 0 ;;
-      m) menu_nav_set "main"; return 0 ;;
-      x|q) menu_nav_set "exit"; return 0 ;;
-    esac
+    local choice selected_idx
+    choice="$(menu_prompt_nav_choice "Field")"
+    if menu_nav_choice_is_handled "$choice"; then
+      return 0
+    fi
 
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 || "$choice" -gt "$field_count" ]]; then
+    selected_idx="$(menu_choice_index "$choice" "$field_count" || true)"
+    if [[ -z "$selected_idx" ]]; then
       ui_warn_line "Invalid selection."
       ui_pause
       continue
     fi
 
-    field="${fields[$((choice - 1))]}"
+    field="${fields[$selected_idx]}"
     env_var="${env_prefix}_${g}_${field}"
     json_key="$(validation_snake_to_lower_camel "$field")"
     json_path="${base}.${json_key}"
@@ -1436,12 +1462,10 @@ menu_edit_user_groups_from_spec() {
       echo
       ui_actions_bar "0 Back" "m Main" "x Exit"
       echo
-      choice="$(ui_prompt_choice "Choice")"
-      case "$choice" in
-        0) return 0 ;;
-        m) menu_nav_set "main"; return 0 ;;
-        x|q) menu_nav_set "exit"; return 0 ;;
-      esac
+      choice="$(menu_prompt_nav_choice "Choice")"
+      if menu_nav_choice_is_handled "$choice"; then
+        return 0
+      fi
       continue
     fi
 
@@ -1456,26 +1480,21 @@ menu_edit_user_groups_from_spec() {
     ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
-    choice="$(ui_prompt_choice "Group")"
-    case "$choice" in
-      0) return 0 ;;
-      m) menu_nav_set "main"; return 0 ;;
-      x|q) menu_nav_set "exit"; return 0 ;;
-    esac
+    choice="$(menu_prompt_nav_choice "Group")"
+    if menu_nav_choice_is_handled "$choice"; then
+      return 0
+    fi
 
-    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+    local selected_idx
+    selected_idx="$(menu_choice_index "$choice" "$count" || true)"
+    if [[ -z "$selected_idx" ]]; then
       ui_warn_line "Invalid selection."
       ui_pause
       continue
     fi
 
     local g
-    g=$((choice - 1))
-    if [[ "$g" -lt 0 || "$g" -ge "$count" ]]; then
-      ui_warn_line "Invalid selection."
-      ui_pause
-      continue
-    fi
+    g="$selected_idx"
 
     menu_spec_editor__user_groups_edit_group "$file" "$g" "$template" "$env_prefix" "$backup_job" "$empty_label" || true
   done
@@ -1536,11 +1555,7 @@ menu_edit_json_from_spec() {
     fi
 
     ui_header "${title:-Edit Settings}"
-    if declare -F menu_display_path >/dev/null 2>&1; then
-      ui_kv "File" "$(menu_display_path "$file")"
-    else
-      ui_kv "File" "$file"
-    fi
+    ui_kv "File" "$(menu_display_path "$file")"
     ui_note "Changes are written immediately."
     ui_note "[ENV] = controlled by container environment (locked)"
     echo
@@ -1617,22 +1632,21 @@ menu_edit_json_from_spec() {
     ui_actions_bar "0 Back" "m Main" "x Exit"
     echo
 
-    local choice
-    choice="$(ui_prompt_choice "Choice")"
-    case "$choice" in
-      0) return 0 ;;
-      m) menu_nav_set "main"; return 0 ;;
-      x|q) menu_nav_set "exit"; return 0 ;;
-    esac
+    local choice selected_idx
+    choice="$(menu_prompt_nav_choice "Choice")"
+    if menu_nav_choice_is_handled "$choice"; then
+      return 0
+    fi
 
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 || "$choice" -gt "$field_count" ]]; then
+    selected_idx="$(menu_choice_index "$choice" "$field_count" || true)"
+    if [[ -z "$selected_idx" ]]; then
       ui_warn_line "Invalid selection."
       ui_pause
       continue
     fi
 
     local selected
-    selected="${options[$((choice - 1))]}"
+    selected="${options[$selected_idx]}"
 
     # Extra entry?
     cb=""
@@ -1844,20 +1858,20 @@ menu_profile_flow() {
         ui_actions_bar "0 Back" "m Main" "x Exit"
         echo
 
-        selected="$(ui_prompt_choice "Profile")"
-        case "$selected" in
-          0) return 0 ;;
-          m) menu_nav_set "main"; return 0 ;;
-          x|q) menu_nav_set "exit"; return 0 ;;
-        esac
+        selected="$(menu_prompt_nav_choice "Profile")"
+        if menu_nav_choice_is_handled "$selected"; then
+          return 0
+        fi
 
-        if ! [[ "$selected" =~ ^[0-9]+$ ]] || [[ "$selected" -lt 1 || "$selected" -gt "$profile_count" ]]; then
+        local selected_idx
+        selected_idx="$(menu_choice_index "$selected" "$profile_count" || true)"
+        if [[ -z "$selected_idx" ]]; then
           ui_warn_line "Invalid selection."
           ui_pause
           continue
         fi
 
-        profile="${profiles[$((selected - 1))]}"
+        profile="${profiles[$selected_idx]}"
 
         if is_supervisor_running "server" || [[ -f "$config_file" ]]; then
           ui_warn_line "This will replace the active ${label} config with the selected profile."
@@ -1920,9 +1934,6 @@ menu_profile_flow() {
   esac
 }
 
-menu_apply_profile_flow() { menu_profile_flow "$1" "apply"; }
-menu_reset_profile_flow() { menu_profile_flow "$1" "reset"; }
-
 # --- inlined menu module: manager ---
 editor_manager_json() {
   local config_file backed_up
@@ -1961,17 +1972,6 @@ editor_manager_json() {
 MENU_NAV=""
 MENU_POST_HOOK_RAN="false"
 
-run_menu_hook() {
-  local hook_name hook_cmd
-  hook_name="$1"
-  hook_cmd="$2"
-  if [[ -z "$hook_cmd" ]]; then
-    return 0
-  fi
-  info "Running ${hook_name} hook: $hook_cmd"
-  eval "$hook_cmd"
-}
-
 menu_run_post_hook_once() {
   if [[ "$MENU_POST_HOOK_RAN" == "true" ]]; then
     return 0
@@ -1981,7 +1981,7 @@ menu_run_post_hook_once() {
     rm -f "$MENU_SPEC_TMP_FILE" 2>/dev/null || true
     MENU_SPEC_TMP_FILE=""
   fi
-  run_menu_hook "menu post" "${MENU_POST_HOOK:-}"
+  cmd_run hook-run --name "menu post" --command "${MENU_POST_HOOK:-}"
 }
 
 menu_execute_action_by_type() {
@@ -2113,7 +2113,7 @@ menu_dispatch_action() {
 }
 
 menu_load_screen() {
-  local screen title choice action
+  local screen title choice action main_screen
   local key label action_id nav_value
   local -a entries
 
@@ -2132,6 +2132,12 @@ menu_load_screen() {
     ui_pause
     menu_nav_set "exit"
     return 1
+  fi
+
+  if [[ "$screen" == "main" ]]; then
+    main_screen="true"
+  else
+    main_screen="false"
   fi
 
   while :; do
@@ -2182,30 +2188,10 @@ menu_load_screen() {
     fi
     echo
 
-    choice="$(ui_prompt_choice "Choice")"
-
-    case "$choice" in
-      x|q)
-        if [[ "$screen" == "main" ]]; then
-          ui_clear
-        fi
-        menu_nav_set "exit"
-        return 0
-        ;;
-      0)
-        if [[ "$screen" == "main" ]]; then
-          ui_clear
-          menu_nav_set "exit"
-        fi
-        return 0
-        ;;
-      m)
-        if [[ "$screen" != "main" ]]; then
-          menu_nav_set "main"
-          return 0
-        fi
-        ;;
-    esac
+    choice="$(menu_prompt_nav_choice "Choice" "$main_screen")"
+    if menu_nav_choice_is_handled "$choice"; then
+      return 0
+    fi
 
     action_id=""
     for action in "${entries[@]}"; do
@@ -2240,7 +2226,7 @@ main() {
   fi
 
   trap menu_run_post_hook_once EXIT
-  run_menu_hook "menu pre" "${MENU_PRE_HOOK:-}"
+  cmd_run hook-run --name "menu pre" --command "${MENU_PRE_HOOK:-}"
   if [[ "$MENU_START_SCREEN" == "main" ]]; then
     menu_load_screen "$MENU_START_SCREEN" "Main Menu"
   else

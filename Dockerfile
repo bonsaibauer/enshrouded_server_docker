@@ -77,9 +77,7 @@ RUN ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/cmd \
     && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/scheduled-restart \
     && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/force-update \
     && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/bootstrap \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/cron-start \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/cron-stop \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/cron-restart
+    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/cron
 RUN find /usr/local/etc/enshrouded -type f -exec sed -i 's/\r$//' {} +
 
 WORKDIR /usr/local/etc/enshrouded

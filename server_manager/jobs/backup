@@ -4,19 +4,8 @@ SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null
 # shellcheck source=server_manager/jobs/profile
 . "${SCRIPT_DIR}/profile"
 
-manager_config_file="$(manager_config_path)"
 enshrouded_config_file="${install_path}/enshrouded_server.json"
 enshrouded_backup_pidfile="${ENSHROUDED_BACKUP_PIDFILE:-/var/run/enshrouded/backup.pid}"
-
-manager_get_text() {
-  local path
-  path="$1"
-  if [[ ! -f "$manager_config_file" ]]; then
-    echo ""
-    return 0
-  fi
-  jq -r "$path | if . == null then empty else tostring end" "$manager_config_file" 2>/dev/null || true
-}
 
 enshrouded_get_text() {
   local path
@@ -28,26 +17,6 @@ enshrouded_get_text() {
   jq -r "$path | if . == null then empty else tostring end" "$enshrouded_config_file" 2>/dev/null || true
 }
 
-resolve_from_env_or_manager() {
-  local var_name path default_value env_value cfg_value
-  var_name="$1"
-  path="$2"
-  default_value="$3"
-
-  env_value="${!var_name-}"
-  if [[ -n "$env_value" ]]; then
-    printf "%s" "$env_value"
-    return 0
-  fi
-
-  cfg_value="$(manager_get_text "$path")"
-  if [[ -n "$cfg_value" ]]; then
-    printf "%s" "$cfg_value"
-    return 0
-  fi
-
-  printf "%s" "$default_value"
-}
 
 load_runtime_values() {
   require_cmd jq
@@ -190,19 +159,6 @@ copy_tree() {
   dst="$2"
   mkdir -p "$dst" 2>/dev/null || true
   (cd "$src" && tar -cf - .) | (cd "$dst" && tar -xf -)
-}
-
-run_backup_hook() {
-  local hook_name hook_cmd
-  hook_name="$1"
-  hook_cmd="$2"
-
-  if [[ -z "$hook_cmd" ]]; then
-    return 0
-  fi
-
-  info "Running ${hook_name} hook: $hook_cmd"
-  eval "$hook_cmd"
 }
 
 resolve_mode_defaults() {
@@ -362,14 +318,14 @@ main() {
   resolve_mode_defaults
 
   export BACKUP_MODE="$mode"
-  run_backup_hook "backup pre" "${BACKUP_PRE_HOOK:-}"
+  "${SCRIPT_DIR}/cmd" hook-run --name "backup pre" --command "${BACKUP_PRE_HOOK:-}"
 
   stage_dir="$(mktemp -d)"
   prepare_stage_content
   create_zip
   cleanup_old_scheduled_backups
 
-  run_backup_hook "backup post" "${BACKUP_POST_HOOK:-}"
+  "${SCRIPT_DIR}/cmd" hook-run --name "backup post" --command "${BACKUP_POST_HOOK:-}"
 
   info "Backup complete: $backup_file"
 }

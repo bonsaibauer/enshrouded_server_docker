@@ -40,49 +40,16 @@ parse_args() {
   done
 }
 
+cmd_run() {
+  "${SCRIPT_DIR}/cmd" "$@"
+}
+
 prepare_enshrouded_app_folders() {
   mkdir -p "$install_path"
 }
 
-init_crontab() {
-  local crontab_file
-  crontab_file="$(mktemp)"
-
-  if [[ -n "$UPDATE_CRON" ]]; then
-    debug "creating cron for update checks (schedule: $UPDATE_CRON)"
-    echo "$UPDATE_CRON supervisorctl start updater >/dev/null 2>&1" >>"$crontab_file"
-  fi
-  if [[ -n "$BACKUP_CRON" ]]; then
-    debug "creating cron for backups (schedule: $BACKUP_CRON)"
-    echo "$BACKUP_CRON supervisorctl start backup >/dev/null 2>&1" >>"$crontab_file"
-  fi
-  if [[ -n "$RESTART_CRON" ]]; then
-    debug "creating cron for server restarts (schedule: $RESTART_CRON)"
-    echo "$RESTART_CRON supervisorctl start restart >/dev/null 2>&1" >>"$crontab_file"
-  fi
-
-  crontab "$crontab_file"
-  rm -f "$crontab_file"
-}
-
 prepare_steam_a2s_python_library() {
   pip3 install python-a2s==1.3.0 --break-system-packages
-}
-
-run_bootstrap_pre_hook() {
-  local hook_cmd
-  hook_cmd="${BOOTSTRAP_PRE_HOOK:-${BOOTSTRAP_HOOK:-}}"
-  if [[ -n "$hook_cmd" ]]; then
-    info "Running bootstrap pre hook: $hook_cmd"
-    eval "$hook_cmd"
-  fi
-}
-
-run_bootstrap_post_hook() {
-  if [[ -n "${BOOTSTRAP_POST_HOOK:-}" ]]; then
-    info "Running bootstrap post hook: $BOOTSTRAP_POST_HOOK"
-    eval "$BOOTSTRAP_POST_HOOK"
-  fi
 }
 
 enshrouded_bootstrap_apply_top_level_env_to_config() {
@@ -246,19 +213,21 @@ run_entrypoint_mode() {
 }
 
 run_job_mode() {
+  local bootstrap_pre_hook
   info "Running bootstrap job"
   verify_variables
   prepare_enshrouded_app_folders
   update_or_create_enshrouded_server_config
   prepare_steam_a2s_python_library
-  init_crontab
-  run_bootstrap_pre_hook
+  cmd_run cron --sync --update-cron "${UPDATE_CRON:-}" --backup-cron "${BACKUP_CRON:-}" --restart-cron "${RESTART_CRON:-}"
+  bootstrap_pre_hook="${BOOTSTRAP_PRE_HOOK:-${BOOTSTRAP_HOOK:-}}"
+  cmd_run hook-run --name "bootstrap pre" --command "$bootstrap_pre_hook"
   if [[ "$skip_update" == "true" ]]; then
     info "Skipping updater start (--no-update)"
   else
     supervisorctl start updater
   fi
-  run_bootstrap_post_hook
+  cmd_run hook-run --name "bootstrap post" --command "${BOOTSTRAP_POST_HOOK:-}"
   info "Bootstrap complete"
 }
 

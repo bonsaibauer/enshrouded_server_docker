@@ -58,7 +58,7 @@ update() {
     return 0
   fi
 
-  if ! check_server_empty; then
+  if ! "${SCRIPT_DIR}/server" --players-check --check-players "${UPDATE_CHECK_PLAYERS:-true}" --query-port "${ENSHROUDED_QUERY_PORT:-15637}"; then
     warn "Enshrouded server is not empty - update will not be performed"
     return 0
   fi
@@ -70,7 +70,7 @@ update() {
 }
 
 run_update_flow() {
-  run_update_pre_hook
+  "${SCRIPT_DIR}/cmd" hook-run --name "update pre" --command "${UPDATE_PRE_HOOK:-}"
   if checkRunning "server"; then
     supervisorctl stop server
   fi
@@ -91,7 +91,7 @@ run_update_flow() {
 
   set_current_version
   supervisorctl start server
-  run_update_post_hook
+  "${SCRIPT_DIR}/cmd" hook-run --name "update post" --command "${UPDATE_POST_HOOK:-}"
   clearLock "$pidfile"
 }
 
@@ -109,27 +109,6 @@ verify_cpu_mhz() {
   fi
 }
 
-check_server_empty() {
-  local connected_players
-  if [[ "$UPDATE_CHECK_PLAYERS" == "false" ]]; then
-    return 0
-  fi
-
-  connected_players="$(python3 -c "
-try:
-    import a2s
-    print(len(a2s.players(('127.0.0.1',$ENSHROUDED_QUERY_PORT))))
-except Exception:
-    print('null')
-")"
-
-  debug "[check_server_empty] connected_players: $connected_players"
-  if [[ -n "$connected_players" && "$connected_players" != "null" && "$connected_players" -gt 0 ]]; then
-    return 1
-  fi
-  return 0
-}
-
 set_current_version() {
   if [[ "$latest_version" == "null" || "$latest_version" == "-1" ]]; then
     warn "Unable to set current version - latest version is unknown"
@@ -138,20 +117,6 @@ set_current_version() {
   fi
   debug "[set_current_version]: $latest_version"
   echo "$latest_version" >"$version_file_path"
-}
-
-run_update_pre_hook() {
-  if [[ -n "$UPDATE_PRE_HOOK" ]]; then
-    info "Running update pre hook: $UPDATE_PRE_HOOK"
-    eval "$UPDATE_PRE_HOOK"
-  fi
-}
-
-run_update_post_hook() {
-  if [[ -n "$UPDATE_POST_HOOK" ]]; then
-    info "Running update post hook: $UPDATE_POST_HOOK"
-    eval "$UPDATE_POST_HOOK"
-  fi
 }
 
 shutdown() {

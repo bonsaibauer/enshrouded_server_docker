@@ -8,15 +8,21 @@ timeout=60
 kill_signal=INT
 WAIT_FOR_DOWNLOAD="true"
 enshrouded_server=""
+SERVER_ACTION="run"
+CHECK_PLAYERS="true"
+SERVER_QUERY_PORT=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  server [--wait-download|--no-wait-download] [--shutdown-timeout <seconds>]
+  server [--wait-download|--no-wait-download]
+  server --stop-safe [--shutdown-timeout <seconds>]
+  server --players-check [--check-players true|false] [--query-port <port>]
 EOF
 }
 
 parse_args() {
+  local parsed_bool
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --wait-download)
@@ -34,6 +40,27 @@ parse_args() {
         fi
         shift 2
         ;;
+      --stop-safe)
+        SERVER_ACTION="stop-safe"
+        shift
+        ;;
+      --players-check)
+        SERVER_ACTION="players-check"
+        shift
+        ;;
+      --check-players)
+        parsed_bool="$(parse_bool_arg "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --check-players (expected true|false)"
+        CHECK_PLAYERS="$parsed_bool"
+        shift 2
+        ;;
+      --query-port)
+        SERVER_QUERY_PORT="${2-}"
+        if [[ -z "$SERVER_QUERY_PORT" || ! "$SERVER_QUERY_PORT" =~ ^[0-9]+$ || "$SERVER_QUERY_PORT" -le 0 ]]; then
+          fatal "Invalid --query-port value: ${2-}"
+        fi
+        shift 2
+        ;;
       --help|-h)
         usage
         exit 0
@@ -43,31 +70,6 @@ parse_args() {
         ;;
     esac
   done
-}
-
-run_server_hook() {
-  local hook_name hook_cmd
-  hook_name="$1"
-  hook_cmd="$2"
-  if [[ -z "$hook_cmd" ]]; then
-    return 0
-  fi
-  info "Running ${hook_name} hook: $hook_cmd"
-  eval "$hook_cmd"
-}
-
-main() {
-  parse_args "$@"
-  init_runtime_env
-  cd "$install_path" || fatal "Could not cd $install_path"
-  enshrouded_server="$install_path/$enshrouded_binary_path"
-  run_server_hook "server pre" "${SERVER_PRE_HOOK:-}"
-  if [[ "$WAIT_FOR_DOWNLOAD" == "true" ]]; then
-    wait_for_server_download
-  elif [[ ! -f "$enshrouded_server" ]]; then
-    fatal "Server binary not found: $enshrouded_server (use --wait-download)"
-  fi
-  run_server_process
 }
 
 wait_for_server_download() {
@@ -100,7 +102,7 @@ run_server_process() {
   debug "server with PID $enshrouded_server_pid stopped"
 
   cleanup_wine
-  run_server_hook "server post" "${SERVER_POST_HOOK:-}"
+  "${SCRIPT_DIR}/cmd" hook-run --name "server post" --command "${SERVER_POST_HOOK:-}"
   info "Shutdown complete"
   exit 0
 }
@@ -137,6 +139,77 @@ shutdown() {
     debug "Waiting for enshrouded Server with PID $enshrouded_server_pid to shut down"
     sleep 6
   done
+}
+
+server_stop_safe() {
+  local deadline now
+  if ! is_supervisor_running "server"; then
+    return 0
+  fi
+
+  info "Stopping server"
+  supervisorctl stop server >/dev/null 2>&1 || true
+
+  deadline=$(( $(date +%s) + timeout ))
+  while is_supervisor_running "server"; do
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      fatal "Timeout while stopping server"
+    fi
+    sleep 1
+  done
+}
+
+server_players_check() {
+  local port connected_players
+  if [[ "$CHECK_PLAYERS" == "false" ]]; then
+    return 0
+  fi
+
+  port="${SERVER_QUERY_PORT:-${ENSHROUDED_QUERY_PORT:-15637}}"
+  if [[ -z "$port" || ! "$port" =~ ^[0-9]+$ || "$port" -le 0 ]]; then
+    fatal "Invalid query port: ${port:-<empty>}"
+  fi
+
+  connected_players="$(python3 -c "
+try:
+    import a2s
+    print(len(a2s.players(('127.0.0.1',$port))))
+except Exception:
+    print('null')
+")"
+
+  debug "[players-check] connected_players: $connected_players"
+  if [[ -n "$connected_players" && "$connected_players" != "null" && "$connected_players" -gt 0 ]]; then
+    return 1
+  fi
+  return 0
+}
+
+main() {
+  parse_args "$@"
+
+  case "$SERVER_ACTION" in
+    stop-safe)
+      server_stop_safe
+      return 0
+      ;;
+    players-check)
+      server_players_check
+      return $?
+      ;;
+  esac
+
+  init_runtime_env
+  cd "$install_path" || fatal "Could not cd $install_path"
+  enshrouded_server="$install_path/$enshrouded_binary_path"
+  "${SCRIPT_DIR}/cmd" hook-run --name "server pre" --command "${SERVER_PRE_HOOK:-}"
+  if [[ "$WAIT_FOR_DOWNLOAD" == "true" ]]; then
+    wait_for_server_download
+  elif [[ ! -f "$enshrouded_server" ]]; then
+    fatal "Server binary not found: $enshrouded_server (use --wait-download)"
+  fi
+  run_server_process
 }
 
 trap shutdown SIGINT SIGTERM

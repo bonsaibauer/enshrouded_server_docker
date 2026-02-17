@@ -151,7 +151,7 @@ This submenu is a convenience wrapper around existing `cmd` commands:
 - `status`
 - `scheduled-restart`
 - `bootstrap`
-- `cron-start`, `cron-stop`, `cron-restart`
+- `cron --sync`
 
 Note: explicit reset commands are intentionally not listed here, because profile reset/apply is handled through the unified `profile` job and menu flows.
 
