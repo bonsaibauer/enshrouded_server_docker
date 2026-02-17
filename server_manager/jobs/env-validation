@@ -6,7 +6,6 @@ _validation_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 # shellcheck source=server_manager/jobs/profile
 . "${_validation_dir}/profile"
 
-install_path="${INSTALL_PATH:-/home/enshrouded/server}"
 savefile_name=""
 steam_app_id=""
 
@@ -974,17 +973,6 @@ profiles_list_manager() {
     echo "$name"
   done
   shopt -u nullglob
-}
-
-backup_dir_resolve() {
-  # Resolve BACKUP_DIR to an absolute path (same behavior as unified backup job).
-  local dir
-  dir="${BACKUP_DIR:-backups}"
-  if [[ "$dir" == /* ]]; then
-    printf "%s" "$dir"
-  else
-    printf "%s/%s" "$install_path" "$dir"
-  fi
 }
 
 enshrouded_profile_resolve_from_value() {

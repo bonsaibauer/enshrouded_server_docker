@@ -336,11 +336,11 @@ ui_prompt_number() {
 }
 
 ui_prompt_choice() {
-  # Reads a raw choice (number or letter command) from the user.
+  # Reads and normalizes a choice (trim + lower-case).
   local prompt ans
   prompt="$1"
   ans="$(ui_read "$prompt: ")"
-  ans="$(echo "$ans" | xargs)"
+  ans="$(echo "$ans" | tr '[:upper:]' '[:lower:]' | xargs)"
   printf "%s" "$ans"
 }
 
@@ -692,31 +692,21 @@ menu_run_backup_job() {
 menu_run_config_backup_job() {
   # Selector wrapper used by editors for config-only backups.
   # Config-only backups are written under BACKUP_DIR/manual (without savegame files).
-  local selector include_ens include_mgr
-  selector="${1:-manual:all}"
-  include_ens="true"
-  include_mgr="true"
-
-  case "$selector" in
+  case "${1:-manual:all}" in
     manual:enshrouded)
-      include_ens="true"
-      include_mgr="false"
+      menu_run_backup_job "manual" "false" "true" "false" "false"
       ;;
     manual:manager)
-      include_ens="false"
-      include_mgr="true"
+      menu_run_backup_job "manual" "false" "false" "true" "false"
       ;;
     manual:all)
-      include_ens="true"
-      include_mgr="true"
+      menu_run_backup_job "manual" "false" "true" "true" "false"
       ;;
     *)
-      ui_warn_line "Unknown config backup selector: $selector"
+      ui_warn_line "Unknown config backup selector: ${1:-manual:all}"
       return 1
       ;;
   esac
-
-  menu_run_backup_job "manual" "false" "$include_ens" "$include_mgr" "false"
 }
 
 
@@ -729,69 +719,6 @@ menu_save_dir_resolve() {
   else
     printf "%s/%s" "$install_path" "$dir"
   fi
-}
-
-menu_backup_kind_from_path() {
-  local backup_root rel
-  backup_root="$(backup_dir_resolve)"
-  rel="${1#$backup_root/}"
-  case "$rel" in
-    scheduled/*) echo "scheduled" ;;
-    manual/*) echo "manual" ;;
-    *) echo "manual" ;;
-  esac
-}
-
-menu_backup_list_files() {
-  local backup_root
-  backup_root="$(backup_dir_resolve)"
-
-  {
-    find "${backup_root}/manual" -maxdepth 1 -type f -name "*.zip" -printf '%T@\t%p\n' 2>/dev/null || true
-    find "${backup_root}/scheduled" -maxdepth 1 -type f -name "*.zip" -printf '%T@\t%p\n' 2>/dev/null || true
-  } | sort -rn | cut -f2-
-}
-
-menu_backup_zip_entries() {
-  local zip_file
-  zip_file="$1"
-
-  python3 - "$zip_file" <<'PY'
-import pathlib
-import sys
-import zipfile
-
-zip_path = pathlib.Path(sys.argv[1])
-try:
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        for name in zf.namelist():
-            print(name)
-except Exception:
-    pass
-PY
-}
-
-menu_backup_detect_components() {
-  local zip_file entries has_savegame has_enshrouded has_manager
-  zip_file="$1"
-  entries="$(menu_backup_zip_entries "$zip_file")"
-  has_savegame="false"
-  has_enshrouded="false"
-  has_manager="false"
-
-  if printf '%s\n' "$entries" | grep -q '^savegame/'; then
-    has_savegame="true"
-  fi
-
-  if printf '%s\n' "$entries" | grep -Fxq "config/enshrouded_server.json"; then
-    has_enshrouded="true"
-  fi
-
-  if printf '%s\n' "$entries" | grep -Fxq "config/server_manager.json"; then
-    has_manager="true"
-  fi
-
-  printf "%s %s %s" "$has_savegame" "$has_enshrouded" "$has_manager"
 }
 
 menu_run_savegame_backup() {
@@ -824,9 +751,7 @@ menu_run_savegame_backup() {
 }
 
 menu_run_config_backup_now() {
-  local choice include_ens include_mgr
-  include_ens="true"
-  include_mgr="true"
+  local choice selector
 
   while :; do
     ui_header "Create Config Backup"
@@ -840,19 +765,15 @@ menu_run_config_backup_now() {
     echo
 
     choice="$(ui_prompt_choice "Choice")"
-    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
       1)
-        include_ens="true"
-        include_mgr="false"
+        selector="manual:enshrouded"
         ;;
       2)
-        include_ens="false"
-        include_mgr="true"
+        selector="manual:manager"
         ;;
       3)
-        include_ens="true"
-        include_mgr="true"
+        selector="manual:all"
         ;;
       0)
         return 0
@@ -872,7 +793,7 @@ menu_run_config_backup_now() {
         ;;
     esac
 
-    if menu_run_backup_job "manual" "false" "$include_ens" "$include_mgr" "false"; then
+    if menu_run_config_backup_job "$selector"; then
       ui_success "Config backup created."
     else
       ui_warn_line "Config backup failed or timed out."
@@ -888,8 +809,13 @@ menu_restore_backup() {
   save_dir="$(menu_save_dir_resolve)"
 
   while :; do
-    local -a files
-    mapfile -t files < <(menu_backup_list_files)
+    local -a files lines
+    files=()
+    mapfile -t lines < <(cmd_run restore-backup --list 2>/dev/null || true)
+    for line in "${lines[@]}"; do
+      [[ -n "$line" ]] || continue
+      files+=("$line")
+    done
 
     ui_header "Restore Backup"
     ui_kv "Backup Root" "$backup_root"
@@ -913,7 +839,10 @@ menu_restore_backup() {
     idx=1
     for file in "${files[@]}"; do
       base="$(basename "$file")"
-      kind="$(menu_backup_kind_from_path "$file")"
+      case "$file" in
+        */scheduled/*) kind="scheduled" ;;
+        *) kind="manual" ;;
+      esac
       printf "%s[%s]%s %-11s %s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${kind}" "$base"
       idx=$((idx + 1))
     done
@@ -922,7 +851,6 @@ menu_restore_backup() {
     echo
 
     choice="$(ui_prompt_choice "Backup")"
-    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
       0)
         return 0
@@ -946,7 +874,10 @@ menu_restore_backup() {
     selected="${files[$((choice - 1))]}"
 
     local has_savegame has_enshrouded has_manager
-    read -r has_savegame has_enshrouded has_manager <<<"$(menu_backup_detect_components "$selected")"
+    read -r has_savegame has_enshrouded has_manager <<<"$(cmd_run restore-backup --inspect --zip "$selected" 2>/dev/null || true)"
+    [[ "$has_savegame" == "true" || "$has_savegame" == "false" ]] || has_savegame="false"
+    [[ "$has_enshrouded" == "true" || "$has_enshrouded" == "false" ]] || has_enshrouded="false"
+    [[ "$has_manager" == "true" || "$has_manager" == "false" ]] || has_manager="false"
     if [[ "$has_savegame" != "true" && "$has_enshrouded" != "true" && "$has_manager" != "true" ]]; then
       ui_warn_line "No restorable components detected in this backup."
       ui_pause
@@ -1017,19 +948,23 @@ menu_restore_backup() {
   done
 }
 
+menu_spec_ready() {
+  [[ -f "$MENU_SPEC_FILE" ]] && command -v jq >/dev/null 2>&1
+}
+
+menu_spec_query() {
+  menu_spec_ready || return 1
+  jq -r "$@" "$MENU_SPEC_FILE" 2>/dev/null
+}
+
 menu_editor_envs_for_meta_field() {
   local meta_field vars
   meta_field="$1"
-
-  [[ -f "$MENU_SPEC_FILE" ]] || return 0
-  command -v jq >/dev/null 2>&1 || return 0
-
-  vars="$(jq -r --arg key "$meta_field" '
+  vars="$(menu_spec_query --arg key "$meta_field" '
     (.editors[$key].fields // [])
     | map(select((.env // "") != ""))
     | .[].env
-  ' "$MENU_SPEC_FILE" 2>/dev/null || true)"
-
+  ' || true)"
   [[ -n "$vars" ]] && printf "%s\n" "$vars"
 }
 
@@ -1037,30 +972,20 @@ menu_editor_group_for_env() {
   local meta_field env_var group
   meta_field="$1"
   env_var="$2"
-
-  [[ -f "$MENU_SPEC_FILE" ]] || return 0
-  command -v jq >/dev/null 2>&1 || return 0
-
-  group="$(jq -r --arg key "$meta_field" --arg env "$env_var" '
+  group="$(menu_spec_query --arg key "$meta_field" --arg env "$env_var" '
     first((.editors[$key].fields // [])[] | select((.env // "") == $env) | (.group // empty)) // empty
-  ' "$MENU_SPEC_FILE" 2>/dev/null || true)"
-
+  ' || true)"
   [[ -n "$group" && "$group" != "null" ]] && printf "%s" "$group"
 }
 
 menu_editor_template_fields() {
   local template fields
   template="$1"
-
-  [[ -f "$MENU_SPEC_FILE" ]] || return 0
-  command -v jq >/dev/null 2>&1 || return 0
-
-  fields="$(jq -r --arg t "$template" '
+  fields="$(menu_spec_query --arg t "$template" '
     (.editors.templates[$t].fields // [])
     | map(select((.field // "") != ""))
     | .[].field
-  ' "$MENU_SPEC_FILE" 2>/dev/null || true)"
-
+  ' || true)"
   [[ -n "$fields" ]] && printf "%s\n" "$fields"
 }
 
@@ -1068,14 +993,9 @@ menu_editor_template_group_for_field() {
   local template field group
   template="$1"
   field="$2"
-
-  [[ -f "$MENU_SPEC_FILE" ]] || return 0
-  command -v jq >/dev/null 2>&1 || return 0
-
-  group="$(jq -r --arg t "$template" --arg field "$field" '
+  group="$(menu_spec_query --arg t "$template" --arg field "$field" '
     first((.editors.templates[$t].fields // [])[] | select((.field // "") == $field) | (.group // empty)) // empty
-  ' "$MENU_SPEC_FILE" 2>/dev/null || true)"
-
+  ' || true)"
   [[ -n "$group" && "$group" != "null" ]] && printf "%s" "$group"
 }
 
@@ -1447,7 +1367,6 @@ menu_spec_editor__user_groups_edit_group() {
 
     local choice
     choice="$(ui_prompt_choice "Field")"
-    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
       0) return 0 ;;
       m) menu_nav_set "main"; return 0 ;;
@@ -1518,7 +1437,6 @@ menu_edit_user_groups_from_spec() {
       ui_actions_bar "0 Back" "m Main" "x Exit"
       echo
       choice="$(ui_prompt_choice "Choice")"
-      choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
       case "$choice" in
         0) return 0 ;;
         m) menu_nav_set "main"; return 0 ;;
@@ -1539,7 +1457,6 @@ menu_edit_user_groups_from_spec() {
     echo
 
     choice="$(ui_prompt_choice "Group")"
-    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
       0) return 0 ;;
       m) menu_nav_set "main"; return 0 ;;
@@ -1702,7 +1619,6 @@ menu_edit_json_from_spec() {
 
     local choice
     choice="$(ui_prompt_choice "Choice")"
-    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
     case "$choice" in
       0) return 0 ;;
       m) menu_nav_set "main"; return 0 ;;
@@ -1854,169 +1770,158 @@ menu_profile_actions_after_change() {
   esac
 }
 
-menu_profile_label() {
-  case "$1" in
-    enshrouded) printf "Enshrouded" ;;
-    manager) printf "Server Manager" ;;
-    *) printf "Profile" ;;
-  esac
-}
-
-menu_profile_config_file() {
-  case "$1" in
-    enshrouded) enshrouded_config_path ;;
-    manager) manager_config_path ;;
-    *) printf "" ;;
-  esac
-}
-
-menu_profile_directory() {
-  case "$1" in
-    enshrouded) printf "%s" "$EN_PROFILE_DIR" ;;
-    manager) printf "%s" "$MANAGER_PROFILE_TEMPLATE_DIR" ;;
-    *) printf "" ;;
-  esac
-}
-
-menu_profile_current_name() {
-  case "$1" in
-    enshrouded) enshrouded_profile_resolve ;;
-    manager) manager_profile_resolve ;;
-    *) printf "" ;;
-  esac
-}
-
-menu_profile_list() {
-  case "$1" in
-    enshrouded) profiles_list_enshrouded | sort ;;
-    manager) profiles_list_manager | sort ;;
-    *) return 1 ;;
-  esac
-}
-
 menu_run_profile_job() {
   local target action profile
+  local -a cmd_args
   target="$1"
   action="$2"
   profile="$3"
-  if [[ "$action" == "apply" ]]; then
-    cmd_run profile --target "$target" --action "$action" --profile "$profile" --create-backup true >/dev/null 2>&1
-  else
-    cmd_run profile --target "$target" --action "$action" --create-backup true >/dev/null 2>&1
-  fi
+  cmd_args=(profile --target "$target" --action "$action" --create-backup true)
+  [[ -n "$profile" ]] && cmd_args+=(--profile "$profile")
+  cmd_run "${cmd_args[@]}" >/dev/null 2>&1
 }
 
-menu_apply_profile_flow() {
-  local target label config_file profiles_dir profile_count idx selected profile
-  target="$1"
-  label="$(menu_profile_label "$target")"
-  config_file="$(menu_profile_config_file "$target")"
-  profiles_dir="$(menu_profile_directory "$target")"
-
-  if ! menu_warn_env_overrides_before_profile_selection "$target"; then
-    return 1
-  fi
-
+menu_profile_flow() {
+  local target mode label config_file profiles_dir profile_count idx selected profile
   local -a profiles
-  mapfile -t profiles < <(menu_profile_list "$target")
-  profile_count="${#profiles[@]}"
-  if [[ "$profile_count" -eq 0 ]]; then
-    ui_error "No ${label} profiles found in: $profiles_dir"
-    ui_pause
-    return 1
-  fi
+  target="$1"
+  mode="${2:-apply}"
 
-  while :; do
-    if menu_nav_is_set; then
-      return 0
-    fi
-    ui_header "Select ${label} Profile"
-    ui_kv "Profiles Folder" "$profiles_dir"
-    echo
-    idx=1
-    for p in "${profiles[@]}"; do
-      printf "%s[%s]%s %s%s%s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${C_GREEN}" "$p" "${C_RESET}"
-      idx=$((idx + 1))
-    done
-    echo
-    ui_actions_bar "0 Back" "m Main" "x Exit"
-    echo
-
-    selected="$(ui_prompt_choice "Profile")"
-    selected="$(echo "$selected" | tr '[:upper:]' '[:lower:]' | xargs)"
-    case "$selected" in
-      0) return 0 ;;
-      m) menu_nav_set "main"; return 0 ;;
-      x|q) menu_nav_set "exit"; return 0 ;;
-    esac
-
-    if ! [[ "$selected" =~ ^[0-9]+$ ]] || [[ "$selected" -lt 1 || "$selected" -gt "$profile_count" ]]; then
-      ui_warn_line "Invalid selection."
+  case "$target" in
+    enshrouded)
+      label="Enshrouded"
+      config_file="$(enshrouded_config_path)"
+      if [[ "$mode" == "apply" ]]; then
+        profiles_dir="$EN_PROFILE_DIR"
+        mapfile -t profiles < <(profiles_list_enshrouded | sort)
+      else
+        profile="$(enshrouded_profile_resolve)"
+      fi
+      ;;
+    manager)
+      label="Server Manager"
+      config_file="$(manager_config_path)"
+      if [[ "$mode" == "apply" ]]; then
+        profiles_dir="$MANAGER_PROFILE_TEMPLATE_DIR"
+        mapfile -t profiles < <(profiles_list_manager | sort)
+      else
+        profile="$(manager_profile_resolve)"
+      fi
+      ;;
+    *)
+      ui_error "Unknown profile target: $target"
       ui_pause
-      continue
-    fi
+      return 1
+      ;;
+  esac
 
-    profile="${profiles[$((selected - 1))]}"
+  case "$mode" in
+    apply)
+      if ! menu_warn_env_overrides_before_profile_selection "$target"; then
+        return 1
+      fi
 
-    if is_supervisor_running "server" || [[ -f "$config_file" ]]; then
-      ui_warn_line "This will replace the active ${label} config with the selected profile."
+      profile_count="${#profiles[@]}"
+      if [[ "$profile_count" -eq 0 ]]; then
+        ui_error "No ${label} profiles found in: $profiles_dir"
+        ui_pause
+        return 1
+      fi
+
+      while :; do
+        if menu_nav_is_set; then
+          return 0
+        fi
+        ui_header "Select ${label} Profile"
+        ui_kv "Profiles Folder" "$profiles_dir"
+        echo
+        idx=1
+        for p in "${profiles[@]}"; do
+          printf "%s[%s]%s %s%s%s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${C_GREEN}" "$p" "${C_RESET}"
+          idx=$((idx + 1))
+        done
+        echo
+        ui_actions_bar "0 Back" "m Main" "x Exit"
+        echo
+
+        selected="$(ui_prompt_choice "Profile")"
+        case "$selected" in
+          0) return 0 ;;
+          m) menu_nav_set "main"; return 0 ;;
+          x|q) menu_nav_set "exit"; return 0 ;;
+        esac
+
+        if ! [[ "$selected" =~ ^[0-9]+$ ]] || [[ "$selected" -lt 1 || "$selected" -gt "$profile_count" ]]; then
+          ui_warn_line "Invalid selection."
+          ui_pause
+          continue
+        fi
+
+        profile="${profiles[$((selected - 1))]}"
+
+        if is_supervisor_running "server" || [[ -f "$config_file" ]]; then
+          ui_warn_line "This will replace the active ${label} config with the selected profile."
+          ui_warn_line "All players will be disconnected."
+          echo
+          ui_kv "Selected Profile" "$profile"
+          ui_kv "Target File" "$config_file"
+          echo
+          if ! ui_confirm_yes_no "Stop server (if running) and apply this profile now?"; then
+            ui_note "Cancelled."
+            ui_pause
+            continue
+          fi
+        fi
+
+        if ! menu_run_profile_job "$target" "apply" "$profile"; then
+          ui_warn_line "Failed to apply profile."
+          ui_note "Check: cmd status"
+          ui_pause
+          continue
+        fi
+
+        ui_success "${label} profile applied: $profile"
+        menu_profile_actions_after_change
+        return 0
+      done
+      ;;
+
+    reset)
+      ui_header "Reset ${label} Profile"
+      ui_warn_line "This resets $(basename "$config_file") from the currently selected profile."
       ui_warn_line "All players will be disconnected."
       echo
-      ui_kv "Selected Profile" "$profile"
+      ui_kv "Profile" "$profile"
       ui_kv "Target File" "$config_file"
       echo
-      if ! ui_confirm_yes_no "Stop server (if running) and apply this profile now?"; then
+
+      if ! ui_confirm_yes_no "Stop server (if running) and reset now?"; then
         ui_note "Cancelled."
         ui_pause
-        continue
+        return 0
       fi
-    fi
 
-    if ! menu_run_profile_job "$target" "apply" "$profile"; then
-      ui_warn_line "Failed to apply profile."
-      ui_note "Check: cmd status"
+      if ! menu_run_profile_job "$target" "reset" "$profile"; then
+        ui_warn_line "Failed to reset profile."
+        ui_note "Check: cmd status"
+        ui_pause
+        return 1
+      fi
+
+      ui_success "${label} profile reset completed: $profile"
+      menu_profile_actions_after_change
+      return 0
+      ;;
+    *)
+      ui_error "Unknown profile mode: $mode"
       ui_pause
-      continue
-    fi
-
-    ui_success "${label} profile applied: $profile"
-    menu_profile_actions_after_change
-    return 0
-  done
+      return 1
+      ;;
+  esac
 }
 
-menu_reset_profile_flow() {
-  local target label profile config_file
-  target="$1"
-  label="$(menu_profile_label "$target")"
-  config_file="$(menu_profile_config_file "$target")"
-  profile="$(menu_profile_current_name "$target")"
-
-  ui_header "Reset ${label} Profile"
-  ui_warn_line "This resets $(basename "$config_file") from the currently selected profile."
-  ui_warn_line "All players will be disconnected."
-  echo
-  ui_kv "Profile" "$profile"
-  ui_kv "Target File" "$config_file"
-  echo
-
-  if ! ui_confirm_yes_no "Stop server (if running) and reset now?"; then
-    ui_note "Cancelled."
-    ui_pause
-    return 0
-  fi
-
-  if ! menu_run_profile_job "$target" "reset" "$profile"; then
-    ui_warn_line "Failed to reset profile."
-    ui_note "Check: cmd status"
-    ui_pause
-    return 1
-  fi
-
-  ui_success "${label} profile reset completed: $profile"
-  menu_profile_actions_after_change
-  return 0
-}
+menu_apply_profile_flow() { menu_profile_flow "$1" "apply"; }
+menu_reset_profile_flow() { menu_profile_flow "$1" "reset"; }
 
 # --- inlined menu module: manager ---
 editor_manager_json() {
@@ -2191,13 +2096,13 @@ menu_dispatch_action() {
   local action_name action_json
   action_name="$1"
 
-  if [[ ! -f "$MENU_SPEC_FILE" ]] || ! command -v jq >/dev/null 2>&1; then
+  if ! menu_spec_ready; then
     ui_error "Menu specification unavailable: ${MENU_SPEC_FILE}"
     ui_pause
     return 1
   fi
 
-  action_json="$(jq -c --arg action "$action_name" '.actions[$action] // empty' "$MENU_SPEC_FILE" 2>/dev/null || true)"
+  action_json="$(menu_spec_query -c --arg action "$action_name" '.actions[$action] // empty' || true)"
   if [[ -z "$action_json" || "$action_json" == "null" ]]; then
     ui_warn_line "Unknown menu action: ${action_name}"
     ui_pause
@@ -2222,7 +2127,7 @@ menu_load_screen() {
     fi
   fi
 
-  if [[ ! -f "$MENU_SPEC_FILE" ]] || ! command -v jq >/dev/null 2>&1; then
+  if ! menu_spec_ready; then
     ui_error "Menu specification unavailable: ${MENU_SPEC_FILE}"
     ui_pause
     menu_nav_set "exit"
@@ -2246,12 +2151,12 @@ menu_load_screen() {
       esac
     fi
 
-    mapfile -t entries < <(jq -r --arg screen "$screen" '
+    mapfile -t entries < <(menu_spec_query --arg screen "$screen" '
       (.screens[$screen] // [])
       | map(select((.key // "") != "" and (.action // "") != ""))
       | .[]
       | "\(.key)|\((.title // .label // .action))|\(.action)"
-    ' "$MENU_SPEC_FILE" 2>/dev/null || true)
+    ' || true)
 
     if [[ "${#entries[@]}" -eq 0 ]]; then
       ui_error "Menu screen '${screen}' missing or empty in ${MENU_SPEC_FILE}"
@@ -2278,7 +2183,6 @@ menu_load_screen() {
     echo
 
     choice="$(ui_prompt_choice "Choice")"
-    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
 
     case "$choice" in
       x|q)

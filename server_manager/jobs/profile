@@ -34,6 +34,16 @@ manager_config_path() {
   printf "%s/server_manager.json" "$MANAGER_DATA_DIR"
 }
 
+backup_dir_resolve() {
+  local dir
+  dir="${BACKUP_DIR:-backups}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
+
 profiles_config_json_key() {
   case "$1" in
     manager) echo "actualProfilManager" ;;

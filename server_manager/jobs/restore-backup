@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
 
-install_path="${INSTALL_PATH:-/home/enshrouded/server}"
-MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-${install_path}/server_manager}"
-manager_config_file="${MANAGER_DATA_DIR}/server_manager.json"
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs/profile
+. "${SCRIPT_DIR}/profile"
+
+manager_config_file="$(manager_config_path)"
 enshrouded_config_file="${install_path}/enshrouded_server.json"
-
-log_level="${LOG_LEVEL:-40}"
-
-info() { [[ "$log_level" -ge 40 ]] && echo "INFO - $*" || true; }
-fatal() { echo "FATAL - $*" >&2; exit 1; }
-
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || fatal "Missing required command: $1"
-}
 
 manager_get_text() {
   local path
@@ -63,61 +56,20 @@ load_runtime_values() {
   [[ -n "$ENSHROUDED_SAVE_DIR" ]] || ENSHROUDED_SAVE_DIR="./savegame"
 }
 
-manager_config_path() {
-  printf "%s/server_manager.json" "$MANAGER_DATA_DIR"
-}
-
-profiles_ensure_schema() {
-  local file tmp
-  file="$(manager_config_path)"
-
-  if [[ ! -f "$file" ]]; then
-    return 0
-  fi
-  if ! jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  tmp="$(mktemp)"
-  jq '
-    .MANAGER_PROFILE = (if (.MANAGER_PROFILE == null or .MANAGER_PROFILE == "") then "default" else .MANAGER_PROFILE end)
-    | .EN_PROFILE = (if (.EN_PROFILE == null or .EN_PROFILE == "") then "default" else .EN_PROFILE end)
-    | .actualProfilManager = (if (.actualProfilManager == null or .actualProfilManager == "") then "default" else .actualProfilManager end)
-    | .actualProfilEnshrouded = (if (.actualProfilEnshrouded == null or .actualProfilEnshrouded == "") then "default" else .actualProfilEnshrouded end)
-  ' "$file" >"$tmp" || {
-    rm -f "$tmp" 2>/dev/null || true
-    return 0
-  }
-  mv "$tmp" "$file"
-  chmod 600 "$file" 2>/dev/null || true
-  chown enshrouded:enshrouded "$file" 2>/dev/null || true
-}
-
-is_supervisor_running() {
-  local proc status
-  proc="$1"
-  status="$(supervisorctl status "${proc}" 2>&1 || true)"
-  [[ "$status" == *RUNNING* ]]
-}
-
 work_dir=""
 
+operation="restore"
 zip_path=""
 restore_savegame="false"
 restore_enshrouded_config="false"
 restore_manager_config="false"
 create_safety_backup="false"
 
-parse_bool_arg() {
-  case "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" in
-    true|false) echo "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" ;;
-    *) echo "" ;;
-  esac
-}
-
 usage() {
   cat <<'EOF'
 Usage:
+  restore-backup --list
+  restore-backup --inspect --zip <path>
   restore-backup --zip <path> --restore <savegame|enshrouded|manager|all> [--safety-backup true|false]
 EOF
 }
@@ -162,6 +114,14 @@ parse_args() {
   restore_selector=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --list)
+        operation="list"
+        shift
+        ;;
+      --inspect)
+        operation="inspect"
+        shift
+        ;;
       --zip)
         zip_path="${2-}"
         [[ -n "$zip_path" ]] || fatal "Missing value for --zip"
@@ -188,13 +148,29 @@ parse_args() {
     esac
   done
 
-  [[ -n "$zip_path" ]] || fatal "Missing --zip"
-  [[ -f "$zip_path" ]] || fatal "Backup source not found: $zip_path"
-  [[ -n "$restore_selector" ]] || fatal "Missing --restore"
-  apply_restore_selection "$restore_selector"
-  if [[ "$restore_savegame" != "true" && "$restore_enshrouded_config" != "true" && "$restore_manager_config" != "true" ]]; then
-    fatal "Missing --restore target"
-  fi
+  case "$operation" in
+    list)
+      [[ -z "$zip_path" ]] || fatal "--list does not accept --zip"
+      [[ -z "$restore_selector" ]] || fatal "--list does not accept --restore"
+      ;;
+    inspect)
+      [[ -n "$zip_path" ]] || fatal "Missing --zip for --inspect"
+      [[ -f "$zip_path" ]] || fatal "Backup source not found: $zip_path"
+      [[ -z "$restore_selector" ]] || fatal "--inspect does not accept --restore"
+      ;;
+    restore)
+      [[ -n "$zip_path" ]] || fatal "Missing --zip"
+      [[ -f "$zip_path" ]] || fatal "Backup source not found: $zip_path"
+      [[ -n "$restore_selector" ]] || fatal "Missing --restore"
+      apply_restore_selection "$restore_selector"
+      if [[ "$restore_savegame" != "true" && "$restore_enshrouded_config" != "true" && "$restore_manager_config" != "true" ]]; then
+        fatal "Missing --restore target"
+      fi
+      ;;
+    *)
+      fatal "Unsupported operation: $operation"
+      ;;
+  esac
 }
 
 cleanup_on_exit() {
@@ -245,14 +221,46 @@ save_dir_resolve() {
   fi
 }
 
-backup_dir_resolve() {
-  local dir
-  dir="${BACKUP_DIR:-backups}"
-  if [[ "$dir" == /* ]]; then
-    printf "%s" "$dir"
-  else
-    printf "%s/%s" "$install_path" "$dir"
-  fi
+list_backup_zip_paths() {
+  local backup_root
+  backup_root="$(backup_dir_resolve)"
+  {
+    find "${backup_root}/manual" -maxdepth 1 -type f -name "*.zip" -printf '%T@\t%p\n' 2>/dev/null || true
+    find "${backup_root}/scheduled" -maxdepth 1 -type f -name "*.zip" -printf '%T@\t%p\n' 2>/dev/null || true
+  } | sort -rn | cut -f2-
+}
+
+inspect_backup_components() {
+  local inspect_zip
+  inspect_zip="$1"
+  python3 - "$inspect_zip" <<'PY'
+import pathlib
+import sys
+import zipfile
+
+zip_path = pathlib.Path(sys.argv[1])
+has_savegame = False
+has_enshrouded = False
+has_manager = False
+
+try:
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for name in zf.namelist():
+            if name.startswith("savegame/"):
+                has_savegame = True
+            elif name == "config/enshrouded_server.json":
+                has_enshrouded = True
+            elif name == "config/server_manager.json":
+                has_manager = True
+except Exception:
+    pass
+
+print(
+    "true" if has_savegame else "false",
+    "true" if has_enshrouded else "false",
+    "true" if has_manager else "false",
+)
+PY
 }
 
 run_safety_backup_if_requested() {
@@ -428,6 +436,17 @@ main() {
   parse_args "$@"
   load_runtime_values
 
+  case "$operation" in
+    list)
+      list_backup_zip_paths
+      return 0
+      ;;
+    inspect)
+      inspect_backup_components "$zip_path"
+      return 0
+      ;;
+  esac
+
   run_restore_hook "restore pre" "${RESTORE_PRE_HOOK:-}"
   stop_server_now
   run_safety_backup_if_requested
@@ -442,4 +461,6 @@ main() {
   info "Restore finished from: $zip_path"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

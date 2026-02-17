@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
 
-install_path="${INSTALL_PATH:-/home/enshrouded/server}"
-MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-${install_path}/server_manager}"
-manager_config_file="${MANAGER_DATA_DIR}/server_manager.json"
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs/profile
+. "${SCRIPT_DIR}/profile"
+
+manager_config_file="$(manager_config_path)"
 enshrouded_config_file="${install_path}/enshrouded_server.json"
 enshrouded_backup_pidfile="${ENSHROUDED_BACKUP_PIDFILE:-/var/run/enshrouded/backup.pid}"
-
-log_level="${LOG_LEVEL:-40}"
-
-info() { [[ "$log_level" -ge 40 ]] && echo "INFO - $*" || true; }
-warn() { [[ "$log_level" -ge 30 ]] && echo "WARN - $*" || true; }
-fatal() { echo "FATAL - $*" >&2; exit 1; }
-
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || fatal "Missing required command: $1"
-}
 
 manager_get_text() {
   local path
@@ -76,20 +68,6 @@ load_runtime_values() {
   fi
 }
 
-manager_config_path() {
-  printf "%s/server_manager.json" "$MANAGER_DATA_DIR"
-}
-
-backup_dir_resolve() {
-  local dir
-  dir="${BACKUP_DIR:-backups}"
-  if [[ "$dir" == /* ]]; then
-    printf "%s" "$dir"
-  else
-    printf "%s/%s" "$install_path" "$dir"
-  fi
-}
-
 pidfile="$enshrouded_backup_pidfile"
 
 mode="scheduled"
@@ -101,12 +79,9 @@ stage_dir=""
 backup_file=""
 
 to_bool() {
-  local normalized
-  normalized="$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)"
-  case "$normalized" in
+  case "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" in
     "") echo "" ;;
-    1|true|yes|y|on) echo "true" ;;
-    0|false|no|n|off) echo "false" ;;
+    true|false) echo "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" ;;
     *) echo "" ;;
   esac
 }
