@@ -13,19 +13,27 @@ Profile selection is special:
 
 ## Validation Rules
 
-ENV input validation and interactive menu validation are driven by two rule files:
+ENV input validation is driven by TSV rule files:
 
-- `server_manager/env/env_server_manager.json`
-- `server_manager/env/env_enshrouded_server.json`
+- `server_manager/env/env_server_manager.tsv`
+- `server_manager/env/env_enshrouded_server.tsv`
 
-If you want to adjust allowed values, ranges, regex, or menu hints, edit the matching file.
+Template field rules (e.g. `ENSHROUDED_ROLE_<index>_*`) are included in
+`env_enshrouded_server.tsv` as internal rows (`ENSHROUDED_ROLE__<FIELD>`).
+
+Menu structure, editor grouping, JSON path mapping and order are defined in:
+
+- `server_manager/env/menu.tsv`
+
+If you want to adjust allowed values, ranges or regex, edit the validation TSVs.
+If you want to adjust menu flow/grouping/path-ordering, edit `menu.tsv`.
 
 The rules support:
 
 - `required`: if `true`, empty/unset is invalid.
 - `allowEmpty`: if `false`, empty string is invalid (but the variable can still be unset unless `required=true`).
 - `envMode`: `hard` will abort bootstrap on invalid values, `soft` will only warn.
-- `allowed`: optional menu hint override (otherwise the hint is derived from `type`/`enum`/`min`/`max`/`regex`/`list`).
+- `allowed`: single source of truth for menu hints (no auto-derived fallback).
 
 ## Spec Domains
 
@@ -36,10 +44,11 @@ The spec is split by domain under `server_manager/env/`:
 
 ## Environment Reference
 
-The source of truth is the spec itself:
+The source of truth is the TSV spec:
 
-- `server_manager/env/env_server_manager.json`
-- `server_manager/env/env_enshrouded_server.json`
+- `server_manager/env/env_server_manager.tsv`
+- `server_manager/env/env_enshrouded_server.tsv`
+- `server_manager/env/menu.tsv`
 
 ## Backup Layout
 

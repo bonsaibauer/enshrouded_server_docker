@@ -1,0 +1,41 @@
+name	type	required	allowEmpty	envMode	min	max	regex	enum	list	description	allowed
+BOOTSTRAP_HOOK	string	false	true				^[^\r\n]*$			Hook executed during bootstrap.	Allowed: single-line string
+PROFILE_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after profile job.	Allowed: single-line string
+PROFILE_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before profile job.	Allowed: single-line string
+EN_PROFILE	string	false	true	hard			^[A-Za-z0-9._-]+$			Selects the Enshrouded profile template on first bootstrap (fresh volume).	A-Z a-z 0-9 . _ -
+LOG_COLOR	bool	false	true							Enable colored log levels (TTY only).	Allowed: true | false
+MANAGER_PROFILE	string	false	true	hard			^[A-Za-z0-9._-]+$			Selects the Server Manager profile template on first bootstrap (fresh volume).	A-Z a-z 0-9 . _ -
+PGID	int	false	true		1					GID for the enshrouded user.	Allowed: integer >= 1
+PUID	int	false	true		1					UID for the enshrouded user.	Allowed: integer >= 1
+SAVEFILE_NAME	string	false	true				^[A-Za-z0-9._-]+$			Base name for save/backup files.	A-Z a-z 0-9 . _ -
+BACKUP_CRON	string	false	true				^[^\r\n]*$			Cron schedule for scheduled backup job (writes to BACKUP_DIR/scheduled).	Allowed: single-line string
+BACKUP_DIR	string	false	true				^[^\r\n]*$			Base backup directory (scheduled/manual subfolders).	Allowed: single-line string
+BACKUP_MAX_COUNT	int	false	true		0					Number of savegame zip backups to keep (0 = unlimited).	Allowed: integer >= 0
+BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG	bool	false	true							Include enshrouded_server.json in scheduled backups.	Allowed: true | false
+BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG	bool	false	true							Include server_manager.json in scheduled backups.	Allowed: true | false
+BACKUP_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after backup job.	Allowed: single-line string
+BACKUP_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before backup job.	Allowed: single-line string
+RESTORE_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after backup restore.	Allowed: single-line string
+RESTORE_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before backup restore.	Allowed: single-line string
+GAME_BRANCH	string	false	true				^[^\r\n]*$			Steam branch name.	Allowed: single-line string
+RESTART_CHECK_PLAYERS	bool	false	true							Only restart when 0 players are connected.	Allowed: true | false
+RESTART_CRON	string	false	true				^[^\r\n]*$			Cron schedule for restart job (crond).	Allowed: single-line string
+RESTART_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after restart.	Allowed: single-line string
+RESTART_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before restart.	Allowed: single-line string
+STEAMCMD_ARGS	string	false	true				^[^\r\n]*$			Additional SteamCMD args.	Allowed: single-line string
+STEAM_APP_ID	int	false	true		1					Steam App ID.	Allowed: integer >= 1
+UPDATE_CHECK_PLAYERS	bool	false	true							Only update when 0 players are connected.	Allowed: true | false
+UPDATE_CRON	string	false	true				^[^\r\n]*$			Cron schedule for update job (crond).	Allowed: single-line string
+UPDATE_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after update.	Allowed: single-line string
+UPDATE_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before update.	Allowed: single-line string
+WINEDEBUG	string	false	true				^[^\r\n]*$			Wine debug level.	Allowed: single-line string
+BOOTSTRAP_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before bootstrap job.	Allowed: single-line string
+BOOTSTRAP_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after bootstrap job.	Allowed: single-line string
+SERVER_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before server start job.	Allowed: single-line string
+SERVER_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after server stop job.	Allowed: single-line string
+CTL_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before ctl command dispatch.	Allowed: single-line string
+CTL_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after ctl command dispatch.	Allowed: single-line string
+MENU_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before interactive menu job.	Allowed: single-line string
+MENU_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after interactive menu job.	Allowed: single-line string
+PASSWORD_VIEW_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before password-view job.	Allowed: single-line string
+PASSWORD_VIEW_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after password-view job.	Allowed: single-line string

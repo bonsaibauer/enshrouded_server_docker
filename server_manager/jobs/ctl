@@ -43,6 +43,7 @@ Commands:
   restore-backup Trigger restore-backup job (expects request file in server_manager/requests)
   profile        Trigger profile job (expects request file in server_manager/requests)
   password-view  Show user group rights and passwords from enshrouded_server.json
+  env-validation Run ENV validation job
   scheduled-restart
                  Trigger restart job
   force-update   Trigger updater in force mode
@@ -190,6 +191,9 @@ run_ctl_command() {
       ;;
     password-view)
       "${SCRIPT_DIR}/password-view" "$@"
+      ;;
+    env-validation)
+      run_supervisorctl start env-validation
       ;;
     scheduled-restart)
       run_supervisorctl start restart

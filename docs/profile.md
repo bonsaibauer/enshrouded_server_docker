@@ -33,7 +33,7 @@ To add your own profiles without rebuilding the image, drop new `*_enshrouded_se
 Naming rules:
 
 - `<name>` must match `^[A-Za-z0-9._-]+$`
-- `<name>` must match the profile selector regex (default: `^[A-Za-z0-9._-]+$`, configurable via `server_manager/env/env_server_manager.json`)
+- `<name>` must match the profile selector regex (default: `^[A-Za-z0-9._-]+$`, configurable via `server_manager/env/env_server_manager.tsv`)
 - File names must follow the exact suffix pattern:
   - `*_enshrouded_server.json`
   - `*_server_manager.json`

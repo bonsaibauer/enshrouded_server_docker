@@ -1,0 +1,139 @@
+section	id	parent	key	title	action	type	cmd	fn	requiresRunning	confirm	program	requestFile	timeoutSec	payloadJson	argsJson	env	group	field	jsonPath	order
+action	enshrouded_settings					internal		menu_enshrouded_settings												
+action	manager_settings					internal		menu_manager_settings												
+action	backups_menu					internal		menu_backups_menu												
+action	start_server					ctl	start													
+action	stop_server					ctl	stop		true											
+action	restart_server					ctl	restart		true											
+action	update_server					ctl	update													
+action	force_update_server					ctl	force-update			true										
+action	view_passwords					ctl	password-view													
+action	backup_now					request				true	backup	backup.json	1200	{"mode":"manual","includeSavegame":true,"includeEnshroudedConfig":true,"includeManagerConfig":true,"cleanup":false}						
+action	open_other_commands					internal		menu_load_screen							["otherCommands","Other ctl Commands"]					
+action	status					ctl	status													
+action	scheduled_restart					ctl	scheduled-restart													
+action	bootstrap					ctl	bootstrap													
+action	cron_start					ctl	cron-start													
+action	cron_stop					ctl	cron-stop													
+action	cron_restart					ctl	cron-restart													
+screen		main	1	Enshrouded Server Settings	enshrouded_settings															1
+screen		main	2	Server Manager Settings	manager_settings															2
+screen		main	3	Backup Menu	backups_menu															3
+screen		main	4	Start Server	start_server															4
+screen		main	5	Stop Server	stop_server															5
+screen		main	6	Restart Server	restart_server															6
+screen		main	7	Update Server	update_server															7
+screen		main	8	Force Update Server	force_update_server															8
+screen		main	9	View Passwords	view_passwords															9
+screen		main	10	Create Manual Backup (.zip)	backup_now															10
+screen		main	11	Other ctl Commands	open_other_commands															11
+screen		otherCommands	1	Status	status															1
+screen		otherCommands	2	Scheduled Restart	scheduled_restart															2
+screen		otherCommands	3	Bootstrap	bootstrap															3
+screen		otherCommands	4	Cron Start	cron_start															4
+screen		otherCommands	5	Cron Stop	cron_stop															5
+screen		otherCommands	6	Cron Restart	cron_restart															6
+editor_env		managerJsonPath														PUID	Core		.puid	1
+editor_env		managerJsonPath														PGID	Core		.pgid	2
+editor_env		managerJsonPath														LOG_COLOR	Core		.logColor	3
+editor_env		managerJsonPath														SAVEFILE_NAME	Core		.savefileName	4
+editor_env		managerJsonPath														STEAM_APP_ID	Steam		.steamAppId	5
+editor_env		managerJsonPath														GAME_BRANCH	Steam		.gameBranch	6
+editor_env		managerJsonPath														STEAMCMD_ARGS	Steam		.steamcmdArgs	7
+editor_env		managerJsonPath														WINEDEBUG	Steam		.winedebug	8
+editor_env		managerJsonPath														UPDATE_CHECK_PLAYERS	Update		.updateCheckPlayers	9
+editor_env		managerJsonPath														UPDATE_CRON	Update		.updateCron	10
+editor_env		managerJsonPath														UPDATE_PRE_HOOK	Update		.updatePreHook	11
+editor_env		managerJsonPath														UPDATE_POST_HOOK	Update		.updatePostHook	12
+editor_env		managerJsonPath														RESTART_CHECK_PLAYERS	Restart		.restartCheckPlayers	13
+editor_env		managerJsonPath														RESTART_CRON	Restart		.restartCron	14
+editor_env		managerJsonPath														RESTART_PRE_HOOK	Restart		.restartPreHook	15
+editor_env		managerJsonPath														RESTART_POST_HOOK	Restart		.restartPostHook	16
+editor_env		managerJsonPath														BACKUP_DIR	Backup		.backupDir	17
+editor_env		managerJsonPath														BACKUP_MAX_COUNT	Backup		.backupMaxCount	18
+editor_env		managerJsonPath														BACKUP_CRON	Backup		.backupCron	19
+editor_env		managerJsonPath														BACKUP_PRE_HOOK	Backup		.backupPreHook	20
+editor_env		managerJsonPath														BACKUP_POST_HOOK	Backup		.backupPostHook	21
+editor_env		managerJsonPath														BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG	Backup		.backupScheduledIncludeEnshroudedConfig	22
+editor_env		managerJsonPath														BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG	Backup		.backupScheduledIncludeServerManagerConfig	23
+editor_env		managerJsonPath														BOOTSTRAP_HOOK	Hooks		.bootstrapHook	24
+editor_env		managerJsonPath														RESTORE_PRE_HOOK	Hooks		.restorePreHook	25
+editor_env		managerJsonPath														RESTORE_POST_HOOK	Hooks		.restorePostHook	26
+editor_env		managerJsonPath														PROFILE_PRE_HOOK	Hooks		.profilePreHook	27
+editor_env		managerJsonPath														PROFILE_POST_HOOK	Hooks		.profilePostHook	28
+editor_env		managerJsonPath														BOOTSTRAP_PRE_HOOK	Hooks		.bootstrapPreHook	29
+editor_env		managerJsonPath														BOOTSTRAP_POST_HOOK	Hooks		.bootstrapPostHook	30
+editor_env		managerJsonPath														SERVER_PRE_HOOK	Hooks		.serverPreHook	31
+editor_env		managerJsonPath														SERVER_POST_HOOK	Hooks		.serverPostHook	32
+editor_env		managerJsonPath														CTL_PRE_HOOK	Hooks		.ctlPreHook	33
+editor_env		managerJsonPath														CTL_POST_HOOK	Hooks		.ctlPostHook	34
+editor_env		managerJsonPath														MENU_PRE_HOOK	Hooks		.menuPreHook	35
+editor_env		managerJsonPath														MENU_POST_HOOK	Hooks		.menuPostHook	36
+editor_env		managerJsonPath														PASSWORD_VIEW_PRE_HOOK	Hooks		.passwordViewPreHook	37
+editor_env		managerJsonPath														PASSWORD_VIEW_POST_HOOK	Hooks		.passwordViewPostHook	38
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_NAME	Server		.name	1
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_IP	Server		.ip	2
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_QUERY_PORT	Server		.queryPort	3
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_SLOT_COUNT	Server		.slotCount	4
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_SAVE_DIR	Server		.saveDirectory	5
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_LOG_DIR	Server		.logDirectory	6
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_TAGS	Server		.tags	7
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_VOICE_CHAT_MODE	Voice / Text		.voiceChatMode	8
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_ENABLE_VOICE_CHAT	Voice / Text		.enableVoiceChat	9
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_ENABLE_TEXT_CHAT	Voice / Text		.enableTextChat	10
+editor_env		enshroudedMenuJsonPath														ENSHROUDED_GS_PRESET	Game		.gameSettingsPreset	11
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PLAYER_HEALTH_FACTOR	Player		.gameSettings.playerHealthFactor	1
+editor_env		enshroudedJsonPath														ENSHROUDED_NAME	Server		.name	2
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PLAYER_MANA_FACTOR	Player		.gameSettings.playerManaFactor	3
+editor_env		enshroudedJsonPath														ENSHROUDED_IP	Server		.ip	4
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PLAYER_STAMINA_FACTOR	Player		.gameSettings.playerStaminaFactor	5
+editor_env		enshroudedJsonPath														ENSHROUDED_QUERY_PORT	Server		.queryPort	6
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PLAYER_BODY_HEAT_FACTOR	Player		.gameSettings.playerBodyHeatFactor	7
+editor_env		enshroudedJsonPath														ENSHROUDED_SLOT_COUNT	Server		.slotCount	8
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PLAYER_DIVING_TIME_FACTOR	Player		.gameSettings.playerDivingTimeFactor	9
+editor_env		enshroudedJsonPath														ENSHROUDED_SAVE_DIR	Server		.saveDirectory	10
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_ENABLE_DURABILITY	Survival / World		.gameSettings.enableDurability	11
+editor_env		enshroudedJsonPath														ENSHROUDED_LOG_DIR	Server		.logDirectory	12
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_ENABLE_STARVING_DEBUFF	Survival / World		.gameSettings.enableStarvingDebuff	13
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_FOOD_BUFF_DURATION_FACTOR	Survival / World		.gameSettings.foodBuffDurationFactor	14
+editor_env		enshroudedJsonPath														ENSHROUDED_VOICE_CHAT_MODE	Voice / Text		.voiceChatMode	15
+editor_env		enshroudedJsonPath														ENSHROUDED_ENABLE_VOICE_CHAT	Voice / Text		.enableVoiceChat	16
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_FROM_HUNGER_TO_STARVING	Survival / World		.gameSettings.fromHungerToStarving	17
+editor_env		enshroudedJsonPath														ENSHROUDED_ENABLE_TEXT_CHAT	Voice / Text		.enableTextChat	18
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_SHROUD_TIME_FACTOR	Survival / World		.gameSettings.shroudTimeFactor	19
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PRESET	Game		.gameSettingsPreset	20
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_TOMBSTONE_MODE	Survival / World		.gameSettings.tombstoneMode	21
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_ENABLE_GLIDER_TURBULENCES	Survival / World		.gameSettings.enableGliderTurbulences	22
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_WEATHER_FREQUENCY	Survival / World		.gameSettings.weatherFrequency	23
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_FISHING_DIFFICULTY	Survival / World		.gameSettings.fishingDifficulty	24
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_MINING_DAMAGE_FACTOR	Economy / Progress		.gameSettings.miningDamageFactor	25
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PLANT_GROWTH_SPEED_FACTOR	Economy / Progress		.gameSettings.plantGrowthSpeedFactor	26
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_RESOURCE_DROP_STACK_AMOUNT_FACTOR	Economy / Progress		.gameSettings.resourceDropStackAmountFactor	27
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_FACTORY_PRODUCTION_SPEED_FACTOR	Economy / Progress		.gameSettings.factoryProductionSpeedFactor	28
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PERK_UPGRADE_RECYCLING_FACTOR	Economy / Progress		.gameSettings.perkUpgradeRecyclingFactor	29
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PERK_COST_FACTOR	Economy / Progress		.gameSettings.perkCostFactor	30
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_EXPERIENCE_COMBAT_FACTOR	Economy / Progress		.gameSettings.experienceCombatFactor	31
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_EXPERIENCE_MINING_FACTOR	Economy / Progress		.gameSettings.experienceMiningFactor	32
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR	Economy / Progress		.gameSettings.experienceExplorationQuestsFactor	33
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_RANDOM_SPAWNER_AMOUNT	Enemies		.gameSettings.randomSpawnerAmount	34
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_AGGRO_POOL_AMOUNT	Enemies		.gameSettings.aggroPoolAmount	35
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_ENEMY_DAMAGE_FACTOR	Enemies		.gameSettings.enemyDamageFactor	36
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_ENEMY_HEALTH_FACTOR	Enemies		.gameSettings.enemyHealthFactor	37
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_ENEMY_STAMINA_FACTOR	Enemies		.gameSettings.enemyStaminaFactor	38
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_ENEMY_PERCEPTION_RANGE_FACTOR	Enemies		.gameSettings.enemyPerceptionRangeFactor	39
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_BOSS_DAMAGE_FACTOR	Enemies		.gameSettings.bossDamageFactor	40
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_BOSS_HEALTH_FACTOR	Enemies		.gameSettings.bossHealthFactor	41
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_THREAT_BONUS	Enemies		.gameSettings.threatBonus	42
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_PACIFY_ALL_ENEMIES	Enemies		.gameSettings.pacifyAllEnemies	43
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_TAMING_STARTLE_REPERCUSSION	Enemies		.gameSettings.tamingStartleRepercussion	44
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_DAY_TIME_DURATION	Time		.gameSettings.dayTimeDuration	45
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_NIGHT_TIME_DURATION	Time		.gameSettings.nightTimeDuration	46
+editor_env		enshroudedJsonPath														ENSHROUDED_GS_CURSE_MODIFIER	Advanced		.gameSettings.curseModifier	47
+editor_template		ENSHROUDED_ROLE															Basics	NAME		1
+editor_template		ENSHROUDED_ROLE															Basics	PASSWORD		2
+editor_template		ENSHROUDED_ROLE															Basics	RESERVED_SLOTS		3
+editor_template		ENSHROUDED_ROLE															Permissions	CAN_KICK_BAN		4
+editor_template		ENSHROUDED_ROLE															Permissions	CAN_ACCESS_INVENTORIES		5
+editor_template		ENSHROUDED_ROLE															Permissions	CAN_EDIT_WORLD		6
+editor_template		ENSHROUDED_ROLE															Permissions	CAN_EDIT_BASE		7
+editor_template		ENSHROUDED_ROLE															Permissions	CAN_EXTEND_BASE		8

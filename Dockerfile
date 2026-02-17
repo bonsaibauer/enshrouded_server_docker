@@ -73,6 +73,7 @@ RUN ln -sf /usr/local/etc/enshrouded/jobs/ctl /usr/local/bin/ctl \
     && ln -sf /usr/local/etc/enshrouded/jobs/ctl /usr/local/bin/restore-backup \
     && ln -sf /usr/local/etc/enshrouded/jobs/ctl /usr/local/bin/profile \
     && ln -sf /usr/local/etc/enshrouded/jobs/ctl /usr/local/bin/password-view \
+    && ln -sf /usr/local/etc/enshrouded/jobs/ctl /usr/local/bin/env-validation \
     && ln -sf /usr/local/etc/enshrouded/jobs/ctl /usr/local/bin/scheduled-restart \
     && ln -sf /usr/local/etc/enshrouded/jobs/ctl /usr/local/bin/force-update \
     && ln -sf /usr/local/etc/enshrouded/jobs/ctl /usr/local/bin/bootstrap \
