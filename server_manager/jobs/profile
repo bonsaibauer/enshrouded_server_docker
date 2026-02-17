@@ -15,17 +15,15 @@ MANAGER_PROFILE_DEFAULT="default"
 
 log_level="${LOG_LEVEL:-40}"
 
-debug() { [[ "$log_level" -ge 50 ]] && echo "DEBUG - $*" || true; }
 info() { [[ "$log_level" -ge 40 ]] && echo "INFO - $*" || true; }
 warn() { [[ "$log_level" -ge 30 ]] && echo "WARN - $*" || true; }
-error() { [[ "$log_level" -ge 20 ]] && echo "ERROR - $*" >&2 || true; }
 fatal() { echo "FATAL - $*" >&2; exit 1; }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fatal "Missing required command: $1"
 }
 
-checkRunning() {
+is_supervisor_running() {
   local proc status
   proc="$1"
   status="$(supervisorctl status "${proc}" 2>&1 || true)"
@@ -58,7 +56,6 @@ profiles_ensure_schema() {
     | .EN_PROFILE = (if (.EN_PROFILE == null or .EN_PROFILE == "") then $edef else .EN_PROFILE end)
     | .actualProfilManager = (if (.actualProfilManager == null or .actualProfilManager == "") then $mdef else .actualProfilManager end)
     | .actualProfilEnshrouded = (if (.actualProfilEnshrouded == null or .actualProfilEnshrouded == "") then $edef else .actualProfilEnshrouded end)
-    | del(.profiles)
   ' "$file" >"$tmp" || {
     rm -f "$tmp"
     return 0
@@ -107,7 +104,7 @@ profiles_config_set() {
 
   [[ -n "$value" ]] || value="$def"
   tmp="$(mktemp)"
-  jq --arg key "$json_key" --arg value "$value" '.[$key] = $value | del(.profiles)' "$file" >"$tmp" || {
+  jq --arg key "$json_key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp" || {
     rm -f "$tmp"
     return 1
   }
@@ -135,7 +132,7 @@ profiles_env_set_if_missing() {
   [[ -n "$value" ]] || return 0
 
   tmp="$(mktemp)"
-  jq --arg key "$key" --arg value "$value" '.[$key] = $value | del(.profiles)' "$file" >"$tmp" || {
+  jq --arg key "$key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp" || {
     rm -f "$tmp"
     return 0
   }
@@ -289,7 +286,7 @@ ensure_enshrouded_profile_file() {
   info "Enshrouded profile created: $profile_file"
 }
 
-generatePassword() {
+generate_password() {
   if [ -r /dev/urandom ]; then
     local out=""
     while [ "${#out}" -lt 12 ]; do
@@ -301,7 +298,7 @@ generatePassword() {
   date +%s%N | sha256sum | cut -c1-12
 }
 
-ensureUserGroupPasswords() {
+ensure_user_group_passwords() {
   local count idx env_var current_password new_password cfg
   cfg="${install_path}/enshrouded_server.json"
 
@@ -325,7 +322,7 @@ ensureUserGroupPasswords() {
       continue
     fi
 
-    new_password="$(generatePassword)"
+    new_password="$(generate_password)"
     [[ -n "$new_password" ]] || continue
 
     local tmp
@@ -421,44 +418,68 @@ create_config_backup() {
   rm -rf "$tmp_dir" 2>/dev/null || true
 }
 
-request_dir="${MANAGER_DATA_DIR}/requests"
-request_file="${request_dir}/profile.json"
-run_file=""
-fail_file=""
-request_claimed="false"
-finished="false"
-
 target=""
 action=""
 profile_name=""
 create_backup="true"
 
-to_bool() {
-  local normalized
-  normalized="$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)"
-  case "$normalized" in
-    "") echo "" ;;
-    1|true|yes|y|on) echo "true" ;;
-    0|false|no|n|off) echo "false" ;;
-    *) echo "" ;;
-  esac
+usage() {
+  cat <<'EOF'
+Usage:
+  profile --target <manager|enshrouded> --action <apply|reset> [--profile <name>] [--create-backup|--no-create-backup]
+EOF
 }
 
-cleanup_on_exit() {
-  local rc
-  rc=$?
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --target)
+        target="${2-}"
+        [[ -n "$target" ]] || fatal "Missing value for --target"
+        shift 2
+        ;;
+      --action)
+        action="${2-}"
+        [[ -n "$action" ]] || fatal "Missing value for --action"
+        shift 2
+        ;;
+      --profile)
+        profile_name="${2-}"
+        [[ -n "$profile_name" ]] || fatal "Missing value for --profile"
+        shift 2
+        ;;
+      --create-backup)
+        create_backup="true"
+        shift
+        ;;
+      --no-create-backup)
+        create_backup="false"
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
 
-  if [[ "$request_claimed" == "true" ]]; then
-    if [[ "$rc" -eq 0 && "$finished" == "true" ]]; then
-      rm -f "$run_file" 2>/dev/null || true
-    else
-      mv -f "$run_file" "$fail_file" 2>/dev/null || true
-    fi
+  case "$target" in
+    manager|enshrouded) ;;
+    *) fatal "Invalid --target value (expected manager|enshrouded): ${target:-<empty>}" ;;
+  esac
+
+  case "$action" in
+    apply|reset) ;;
+    *) fatal "Invalid --action value (expected apply|reset): ${action:-<empty>}" ;;
+  esac
+
+  if [[ "$action" == "apply" && -z "$profile_name" ]]; then
+    fatal "Missing --profile for action=apply"
   fi
 }
-
-trap cleanup_on_exit EXIT
-trap 'exit 1' SIGINT SIGTERM
 
 run_profile_hook() {
   local hook_name hook_cmd
@@ -474,7 +495,7 @@ run_profile_hook() {
 stop_server_now() {
   local deadline now
 
-  if ! checkRunning "server"; then
+  if ! is_supervisor_running "server"; then
     return 0
   fi
 
@@ -482,60 +503,13 @@ stop_server_now() {
   supervisorctl stop server >/dev/null 2>&1 || true
 
   deadline=$(( $(date +%s) + 90 ))
-  while checkRunning "server"; do
+  while is_supervisor_running "server"; do
     now="$(date +%s)"
     if [[ "$now" -ge "$deadline" ]]; then
       fatal "Timeout while stopping server"
     fi
     sleep 1
   done
-}
-
-claim_request() {
-  local ts
-  mkdir -p "$request_dir" 2>/dev/null || true
-
-  if [[ ! -f "$request_file" ]]; then
-    fatal "Missing request file: $request_file"
-  fi
-  if ! jq -e 'type == "object"' "$request_file" >/dev/null 2>&1; then
-    fatal "Invalid request JSON: $request_file"
-  fi
-
-  ts="$(date +%Y-%m-%d_%H-%M-%S)"
-  run_file="${request_dir}/.profile.${ts}.$$"
-  fail_file="${request_dir}/failed_profile.${ts}.$$.json"
-  if ! mv -f "$request_file" "$run_file" 2>/dev/null; then
-    fatal "Failed to claim request file: $request_file"
-  fi
-  request_claimed="true"
-}
-
-parse_request() {
-  local create_backup_raw
-  target="$(jq -r '.target // empty' "$run_file" 2>/dev/null || true)"
-  action="$(jq -r '.action // empty' "$run_file" 2>/dev/null || true)"
-  profile_name="$(jq -r '.profile // empty' "$run_file" 2>/dev/null || true)"
-  create_backup_raw="$(jq -r 'if has("createBackup") then (.createBackup | tostring) else empty end' "$run_file" 2>/dev/null || true)"
-
-  case "$target" in
-    manager|enshrouded) ;;
-    *) fatal "Invalid request target (expected manager|enshrouded): $target" ;;
-  esac
-
-  case "$action" in
-    apply|reset) ;;
-    *) fatal "Invalid request action (expected apply|reset): $action" ;;
-  esac
-
-  if [[ "$action" == "apply" && -z "$profile_name" ]]; then
-    fatal "Request missing profile for action=apply"
-  fi
-
-  if [[ -n "$create_backup_raw" ]]; then
-    create_backup="$(to_bool "$create_backup_raw")"
-    [[ -n "$create_backup" ]] || fatal "Invalid createBackup value: $create_backup_raw"
-  fi
 }
 
 apply_manager_profile() {
@@ -628,7 +602,7 @@ apply_enshrouded_profile() {
   chmod 600 "$config_file" 2>/dev/null || true
   chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
 
-  ensureUserGroupPasswords || true
+  ensure_user_group_passwords || true
   profiles_ensure_schema || true
   profiles_config_set "enshrouded" "$profile" || true
 
@@ -644,9 +618,8 @@ load_runtime_values() {
 }
 
 main() {
+  parse_args "$@"
   load_runtime_values
-  claim_request
-  parse_request
 
   if [[ -z "$profile_name" ]]; then
     if [[ "$target" == "manager" ]]; then
@@ -669,7 +642,6 @@ main() {
   fi
 
   run_profile_hook "profile post" "${PROFILE_POST_HOOK:-}"
-  finished="true"
 }
 
 main "$@"

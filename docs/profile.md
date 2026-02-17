@@ -43,14 +43,14 @@ Naming rules:
 1. Copy `server_manager/profiles/enshrouded/default_enshrouded_server.json` to `server_manager/profiles/enshrouded/<name>_enshrouded_server.json`
 2. Edit the JSON (must stay valid JSON)
 3. Put the file into the volume catalog: `/home/enshrouded/server/profiles/enshrouded/` (or rebuild the image to ship it)
-4. Select it with `EN_PROFILE=<name>` or via `ctl menu`
+4. Select it with `EN_PROFILE=<name>` or via `cmd menu`
 
 ### Server Manager Profile
 
 1. Copy `server_manager/profiles/manager/default_server_manager.json` to `server_manager/profiles/manager/<name>_server_manager.json`
 2. Edit the JSON (see `docs/environment.md` for variable meanings)
 3. Put the file into the volume catalog: `/home/enshrouded/server/profiles/manager/` (or rebuild the image to ship it)
-4. Select it with `MANAGER_PROFILE=<name>` or via `ctl menu`
+4. Select it with `MANAGER_PROFILE=<name>` or via `cmd menu`
 
 When selected, the Server Manager template is copied into the persistent profile store at:
 
@@ -63,7 +63,7 @@ When selected, the Server Manager template is copied into the persistent profile
 
 If a profile name is missing/invalid, it falls back to `default`.
 
-### Persisted Selection (via `ctl menu`)
+### Persisted Selection (via `cmd menu`)
 
 Profile selection is stored directly in the Server Manager config file:
 
@@ -81,8 +81,8 @@ The initial ENV selectors are captured once for transparency:
 
 Profile reset/apply is now handled by the unified `profile` job (request-driven):
 
-- Interactive way (recommended): use `ctl menu` and choose profile reset/apply flows.
-- CLI way: write `server_manager/requests/profile.json` and trigger `ctl profile`.
+- Interactive way (recommended): use `cmd menu` and choose profile reset/apply flows.
+- CLI way: write `server_manager/requests/profile.json` and trigger `cmd profile`.
 
 The job will:
 

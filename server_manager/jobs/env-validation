@@ -1160,7 +1160,6 @@ profiles_ensure_schema() {
     | .EN_PROFILE = (if (.EN_PROFILE == null or .EN_PROFILE == "") then $edef else .EN_PROFILE end)
     | .actualProfilManager = (if (.actualProfilManager == null or .actualProfilManager == "") then $mdef else .actualProfilManager end)
     | .actualProfilEnshrouded = (if (.actualProfilEnshrouded == null or .actualProfilEnshrouded == "") then $edef else .actualProfilEnshrouded end)
-    | del(.profiles)
   ' "$file" >"$tmp" || {
     rm -f "$tmp"
     return 0
@@ -1250,7 +1249,7 @@ profiles_config_set() {
     value="$def"
   fi
 
-  jq --arg key "$json_key" --arg value "$value" '.[$key] = $value | del(.profiles)' "$file" >"$tmp" || {
+  jq --arg key "$json_key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp" || {
     rm -f "$tmp"
     return 1
   }
@@ -1292,7 +1291,7 @@ profiles_env_set_if_missing() {
   fi
 
   tmp="$(mktemp)"
-  jq --arg key "$key" --arg value "$value" '.[$key] = $value | del(.profiles)' "$file" >"$tmp" || {
+  jq --arg key "$key" --arg value "$value" '.[$key] = $value' "$file" >"$tmp" || {
     rm -f "$tmp"
     return 0
   }
@@ -1791,7 +1790,7 @@ update_or_create_manager_config() {
     created_config="true"
   fi
 
-  # Ensure profile selection keys exist (and drop legacy .profiles if present).
+  # Ensure profile selection keys exist.
   profiles_ensure_schema || true
 
   while IFS= read -r var; do
@@ -1850,7 +1849,7 @@ load_enshrouded_env_from_profile() {
   config_file="${install_path}/enshrouded_server.json"
 
   # Prefer existing runtime config as the source of truth for runtime defaults.
-  # This keeps manual edits (e.g. via ctl menu) consistent across restarts.
+  # This keeps manual edits (e.g. via cmd menu) consistent across restarts.
   if command -v jq >/dev/null 2>&1 && [[ -f "$config_file" ]] && jq -e '.' "$config_file" >/dev/null 2>&1; then
     local var path candidate
     while IFS= read -r var; do
@@ -2037,8 +2036,75 @@ verify_variables() {
   validate_unknown_game_settings_env_values
 }
 
+usage() {
+  cat <<'EOF'
+Usage:
+  env-validation [--verify]
+  env-validation --init-runtime
+  env-validation --var <name> --value <value>
+EOF
+}
+
+main() {
+  local mode var_name var_value
+  mode="verify"
+  var_name=""
+  var_value=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --verify)
+        mode="verify"
+        shift
+        ;;
+      --init-runtime)
+        mode="init-runtime"
+        shift
+        ;;
+      --var)
+        var_name="${2-}"
+        [[ -n "$var_name" ]] || fatal "Missing value for --var"
+        mode="single"
+        shift 2
+        ;;
+      --value)
+        var_value="${2-}"
+        [[ $# -ge 2 ]] || fatal "Missing value for --value"
+        shift 2
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+
+  case "$mode" in
+    verify)
+      verify_variables
+      info "ENV validation complete"
+      ;;
+    init-runtime)
+      init_runtime_env
+      info "Runtime initialization complete"
+      ;;
+    single)
+      [[ -n "$var_name" ]] || fatal "Missing --var for single validation mode"
+      if validation_check "$var_name" "$var_value"; then
+        info "$var_name is valid"
+      else
+        case "$?" in
+          1) fatal "$VALIDATION_LAST_ERROR" ;;
+          *) fatal "Validation unavailable: $VALIDATION_LAST_ERROR" ;;
+        esac
+      fi
+      ;;
+  esac
+}
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-  verify_variables
-  info "ENV validation complete"
+  main "$@"
 fi

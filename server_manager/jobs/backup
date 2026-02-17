@@ -8,17 +8,15 @@ enshrouded_backup_pidfile="${ENSHROUDED_BACKUP_PIDFILE:-/var/run/enshrouded/back
 
 log_level="${LOG_LEVEL:-40}"
 
-debug() { [[ "$log_level" -ge 50 ]] && echo "DEBUG - $*" || true; }
 info() { [[ "$log_level" -ge 40 ]] && echo "INFO - $*" || true; }
 warn() { [[ "$log_level" -ge 30 ]] && echo "WARN - $*" || true; }
-error() { [[ "$log_level" -ge 20 ]] && echo "ERROR - $*" >&2 || true; }
 fatal() { echo "FATAL - $*" >&2; exit 1; }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fatal "Missing required command: $1"
 }
 
-manager_get() {
+manager_get_text() {
   local path
   path="$1"
   if [[ ! -f "$manager_config_file" ]]; then
@@ -28,7 +26,7 @@ manager_get() {
   jq -r "$path | if . == null then empty else tostring end" "$manager_config_file" 2>/dev/null || true
 }
 
-enshrouded_get() {
+enshrouded_get_text() {
   local path
   path="$1"
   if [[ ! -f "$enshrouded_config_file" ]]; then
@@ -50,7 +48,7 @@ resolve_from_env_or_manager() {
     return 0
   fi
 
-  cfg_value="$(manager_get "$path")"
+  cfg_value="$(manager_get_text "$path")"
   if [[ -n "$cfg_value" ]]; then
     printf "%s" "$cfg_value"
     return 0
@@ -72,7 +70,7 @@ load_runtime_values() {
   BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG="$(resolve_from_env_or_manager "BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG" ".backupScheduledIncludeEnshroudedConfig" "true")"
   BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG="$(resolve_from_env_or_manager "BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG" ".backupScheduledIncludeServerManagerConfig" "true")"
 
-  ENSHROUDED_SAVE_DIR="${ENSHROUDED_SAVE_DIR:-$(enshrouded_get ".saveDirectory")}"
+  ENSHROUDED_SAVE_DIR="${ENSHROUDED_SAVE_DIR:-$(enshrouded_get_text ".saveDirectory")}"
   if [[ -z "$ENSHROUDED_SAVE_DIR" ]]; then
     ENSHROUDED_SAVE_DIR="./savegame"
   fi
@@ -93,20 +91,12 @@ backup_dir_resolve() {
 }
 
 pidfile="$enshrouded_backup_pidfile"
-request_dir="${MANAGER_DATA_DIR}/requests"
-request_file="${request_dir}/backup.json"
 
 mode="scheduled"
 include_savegame=""
 include_enshrouded_config=""
 include_manager_config=""
 run_cleanup=""
-ignore_request="false"
-
-request_claimed="false"
-run_file=""
-fail_file=""
-finished="false"
 stage_dir=""
 backup_file=""
 
@@ -134,19 +124,8 @@ normalize_bool_with_default() {
 }
 
 cleanup_on_exit() {
-  local rc
-  rc=$?
-
   rm -f "$pidfile" 2>/dev/null || true
   [[ -n "$stage_dir" ]] && rm -rf "$stage_dir" 2>/dev/null || true
-
-  if [[ "$request_claimed" == "true" ]]; then
-    if [[ "$rc" -eq 0 && "$finished" == "true" ]]; then
-      rm -f "$run_file" 2>/dev/null || true
-    else
-      mv -f "$run_file" "$fail_file" 2>/dev/null || true
-    fi
-  fi
 }
 
 trap cleanup_on_exit EXIT
@@ -155,10 +134,10 @@ trap 'exit 1' SIGINT SIGTERM
 usage() {
   cat <<'EOF'
 Usage:
-  backup [--mode scheduled|manual] [--ignore-request]
-         [--include-savegame true|false]
-         [--include-enshrouded-config true|false]
-         [--include-manager-config true|false]
+  backup [--mode scheduled|manual]
+         [--with-savegame|--without-savegame]
+         [--with-enshrouded-config|--without-enshrouded-config]
+         [--with-manager-config|--without-manager-config]
          [--cleanup|--no-cleanup]
 EOF
 }
@@ -168,19 +147,32 @@ parse_args() {
     case "$1" in
       --mode)
         mode="${2-}"
+        [[ -n "$mode" ]] || fatal "Missing value for --mode"
         shift 2
         ;;
-      --include-savegame)
-        include_savegame="${2-}"
-        shift 2
+      --with-savegame)
+        include_savegame="true"
+        shift
         ;;
-      --include-enshrouded-config)
-        include_enshrouded_config="${2-}"
-        shift 2
+      --without-savegame)
+        include_savegame="false"
+        shift
         ;;
-      --include-manager-config)
-        include_manager_config="${2-}"
-        shift 2
+      --with-enshrouded-config)
+        include_enshrouded_config="true"
+        shift
+        ;;
+      --without-enshrouded-config)
+        include_enshrouded_config="false"
+        shift
+        ;;
+      --with-manager-config)
+        include_manager_config="true"
+        shift
+        ;;
+      --without-manager-config)
+        include_manager_config="false"
+        shift
         ;;
       --cleanup)
         run_cleanup="true"
@@ -188,10 +180,6 @@ parse_args() {
         ;;
       --no-cleanup)
         run_cleanup="false"
-        shift
-        ;;
-      --ignore-request)
-        ignore_request="true"
         shift
         ;;
       --help|-h)
@@ -216,58 +204,6 @@ acquire_lock() {
     rm -f "$pidfile" 2>/dev/null || true
   fi
   echo "$$" >"$pidfile" || fatal "Failed to create PID file: $pidfile"
-}
-
-claim_request_if_present() {
-  local ts
-
-  if [[ "$ignore_request" == "true" ]]; then
-    return 0
-  fi
-
-  mkdir -p "$request_dir" 2>/dev/null || true
-  if [[ ! -f "$request_file" ]]; then
-    return 0
-  fi
-  if ! jq -e 'type == "object"' "$request_file" >/dev/null 2>&1; then
-    fatal "Invalid request JSON: $request_file"
-  fi
-
-  ts="$(date +%Y-%m-%d_%H-%M-%S)"
-  run_file="${request_dir}/.backup.${ts}.$$"
-  fail_file="${request_dir}/failed_backup.${ts}.$$.json"
-  if ! mv -f "$request_file" "$run_file" 2>/dev/null; then
-    fatal "Failed to claim request file: $request_file"
-  fi
-  request_claimed="true"
-}
-
-read_request_field() {
-  local field
-  field="$1"
-  jq -r --arg field "$field" 'if has($field) then (.[$field] | tostring) else empty end' "$run_file" 2>/dev/null || true
-}
-
-apply_request_overrides() {
-  local value
-  if [[ "$request_claimed" != "true" ]]; then
-    return 0
-  fi
-
-  value="$(read_request_field "mode")"
-  [[ -n "$value" ]] && mode="$value"
-
-  value="$(read_request_field "includeSavegame")"
-  [[ -n "$value" ]] && include_savegame="$value"
-
-  value="$(read_request_field "includeEnshroudedConfig")"
-  [[ -n "$value" ]] && include_enshrouded_config="$value"
-
-  value="$(read_request_field "includeManagerConfig")"
-  [[ -n "$value" ]] && include_manager_config="$value"
-
-  value="$(read_request_field "cleanup")"
-  [[ -n "$value" ]] && run_cleanup="$value"
 }
 
 save_dir_resolve() {
@@ -455,8 +391,6 @@ main() {
   parse_args "$@"
   load_runtime_values
   acquire_lock
-  claim_request_if_present
-  apply_request_overrides
   resolve_mode_defaults
 
   export BACKUP_MODE="$mode"
@@ -470,7 +404,6 @@ main() {
   run_backup_hook "backup post" "${BACKUP_POST_HOOK:-}"
 
   info "Backup complete: $backup_file"
-  finished="true"
 }
 
 main "$@"

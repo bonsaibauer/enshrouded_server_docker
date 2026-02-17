@@ -2,20 +2,20 @@ section	id	parent	key	title	action	type	cmd	fn	requiresRunning	confirm	program	r
 action	enshrouded_settings					internal		menu_enshrouded_settings												
 action	manager_settings					internal		menu_manager_settings												
 action	backups_menu					internal		menu_backups_menu												
-action	start_server					ctl	start													
-action	stop_server					ctl	stop		true											
-action	restart_server					ctl	restart		true											
-action	update_server					ctl	update													
-action	force_update_server					ctl	force-update			true										
-action	view_passwords					ctl	password-view													
-action	backup_now					request				true	backup	backup.json	1200	{"mode":"manual","includeSavegame":true,"includeEnshroudedConfig":true,"includeManagerConfig":true,"cleanup":false}						
-action	open_other_commands					internal		menu_load_screen							["otherCommands","Other ctl Commands"]					
-action	status					ctl	status													
-action	scheduled_restart					ctl	scheduled-restart													
-action	bootstrap					ctl	bootstrap													
-action	cron_start					ctl	cron-start													
-action	cron_stop					ctl	cron-stop													
-action	cron_restart					ctl	cron-restart													
+action	start_server					cmd	start													
+action	stop_server					cmd	stop		true											
+action	restart_server					cmd	restart		true											
+action	update_server					cmd	update													
+action	force_update_server					cmd	force-update			true										
+action	view_passwords					cmd	password-view													
+action	backup_now					cmd	backup		true						["--mode","manual","--with-savegame","--with-enshrouded-config","--with-manager-config","--no-cleanup"]					
+action	open_other_commands					internal		menu_load_screen							["otherCommands","Other Commands"]					
+action	status					cmd	status													
+action	scheduled_restart					cmd	scheduled-restart													
+action	bootstrap					cmd	bootstrap													
+action	cron_start					cmd	cron-start													
+action	cron_stop					cmd	cron-stop													
+action	cron_restart					cmd	cron-restart													
 screen		main	1	Enshrouded Server Settings	enshrouded_settings															1
 screen		main	2	Server Manager Settings	manager_settings															2
 screen		main	3	Backup Menu	backups_menu															3
@@ -26,7 +26,7 @@ screen		main	7	Update Server	update_server															7
 screen		main	8	Force Update Server	force_update_server															8
 screen		main	9	View Passwords	view_passwords															9
 screen		main	10	Create Manual Backup (.zip)	backup_now															10
-screen		main	11	Other ctl Commands	open_other_commands															11
+screen		main	11	Other Commands	open_other_commands															11
 screen		otherCommands	1	Status	status															1
 screen		otherCommands	2	Scheduled Restart	scheduled_restart															2
 screen		otherCommands	3	Bootstrap	bootstrap															3
@@ -65,8 +65,8 @@ editor_env		managerJsonPath														BOOTSTRAP_PRE_HOOK	Hooks		.bootstrapPre
 editor_env		managerJsonPath														BOOTSTRAP_POST_HOOK	Hooks		.bootstrapPostHook	30
 editor_env		managerJsonPath														SERVER_PRE_HOOK	Hooks		.serverPreHook	31
 editor_env		managerJsonPath														SERVER_POST_HOOK	Hooks		.serverPostHook	32
-editor_env		managerJsonPath														CTL_PRE_HOOK	Hooks		.ctlPreHook	33
-editor_env		managerJsonPath														CTL_POST_HOOK	Hooks		.ctlPostHook	34
+editor_env		managerJsonPath														CMD_PRE_HOOK	Hooks		.cmdPreHook	33
+editor_env		managerJsonPath														CMD_POST_HOOK	Hooks		.cmdPostHook	34
 editor_env		managerJsonPath														MENU_PRE_HOOK	Hooks		.menuPreHook	35
 editor_env		managerJsonPath														MENU_POST_HOOK	Hooks		.menuPostHook	36
 editor_env		managerJsonPath														PASSWORD_VIEW_PRE_HOOK	Hooks		.passwordViewPreHook	37

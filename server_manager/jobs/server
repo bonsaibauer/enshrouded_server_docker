@@ -1,27 +1,49 @@
 #!/bin/bash
-resolve_script_dir() {
-  local src dir
-  src="${BASH_SOURCE[0]}"
-  while [[ -h "$src" ]]; do
-    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
-    src="$(readlink "$src")"
-    [[ "$src" != /* ]] && src="$dir/$src"
-  done
-  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
-}
-
-SCRIPT_DIR="$(resolve_script_dir)"
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
 # shellcheck source=server_manager/jobs/env-validation
 . "${SCRIPT_DIR}/env-validation"
-
-init_runtime_env
 
 enshrouded_server_pid=-1
 timeout=60
 kill_signal=INT
+WAIT_FOR_DOWNLOAD="true"
+enshrouded_server=""
 
-cd "$install_path" || fatal "Could not cd $install_path"
-enshrouded_server="$install_path/$enshrouded_binary_path"
+usage() {
+  cat <<'EOF'
+Usage:
+  server [--wait-download|--no-wait-download] [--shutdown-timeout <seconds>]
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --wait-download)
+        WAIT_FOR_DOWNLOAD="true"
+        shift
+        ;;
+      --no-wait-download)
+        WAIT_FOR_DOWNLOAD="false"
+        shift
+        ;;
+      --shutdown-timeout)
+        timeout="${2-}"
+        if [[ -z "$timeout" || ! "$timeout" =~ ^[0-9]+$ || "$timeout" -le 0 ]]; then
+          fatal "Invalid --shutdown-timeout value: ${2-}"
+        fi
+        shift 2
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+}
 
 run_server_hook() {
   local hook_name hook_cmd
@@ -35,12 +57,20 @@ run_server_hook() {
 }
 
 main() {
+  parse_args "$@"
+  init_runtime_env
+  cd "$install_path" || fatal "Could not cd $install_path"
+  enshrouded_server="$install_path/$enshrouded_binary_path"
   run_server_hook "server pre" "${SERVER_PRE_HOOK:-}"
-  waitForServerDownload
-  runServer
+  if [[ "$WAIT_FOR_DOWNLOAD" == "true" ]]; then
+    wait_for_server_download
+  elif [[ ! -f "$enshrouded_server" ]]; then
+    fatal "Server binary not found: $enshrouded_server (use --wait-download)"
+  fi
+  run_server_process
 }
 
-waitForServerDownload() {
+wait_for_server_download() {
   while :; do
     if [ -f "$enshrouded_server" ]; then
       break
@@ -51,7 +81,7 @@ waitForServerDownload() {
   done
 }
 
-runServer() {
+run_server_process() {
   info "Running server"
   debug "Server config ServerName:${ENSHROUDED_NAME} - ServerQueryPort:${ENSHROUDED_QUERY_PORT}"
 
@@ -69,13 +99,13 @@ runServer() {
   wait $enshrouded_server_pid
   debug "server with PID $enshrouded_server_pid stopped"
 
-  cleanup
+  cleanup_wine
   run_server_hook "server post" "${SERVER_POST_HOOK:-}"
   info "Shutdown complete"
   exit 0
 }
 
-cleanup() {
+cleanup_wine() {
   debug "cleanup wineserver"
   WINEPREFIX="$install_path/steamapps/compatdata/$steam_app_id/pfx/" /usr/local/bin/files/bin/wineserver -k
   clearLock "$enshrouded_server_pidfile"

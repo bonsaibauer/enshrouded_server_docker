@@ -1,0 +1,218 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SUPERVISORCTL_BIN="${SUPERVISORCTL_BIN:-supervisorctl}"
+MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-/home/enshrouded/server/server_manager}"
+manager_config_file="${MANAGER_DATA_DIR}/server_manager.json"
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  docker exec CONTAINER_NAME cmd <command> [args...]
+
+Commands:
+  status         Show supervisor program status
+  menu           Start interactive Server Manager menu
+  start          Start server
+  stop           Stop server
+  restart        Restart server
+  update         Trigger updater
+  backup         Trigger manual full backup (BACKUP_DIR/manual/*.zip)
+  backup-config  Trigger config-only backup zip (BACKUP_DIR/manual/*.zip)
+  restore-backup Trigger restore-backup job (requires args, e.g. --zip ... --restore ...)
+  profile        Trigger profile job (requires args, e.g. --target ... --action ...)
+  password-view  Show user group rights and passwords from enshrouded_server.json
+  env-validation Run ENV validation job
+  scheduled-restart
+                 Trigger restart job
+  force-update   Trigger updater in force mode
+  bootstrap      Trigger bootstrap
+  cron-start     Start crond
+  cron-stop      Stop crond
+  cron-restart   Restart crond
+  help           Show this help
+EOF
+}
+
+run_supervisorctl() {
+  "$SUPERVISORCTL_BIN" "$@"
+}
+
+run_job_script() {
+  local script
+  script="$1"
+  shift || true
+  "${SCRIPT_DIR}/${script}" "$@"
+}
+
+run_job_or_supervisor_start() {
+  local script program
+  script="$1"
+  program="$2"
+  shift 2
+  if [[ "$#" -gt 0 ]]; then
+    run_job_script "$script" "$@"
+  else
+    run_supervisorctl start "$program"
+  fi
+}
+
+manager_get() {
+  local path
+  path="$1"
+  if [[ ! -f "$manager_config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path | if . == null then empty else tostring end" "$manager_config_file" 2>/dev/null || true
+}
+
+resolve_from_env_or_manager() {
+  local var_name path default_value env_value cfg_value
+  var_name="$1"
+  path="$2"
+  default_value="$3"
+
+  env_value="${!var_name-}"
+  if [[ -n "$env_value" ]]; then
+    printf "%s" "$env_value"
+    return 0
+  fi
+
+  cfg_value="$(manager_get "$path")"
+  if [[ -n "$cfg_value" ]]; then
+    printf "%s" "$cfg_value"
+    return 0
+  fi
+
+  printf "%s" "$default_value"
+}
+
+run_cmd_hook() {
+  local hook_name hook_cmd
+  hook_name="$1"
+  hook_cmd="$2"
+
+  if [[ -z "$hook_cmd" ]]; then
+    return 0
+  fi
+
+  echo "INFO - Running ${hook_name} hook: $hook_cmd"
+  eval "$hook_cmd"
+}
+
+load_cmd_hooks() {
+  CMD_PRE_HOOK="$(resolve_from_env_or_manager "CMD_PRE_HOOK" ".cmdPreHook" "")"
+  CMD_POST_HOOK="$(resolve_from_env_or_manager "CMD_POST_HOOK" ".cmdPostHook" "")"
+}
+
+run_cmd_command() {
+  local cmd
+  cmd="$1"
+  shift || true
+  case "$cmd" in
+    status)
+      run_supervisorctl status
+      ;;
+    menu)
+      run_job_script "menu" "$@"
+      ;;
+    start)
+      run_supervisorctl start server
+      ;;
+    stop)
+      run_supervisorctl stop server
+      ;;
+    restart)
+      if [[ "$#" -gt 0 ]]; then
+        run_job_script "restart" "$@"
+      else
+        run_supervisorctl restart server
+      fi
+      ;;
+    update)
+      run_job_or_supervisor_start "updater" "updater" "$@"
+      ;;
+    backup)
+      if [[ "$#" -gt 0 ]]; then
+        run_job_script "backup" "$@"
+      else
+        run_job_script "backup" --mode manual --with-savegame --with-enshrouded-config --with-manager-config --no-cleanup
+      fi
+      ;;
+    backup-config)
+      if [[ "$#" -gt 0 ]]; then
+        run_job_script "backup" --mode manual --without-savegame --with-enshrouded-config --with-manager-config "$@"
+      else
+        run_job_script "backup" --mode manual --without-savegame --with-enshrouded-config --with-manager-config --no-cleanup
+      fi
+      ;;
+    restore-backup)
+      if [[ "$#" -eq 0 ]]; then
+        echo "restore-backup requires args (example: cmd restore-backup --zip <path> --restore all)" >&2
+        exit 1
+      fi
+      run_job_script "restore-backup" "$@"
+      ;;
+    profile)
+      if [[ "$#" -eq 0 ]]; then
+        echo "profile requires args (example: cmd profile --target manager --action reset)" >&2
+        exit 1
+      fi
+      run_job_script "profile" "$@"
+      ;;
+    password-view)
+      run_job_script "password-view" "$@"
+      ;;
+    env-validation)
+      run_job_or_supervisor_start "env-validation" "env-validation" "$@"
+      ;;
+    scheduled-restart)
+      run_job_or_supervisor_start "restart" "restart" "$@"
+      ;;
+    force-update)
+      run_job_script "updater" --force "$@"
+      ;;
+    bootstrap)
+      run_job_or_supervisor_start "bootstrap" "bootstrap" "$@"
+      ;;
+    cron-start)
+      run_supervisorctl start crond
+      ;;
+    cron-stop)
+      run_supervisorctl stop crond
+      ;;
+    cron-restart)
+      run_supervisorctl restart crond
+      ;;
+    help|--help|-h)
+      usage
+      ;;
+    *)
+      echo "Unknown command: $cmd" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+main() {
+  local cmd
+  cmd="${1:-help}"
+  shift || true
+
+  load_cmd_hooks
+  if [[ "$cmd" != "help" && "$cmd" != "--help" && "$cmd" != "-h" ]]; then
+    run_cmd_hook "cmd pre" "${CMD_PRE_HOOK:-}"
+    run_cmd_command "$cmd" "$@"
+    run_cmd_hook "cmd post" "${CMD_POST_HOOK:-}"
+    return 0
+  fi
+
+  run_cmd_command "$cmd" "$@"
+}
+
+main "$@"

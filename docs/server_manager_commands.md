@@ -1,6 +1,6 @@
 # Server Manager Commands
 
-Current commands according to `server_manager/jobs/ctl`.
+Current commands according to `server_manager/jobs/cmd`.
 
 Replace `enshroudedserver` with your container name (see `docker ps`).
 
@@ -26,26 +26,26 @@ docker exec enshroudedserver cron-stop
 docker exec enshroudedserver cron-restart
 ```
 
-## Alternative via ctl
+## Alternative via cmd
 
 ```bash
-docker exec enshroudedserver ctl status
-docker exec -it enshroudedserver ctl menu
-docker exec enshroudedserver ctl start
-docker exec enshroudedserver ctl stop
-docker exec enshroudedserver ctl restart
-docker exec enshroudedserver ctl update
-docker exec enshroudedserver ctl backup
-docker exec enshroudedserver ctl backup-config
-docker exec enshroudedserver ctl restore-backup
-docker exec enshroudedserver ctl profile
-docker exec enshroudedserver ctl password-view
-docker exec enshroudedserver ctl scheduled-restart
-docker exec enshroudedserver ctl force-update
-docker exec enshroudedserver ctl bootstrap
-docker exec enshroudedserver ctl cron-start
-docker exec enshroudedserver ctl cron-stop
-docker exec enshroudedserver ctl cron-restart
+docker exec enshroudedserver cmd status
+docker exec -it enshroudedserver cmd menu
+docker exec enshroudedserver cmd start
+docker exec enshroudedserver cmd stop
+docker exec enshroudedserver cmd restart
+docker exec enshroudedserver cmd update
+docker exec enshroudedserver cmd backup
+docker exec enshroudedserver cmd backup-config
+docker exec enshroudedserver cmd restore-backup
+docker exec enshroudedserver cmd profile
+docker exec enshroudedserver cmd password-view
+docker exec enshroudedserver cmd scheduled-restart
+docker exec enshroudedserver cmd force-update
+docker exec enshroudedserver cmd bootstrap
+docker exec enshroudedserver cmd cron-start
+docker exec enshroudedserver cmd cron-stop
+docker exec enshroudedserver cmd cron-restart
 ```
 
 ## Supervisor Program Names

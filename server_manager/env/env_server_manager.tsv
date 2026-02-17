@@ -33,8 +33,8 @@ BOOTSTRAP_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before bootst
 BOOTSTRAP_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after bootstrap job.	Allowed: single-line string
 SERVER_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before server start job.	Allowed: single-line string
 SERVER_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after server stop job.	Allowed: single-line string
-CTL_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before ctl command dispatch.	Allowed: single-line string
-CTL_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after ctl command dispatch.	Allowed: single-line string
+CMD_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before cmd command dispatch.	Allowed: single-line string
+CMD_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after cmd command dispatch.	Allowed: single-line string
 MENU_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before interactive menu job.	Allowed: single-line string
 MENU_POST_HOOK	string	false	true				^[^\r\n]*$			Hook executed after interactive menu job.	Allowed: single-line string
 PASSWORD_VIEW_PRE_HOOK	string	false	true				^[^\r\n]*$			Hook executed before password-view job.	Allowed: single-line string

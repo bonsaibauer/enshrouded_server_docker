@@ -1,289 +1,20 @@
 #!/bin/bash
-resolve_script_dir() {
-  local src dir
-  src="${BASH_SOURCE[0]}"
-  while [[ -h "$src" ]]; do
-    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
-    src="$(readlink "$src")"
-    [[ "$src" != /* ]] && src="$dir/$src"
-  done
-  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
-}
-
-SCRIPT_DIR="$(resolve_script_dir)"
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
 # shellcheck source=server_manager/jobs/env-validation
 . "${SCRIPT_DIR}/env-validation"
 
-# --- inlined standalone support: enshrouded runtime ---
-# Consolidated Enshrouded runtime helpers (bootstrap + updater).
-
-_enshrouded_bootstrap_shared_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-
-prepareEnshroudedAppFolders() {
-  mkdir -p "$install_path"
-}
-
-initCrontab() {
-  crontab=$(mktemp)
-
-  if [ -n "$UPDATE_CRON" ]; then
-    debug "creating cron for update checks (schedule: $UPDATE_CRON)"
-    echo "$UPDATE_CRON supervisorctl start updater >/dev/null 2>&1" >>"$crontab"
-  fi
-
-  if [ -n "$BACKUP_CRON" ]; then
-    debug "creating cron for backups (schedule: $BACKUP_CRON)"
-    echo "$BACKUP_CRON supervisorctl start backup >/dev/null 2>&1" >>"$crontab"
-  fi
-
-  if [ -n "$RESTART_CRON" ]; then
-    debug "creating cron for server restarts (schedule: $RESTART_CRON)"
-    echo "$RESTART_CRON supervisorctl start restart >/dev/null 2>&1" >>"$crontab"
-  fi
-
-  crontab "$crontab"
-  rm -f "$crontab"
-}
-
-prepareSteamA2sPythonLibrary() {
-  pip3 install python-a2s==1.3.0 --break-system-packages
-}
-
-bootstrapHook() {
-  local hook_cmd
-  hook_cmd="${BOOTSTRAP_PRE_HOOK:-${BOOTSTRAP_HOOK:-}}"
-  if [ -n "$hook_cmd" ]; then
-    info "Running bootstrap pre hook: $hook_cmd"
-    eval "$hook_cmd"
-  fi
-}
-
-bootstrapPostHook() {
-  if [ -n "${BOOTSTRAP_POST_HOOK:-}" ]; then
-    info "Running bootstrap post hook: $BOOTSTRAP_POST_HOOK"
-    eval "$BOOTSTRAP_POST_HOOK"
-  fi
-}
-
-enshrouded_bootstrap_apply_top_level_env_to_config() {
-  # Applies all known top-level env values (and gameSettingsPreset) based on validation spec.
-  local file
-  file="$1"
-
-  if ! apply_env_to_json --file "$file" --metaField "enshroudedMenuJsonPath"; then
-    warn "Failed to apply some top-level ENV values to enshrouded_server.json (jq error)"
-  fi
-}
-
-updateOrCreateEnshroudedServerConfig() {
-  if declare -F ensure_enshrouded_config_from_profile >/dev/null 2>&1; then
-    ensure_enshrouded_config_from_profile || fatal "Failed to initialize enshrouded_server.json from profile"
-  fi
-
-  local config_file
-  config_file="${install_path}/enshrouded_server.json"
-  if [[ ! -e "$config_file" ]]; then
-    fatal "Missing enshrouded_server.json at $config_file"
-  fi
-
-  enshrouded_bootstrap_apply_top_level_env_to_config "$config_file"
-
-  updateUserGroupConfig
-  updateGameSettingsConfig
-}
-
-updateUserGroupConfig() {
-  local config_file
-  config_file="${install_path}/enshrouded_server.json"
-  if ! apply_env_template_to_json_array \
-    --file "$config_file" \
-    --template "ENSHROUDED_ROLE" \
-    --envPrefix "ENSHROUDED_ROLE" \
-    --arrayPath ".userGroups"; then
-    warn "Failed to apply some role ENV values to enshrouded_server.json (jq error)"
-  fi
-
-  ensureUserGroupPasswords
-}
-
-generatePassword() {
-  if [ -r /dev/urandom ]; then
-    # Avoid `tr | head` which can emit a noisy SIGPIPE warning when `head` exits early.
-    # Read bounded random bytes first, then filter and slice in bash.
-    local out=""
-    while [ "${#out}" -lt 12 ]; do
-      out="${out}$(dd if=/dev/urandom bs=64 count=1 2>/dev/null | LC_ALL=C tr -dc 'A-Za-z0-9')"
-    done
-    printf '%s' "${out:0:12}"
-    return 0
-  fi
-  date +%s%N | sha256sum | cut -c1-12
-}
-
-ensureUserGroupPasswords() {
-  local count idx env_var current_password new_password
-
-  if ! jq -e '.userGroups' ${install_path}/enshrouded_server.json >/dev/null 2>&1; then
-    return 0
-  fi
-
-  count=$(jq -r '.userGroups | length' ${install_path}/enshrouded_server.json 2>/dev/null || echo 0)
-  if ! [[ "$count" =~ ^[0-9]+$ ]] || [[ "$count" -le 0 ]]; then
-    return 0
-  fi
-
-  for idx in $(seq 0 $((count - 1))); do
-    env_var="ENSHROUDED_ROLE_${idx}_PASSWORD"
-    if [[ -n "${!env_var-}" ]]; then
-      continue
-    fi
-
-    current_password="$(jq -r ".userGroups[$idx].password // empty" ${install_path}/enshrouded_server.json 2>/dev/null || echo "")"
-    if [[ -n "$current_password" ]]; then
-      continue
-    fi
-
-    new_password="$(generatePassword)"
-    if [[ -z "$new_password" ]]; then
-      warn "Could not generate password for group index $idx"
-      continue
-    fi
-
-    spec_apply__jq_set "${install_path}/enshrouded_server.json" --argjson group_index "$idx" --arg password "$new_password" '.userGroups[$group_index].password = $password' || warn "Failed to set generated password for group index $idx"
-  done
-}
-
-updateGameSettingsConfig() {
-  local config_file
-  config_file="${install_path}/enshrouded_server.json"
-
-  if ! apply_env_to_json --file "$config_file" --metaField "enshroudedJsonPath" --filterPrefix ".gameSettings."; then
-    warn "Failed to apply some game settings ENV values to enshrouded_server.json (jq error)"
-  fi
-}
-
-
-pidfile=$enshrouded_updater_pidfile
-latest_version=-1
-
-update() {
-  if [ -f "$pidfile" ]; then
-    info "Found existing PID file - checking process"
-    checkLock $pidfile
-  fi
-  trap shutdown SIGINT SIGTERM
-  if ! checkForUpdates; then
-    if ! checkRunning "server"; then
-      info "Enshrouded server is not running - starting"
-      supervisorctl start server
-    fi
-    return
-  fi
-  if ! checkServerEmpty; then
-    warn "Enshrouded server is not empty - update will not be performed"
-    return
-  fi
-
-  doUpdate &
-  enshrouded_updater_pid=$!
-  echo $enshrouded_updater_pid >"$pidfile"
-  wait $enshrouded_updater_pid
-}
-
-doUpdate() {
-  updatePreHook
-  if checkRunning "server"; then
-    supervisorctl stop server
-  fi
-  verifyCpuMhz
-  if ! downloadEnshrouded; then
-    warn "Download of Enshrouded server failed - retry"
-    debug "Removing $install_path/$steamapp_path"
-    rm -rf $install_path/$steamapp_path
-
-    if ! downloadEnshrouded; then
-      warn "Download of Enshrouded server failed - aborting update"
-      supervisorctl start server
-      clearLock "$pidfile"
-      return
-    fi
-  fi
-  setCurrentVersion
-  supervisorctl start server
-  updatePostHook
-
-  clearLock "$pidfile"
-}
-
-# This works around the `Unable to determine CPU Frequency. Try defining CPU_MHZ.` steamcmd issue.
-verifyCpuMhz() {
-  local float_regex
-  local cpu_mhz
-  float_regex="^([0-9]+\\.?[0-9]*)\$"
-  cpu_mhz=$(grep "^cpu MHz" /proc/cpuinfo | head -1 | cut -d : -f 2 | xargs)
-  if [ -n "$cpu_mhz" ] && [[ "$cpu_mhz" =~ $float_regex ]] && [ "${cpu_mhz%.*}" -gt 0 ]; then
-    debug "Found CPU with $cpu_mhz MHz"
-    unset CPU_MHZ
-  else
-    debug "Unable to determine CPU Frequency - setting a default of 1.5 GHz so steamcmd won't complain"
-    export CPU_MHZ="1500.000"
-  fi
-}
-
-checkServerEmpty() {
-  local connected_players
-
-  if [ "$UPDATE_CHECK_PLAYERS" == "false" ]; then
-    return 0
-  fi
-
-  connected_players=$(python3 -c "
-try:
-    import a2s
-    print(len(a2s.players(('127.0.0.1',$ENSHROUDED_QUERY_PORT))))
-except Exception as e:
-    print('null')
-")
-
-  debug "[checkServerEmpty] connected_players: $connected_players"
-  if [ -n "$connected_players" ] && [ "$connected_players" != "null" ] && [ "$connected_players" -gt 0 ]; then
-    return 1
-  fi
-
-  return 0
-}
-
-setCurrentVersion() {
-  if [ "$latest_version" == "null" ] || [ "$latest_version" == "-1" ]; then
-    warn "Unable to set current version - latest version is unknown"
-    warn "Next update check will restart the server until version can be determined"
-    return 1
-  fi
-  debug "[setCurrentVersion]: $latest_version"
-  echo "$latest_version" >"$version_file_path"
-}
-
-updatePreHook() {
-  if [ -n "$UPDATE_PRE_HOOK" ]; then
-    info "Running update pre hook: $UPDATE_PRE_HOOK"
-    eval "$UPDATE_PRE_HOOK"
-  fi
-}
-
-updatePostHook() {
-  if [ -n "$UPDATE_POST_HOOK" ]; then
-    info "Running update post hook: $UPDATE_POST_HOOK"
-    eval "$UPDATE_POST_HOOK"
-  fi
-}
-
-shutdown() {
-  debug "Received signal to shut down updater"
-  clearLock "$pidfile"
-}
-init_runtime_env
-
+pidfile="$enshrouded_updater_pidfile"
+latest_version="-1"
 FORCE_UPDATE="false"
+CHECK_ONLY="false"
+NO_PLAYER_CHECK="false"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  updater [--force] [--check-only] [--no-player-check]
+EOF
+}
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -292,8 +23,16 @@ parse_args() {
         FORCE_UPDATE="true"
         shift
         ;;
+      --check-only)
+        CHECK_ONLY="true"
+        shift
+        ;;
+      --no-player-check)
+        NO_PLAYER_CHECK="true"
+        shift
+        ;;
       --help|-h)
-        echo "Usage: updater [--force]"
+        usage
         exit 0
         ;;
       *)
@@ -303,26 +42,135 @@ parse_args() {
   done
 }
 
-main() {
-  parse_args "$@"
-  info "Running updater"
-  update
-  info "updater complete"
+update() {
+  if [[ -f "$pidfile" ]]; then
+    info "Found existing PID file - checking process"
+    checkLock "$pidfile"
+  fi
+
+  trap shutdown SIGINT SIGTERM
+
+  if ! check_for_updates; then
+    if ! checkRunning "server"; then
+      info "Enshrouded server is not running - starting"
+      supervisorctl start server
+    fi
+    return 0
+  fi
+
+  if ! check_server_empty; then
+    warn "Enshrouded server is not empty - update will not be performed"
+    return 0
+  fi
+
+  run_update_flow &
+  enshrouded_updater_pid=$!
+  echo "$enshrouded_updater_pid" >"$pidfile"
+  wait "$enshrouded_updater_pid"
 }
 
-downloadEnshrouded() {
-  debug "Downloading Enshrouded server"
+run_update_flow() {
+  run_update_pre_hook
+  if checkRunning "server"; then
+    supervisorctl stop server
+  fi
 
+  verify_cpu_mhz
+  if ! download_enshrouded; then
+    warn "Download of Enshrouded server failed - retry"
+    debug "Removing $install_path/$steamapp_path"
+    rm -rf "$install_path/$steamapp_path"
+
+    if ! download_enshrouded; then
+      warn "Download of Enshrouded server failed - aborting update"
+      supervisorctl start server
+      clearLock "$pidfile"
+      return 1
+    fi
+  fi
+
+  set_current_version
+  supervisorctl start server
+  run_update_post_hook
+  clearLock "$pidfile"
+}
+
+# This works around the `Unable to determine CPU Frequency. Try defining CPU_MHZ.` steamcmd issue.
+verify_cpu_mhz() {
+  local float_regex cpu_mhz
+  float_regex="^([0-9]+\\.?[0-9]*)\$"
+  cpu_mhz="$(grep "^cpu MHz" /proc/cpuinfo | head -1 | cut -d : -f 2 | xargs)"
+  if [[ -n "$cpu_mhz" && "$cpu_mhz" =~ $float_regex && "${cpu_mhz%.*}" -gt 0 ]]; then
+    debug "Found CPU with $cpu_mhz MHz"
+    unset CPU_MHZ
+  else
+    debug "Unable to determine CPU Frequency - setting a default of 1.5 GHz so steamcmd won't complain"
+    export CPU_MHZ="1500.000"
+  fi
+}
+
+check_server_empty() {
+  local connected_players
+  if [[ "$UPDATE_CHECK_PLAYERS" == "false" ]]; then
+    return 0
+  fi
+
+  connected_players="$(python3 -c "
+try:
+    import a2s
+    print(len(a2s.players(('127.0.0.1',$ENSHROUDED_QUERY_PORT))))
+except Exception:
+    print('null')
+")"
+
+  debug "[check_server_empty] connected_players: $connected_players"
+  if [[ -n "$connected_players" && "$connected_players" != "null" && "$connected_players" -gt 0 ]]; then
+    return 1
+  fi
+  return 0
+}
+
+set_current_version() {
+  if [[ "$latest_version" == "null" || "$latest_version" == "-1" ]]; then
+    warn "Unable to set current version - latest version is unknown"
+    warn "Next update check will restart the server until version can be determined"
+    return 1
+  fi
+  debug "[set_current_version]: $latest_version"
+  echo "$latest_version" >"$version_file_path"
+}
+
+run_update_pre_hook() {
+  if [[ -n "$UPDATE_PRE_HOOK" ]]; then
+    info "Running update pre hook: $UPDATE_PRE_HOOK"
+    eval "$UPDATE_PRE_HOOK"
+  fi
+}
+
+run_update_post_hook() {
+  if [[ -n "$UPDATE_POST_HOOK" ]]; then
+    info "Running update post hook: $UPDATE_POST_HOOK"
+    eval "$UPDATE_POST_HOOK"
+  fi
+}
+
+shutdown() {
+  debug "Received signal to shut down updater"
+  clearLock "$pidfile"
+}
+
+download_enshrouded() {
+  debug "Downloading Enshrouded server"
   mkdir -p "$install_path/steamapps/compatdata/$steam_app_id"
   export WINETRICKS="/usr/local/bin/winetricks"
   export STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/enshrouded/.steam/steam"
   export STEAM_COMPAT_DATA_PATH="$install_path/steamapps/compatdata/$steam_app_id"
   export STEAM_DIR="/home/enshrouded/.steam/steam/"
 
-  $steamcmd_path +@sSteamCmdForcePlatformType windows +force_install_dir "$install_path" +login anonymous +app_update $steam_app_id "$GAME_BRANCH $STEAMCMD_ARGS" +quit
+  "$steamcmd_path" +@sSteamCmdForcePlatformType windows +force_install_dir "$install_path" +login anonymous +app_update "$steam_app_id" "$GAME_BRANCH $STEAMCMD_ARGS" +quit
 }
 
-checkForUpdates() {
+check_for_updates() {
   local current_version
 
   if [[ "$FORCE_UPDATE" == "true" ]]; then
@@ -330,24 +178,23 @@ checkForUpdates() {
     rm -f "$version_file_path"
     debug "Removing $install_path/$steamapp_path"
     rm -rf "$install_path/$steamapp_path"
-    latest_version=$(curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid")
+    latest_version="$(curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid")"
     return 0
   fi
 
-  if checkProtonFilesAvailable; then
+  if check_proton_files_available; then
     return 0
   fi
 
-  if [ -f "$version_file_path" ]; then
-    current_version=$(cat "$version_file_path")
+  if [[ -f "$version_file_path" ]]; then
+    current_version="$(cat "$version_file_path")"
   else
     current_version="0"
   fi
 
-  latest_version=$(curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid")
-
-  if [ "$latest_version" == "null" ] || [ "$latest_version" == "-1" ]; then
-    if [ "$current_version" == "0" ]; then
+  latest_version="$(curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid")"
+  if [[ "$latest_version" == "null" || "$latest_version" == "-1" ]]; then
+    if [[ "$current_version" == "0" ]]; then
       warn "Unable to determine latest version of enshrouded server! No version currently installed, update server anyways"
       return 0
     fi
@@ -355,23 +202,43 @@ checkForUpdates() {
     return 1
   fi
 
-  if [ "$current_version" != "$latest_version" ]; then
+  if [[ "$current_version" != "$latest_version" ]]; then
     info "Enshrouded server needs to be updated"
     return 0
-  else
-    info "Enshrouded server is already the latest version"
-    return 1
   fi
+
+  info "Enshrouded server is already the latest version"
+  return 1
 }
 
-checkProtonFilesAvailable() {
-  if [ ! -d "$install_path/steamapps/compatdata/$steam_app_id" ]; then
+check_proton_files_available() {
+  if [[ ! -d "$install_path/steamapps/compatdata/$steam_app_id" ]]; then
     warn "Proton files are not available! Performing Enshrouded update to generate proton files"
     return 0
   fi
   return 1
 }
 
+main() {
+  parse_args "$@"
+  init_runtime_env
+
+  if [[ "$NO_PLAYER_CHECK" == "true" ]]; then
+    UPDATE_CHECK_PLAYERS="false"
+  fi
+
+  if [[ "$CHECK_ONLY" == "true" ]]; then
+    if check_for_updates; then
+      info "Update check: update available"
+    else
+      info "Update check: no update required"
+    fi
+    return 0
+  fi
+
+  info "Running updater"
+  update
+  info "updater complete"
+}
+
 main "$@"
-
-

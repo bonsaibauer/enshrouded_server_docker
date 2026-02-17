@@ -27,7 +27,7 @@ Notes:
 
 ## Interactive Menu
 
-`ctl menu` runs via `docker exec -it ...` and writes output to your terminal session.
+`cmd menu` runs via `docker exec -it ...` and writes output to your terminal session.
 
 - Menu UI output is not part of the container's main stdout/stderr, so it does not show up in `docker logs`.
 - Actions that are started as Supervisor programs (e.g. backup/apply/restore jobs) do log via Supervisor and will appear in `docker logs`.

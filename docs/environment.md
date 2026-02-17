@@ -55,7 +55,7 @@ The source of truth is the TSV spec:
 There are two backup types:
 
 1. Savegame backups (zip)
-   - Triggered by `ctl backup` / `supervisorctl start backup`
+   - Triggered by `cmd backup` / `supervisorctl start backup`
    - The same Supervisor job is used for manual backups, cron backups (`BACKUP_CRON`), and safety backups before restore.
    - Stored in `BACKUP_DIR` (default: `/home/enshrouded/server/backups`)
    - Filename pattern: `YYYY-MM-DD_HH-MM-SS-$SAVEFILE_NAME.zip`
@@ -76,4 +76,4 @@ There are two backup types:
 
 | Variable | Description | Default |
 |---|---|---|
-| `SUPERVISORCTL_BIN` | Binary for the `ctl` wrapper | `supervisorctl` |
+| `SUPERVISORCTL_BIN` | Binary for the `cmd` wrapper | `supervisorctl` |
