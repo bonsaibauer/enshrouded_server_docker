@@ -88,7 +88,7 @@ run_bootstrap_post_hook() {
 enshrouded_bootstrap_apply_top_level_env_to_config() {
   local file
   file="$1"
-  if ! apply_env_to_json --file "$file" --metaField "enshroudedMenuJsonPath"; then
+  if ! apply_env_to_json --file "$file" --meta-field "enshroudedMenuJsonPath"; then
     warn "Failed to apply some top-level ENV values to enshrouded_server.json (jq error)"
   fi
 }
@@ -139,8 +139,8 @@ update_user_group_config() {
   if ! apply_env_template_to_json_array \
     --file "$config_file" \
     --template "ENSHROUDED_ROLE" \
-    --envPrefix "ENSHROUDED_ROLE" \
-    --arrayPath ".userGroups"; then
+    --env-prefix "ENSHROUDED_ROLE" \
+    --array-path ".userGroups"; then
     warn "Failed to apply some role ENV values to enshrouded_server.json (jq error)"
   fi
   ensure_user_group_passwords
@@ -149,7 +149,7 @@ update_user_group_config() {
 update_game_settings_config() {
   local config_file
   config_file="${install_path}/enshrouded_server.json"
-  if ! apply_env_to_json --file "$config_file" --metaField "enshroudedJsonPath" --filterPrefix ".gameSettings."; then
+  if ! apply_env_to_json --file "$config_file" --meta-field "enshroudedJsonPath" --filter-prefix ".gameSettings."; then
     warn "Failed to apply some game settings ENV values to enshrouded_server.json (jq error)"
   fi
 }

@@ -20,8 +20,7 @@ Commands:
   stop           Stop server
   restart        Restart server
   update         Trigger updater
-  backup         Trigger manual full backup (BACKUP_DIR/manual/*.zip)
-  backup-config  Trigger config-only backup zip (BACKUP_DIR/manual/*.zip)
+  backup         Trigger backup job (requires args, e.g. --mode manual --savegame true ...)
   restore-backup Trigger restore-backup job (requires args, e.g. --zip ... --restore ...)
   profile        Trigger profile job (requires args, e.g. --target ... --action ...)
   password-view  Show user group rights and passwords from enshrouded_server.json
@@ -137,29 +136,22 @@ run_cmd_command() {
       run_job_or_supervisor_start "updater" "updater" "$@"
       ;;
     backup)
-      if [[ "$#" -gt 0 ]]; then
-        run_job_script "backup" "$@"
-      else
-        run_job_script "backup" --mode manual --with-savegame --with-enshrouded-config --with-manager-config --no-cleanup
+      if [[ "$#" -eq 0 ]]; then
+        echo "backup requires args (example: cmd backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false)" >&2
+        exit 1
       fi
-      ;;
-    backup-config)
-      if [[ "$#" -gt 0 ]]; then
-        run_job_script "backup" --mode manual --without-savegame --with-enshrouded-config --with-manager-config "$@"
-      else
-        run_job_script "backup" --mode manual --without-savegame --with-enshrouded-config --with-manager-config --no-cleanup
-      fi
+      run_job_script "backup" "$@"
       ;;
     restore-backup)
       if [[ "$#" -eq 0 ]]; then
-        echo "restore-backup requires args (example: cmd restore-backup --zip <path> --restore all)" >&2
+        echo "restore-backup requires args (example: cmd restore-backup --zip <path> --restore all --safety-backup false)" >&2
         exit 1
       fi
       run_job_script "restore-backup" "$@"
       ;;
     profile)
       if [[ "$#" -eq 0 ]]; then
-        echo "profile requires args (example: cmd profile --target manager --action reset)" >&2
+        echo "profile requires args (example: cmd profile --target manager --action reset --create-backup true)" >&2
         exit 1
       fi
       run_job_script "profile" "$@"

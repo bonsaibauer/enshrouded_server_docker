@@ -9,6 +9,7 @@ MENU_SPEC_TMP_FILE=""
 MENU_START_SCREEN="main"
 MENU_ONCE="false"
 MENU_NO_CLEAR="false"
+CMD_JOB_BIN="${CMD_JOB_BIN:-/usr/local/etc/enshrouded/jobs/cmd}"
 
 usage() {
   cat <<'EOF'
@@ -42,6 +43,10 @@ parse_args() {
         ;;
     esac
   done
+}
+
+cmd_run() {
+  "$CMD_JOB_BIN" "$@"
 }
 
 menu_spec__append_action_row() {
@@ -451,7 +456,7 @@ ui_header() {
   en_profile="$(enshrouded_profile_resolve 2>/dev/null || echo "default")"
   manager_profile="$(manager_profile_resolve 2>/dev/null || echo "default")"
 
-  if checkRunning "server"; then
+  if is_supervisor_running "server"; then
     server_status="${C_GREEN}RUNNING${C_RESET}"
   else
     server_status="${C_RED}STOPPED${C_RESET}"
@@ -475,16 +480,16 @@ ui_header() {
 
 menu_stop_server_now() {
   # Stop the Enshrouded server without asking (callers must confirm before invoking).
-  if ! checkRunning "server"; then
+  if ! is_supervisor_running "server"; then
     return 0
   fi
 
-  /usr/local/etc/enshrouded/jobs/cmd stop >/dev/null 2>&1 || true
+  cmd_run stop >/dev/null 2>&1 || true
 
   # Best-effort wait until supervisor reports it stopped.
   local deadline now
   deadline=$(( $(date +%s) + 30 ))
-  while checkRunning "server"; do
+  while is_supervisor_running "server"; do
     now="$(date +%s)"
     if [[ "$now" -ge "$deadline" ]]; then
       ui_error "Timeout while stopping server. Aborting."
@@ -500,7 +505,7 @@ menu_stop_server_for_config_change() {
   local reason
   reason="$1"
 
-  if ! checkRunning "server"; then
+  if ! is_supervisor_running "server"; then
     return 0
   fi
 
@@ -527,7 +532,7 @@ menu_prompt_start_server() {
   prompt="${1:-Start server now?}"
 
   if ui_confirm_yes_no "$prompt"; then
-    /usr/local/etc/enshrouded/jobs/cmd start >/dev/null 2>&1 || true
+    cmd_run start >/dev/null 2>&1 || true
     ui_success "Server start requested."
   else
     ui_note "Server remains stopped."
@@ -539,13 +544,13 @@ menu_wait_for_program_exit() {
   proc="$1"
   timeout="${2:-600}"
 
-  if ! checkRunning "$proc"; then
+  if ! is_supervisor_running "$proc"; then
     return 0
   fi
 
   ui_note "Waiting for $proc to finish..."
   deadline=$(( $(date +%s) + timeout ))
-  while checkRunning "$proc"; do
+  while is_supervisor_running "$proc"; do
     now="$(date +%s)"
     if [[ "$now" -ge "$deadline" ]]; then
       ui_warn_line "Timeout while waiting for $proc."
@@ -667,13 +672,16 @@ menu_run_backup_job() {
   include_mgr="${4:-true}"
   cleanup="${5:-false}"
 
-  cmd_args=(backup --mode "$mode")
-  if [[ "$include_savegame" == "true" ]]; then cmd_args+=(--with-savegame); else cmd_args+=(--without-savegame); fi
-  if [[ "$include_ens" == "true" ]]; then cmd_args+=(--with-enshrouded-config); else cmd_args+=(--without-enshrouded-config); fi
-  if [[ "$include_mgr" == "true" ]]; then cmd_args+=(--with-manager-config); else cmd_args+=(--without-manager-config); fi
-  if [[ "$cleanup" == "true" ]]; then cmd_args+=(--cleanup); else cmd_args+=(--no-cleanup); fi
+  cmd_args=(
+    backup
+    --mode "$mode"
+    --savegame "$include_savegame"
+    --enshrouded-config "$include_ens"
+    --manager-config "$include_mgr"
+    --cleanup "$cleanup"
+  )
 
-  if ! /usr/local/etc/enshrouded/jobs/cmd "${cmd_args[@]}" >/dev/null 2>&1; then
+  if ! cmd_run "${cmd_args[@]}" >/dev/null 2>&1; then
     ui_error "Backup command failed."
     return 1
   fi
@@ -690,15 +698,15 @@ menu_run_config_backup_job() {
   include_mgr="true"
 
   case "$selector" in
-    manual:enshrouded|enshrouded)
+    manual:enshrouded)
       include_ens="true"
       include_mgr="false"
       ;;
-    manual:manager|manager)
+    manual:manager)
       include_ens="false"
       include_mgr="true"
       ;;
-    manual:all|all)
+    manual:all)
       include_ens="true"
       include_mgr="true"
       ;;
@@ -993,14 +1001,9 @@ menu_restore_backup() {
     [[ "$restore_manager" == "true" ]] && restore_parts+=("manager")
     restore_selector="$(IFS=,; echo "${restore_parts[*]}")"
 
-    restore_cmd=(restore-backup --zip "$selected" --restore "$restore_selector")
-    if [[ "$safety" == "true" ]]; then
-      restore_cmd+=(--safety-backup)
-    else
-      restore_cmd+=(--no-safety-backup)
-    fi
+    restore_cmd=(restore-backup --zip "$selected" --restore "$restore_selector" --safety-backup "$safety")
 
-    if ! /usr/local/etc/enshrouded/jobs/cmd "${restore_cmd[@]}" >/dev/null 2>&1; then
+    if ! cmd_run "${restore_cmd[@]}" >/dev/null 2>&1; then
       ui_error "Restore command failed."
       ui_pause
       continue
@@ -1013,45 +1016,6 @@ menu_restore_backup() {
     return 0
   done
 }
-
-menu_backups_menu() {
-  local choice
-  while :; do
-    if menu_nav_is_set; then
-      return 0
-    fi
-    ui_header "Backups"
-
-    ui_opt 1 "Restore from backup ZIP"
-    ui_opt 2 "Create manual full backup now"
-    ui_opt 3 "Create config backup now"
-    echo
-    ui_actions_bar "0 Back" "m Main" "x Exit"
-    echo
-
-    choice="$(ui_prompt_choice "Choice")"
-    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
-    case "$choice" in
-      1) menu_restore_backup || true ;;
-      2) menu_run_savegame_backup || true ;;
-      3) menu_run_config_backup_now || true ;;
-      0) return 0 ;;
-      m)
-        menu_nav_set "main"
-        return 0
-        ;;
-      x|q)
-        menu_nav_set "exit"
-        return 0
-        ;;
-      *)
-        ui_warn_line "Invalid selection."
-        ui_pause
-        ;;
-    esac
-  done
-}
-
 
 menu_editor_envs_for_meta_field() {
   local meta_field vars
@@ -1520,45 +1484,16 @@ menu_spec_editor__user_groups_edit_group() {
 
 menu_edit_user_groups_from_spec() {
   # Spec-driven editor for `.userGroups` driven by `templates.ENSHROUDED_ROLE`.
+  # Args: <file> [template] [env_prefix] [backup_job] [empty_label]
   local file template env_prefix backup_job empty_label
-  file=""
-  template="ENSHROUDED_ROLE"
-  env_prefix="ENSHROUDED_ROLE"
-  backup_job="manual:enshrouded"
-  empty_label="<empty>"
-
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --file)
-        file="${2-}"
-        shift 2
-        ;;
-      --template)
-        template="${2-}"
-        shift 2
-        ;;
-      --envPrefix|--env-prefix)
-        env_prefix="${2-}"
-        shift 2
-        ;;
-      --backupJob|--backup-job)
-        backup_job="${2-}"
-        shift 2
-        ;;
-      --emptyLabel|--empty-label)
-        empty_label="${2-}"
-        shift 2
-        ;;
-      *)
-        ui_warn_line "Unknown arg: $1"
-        ui_pause
-        return 1
-        ;;
-    esac
-  done
+  file="${1-}"
+  template="${2:-ENSHROUDED_ROLE}"
+  env_prefix="${3:-ENSHROUDED_ROLE}"
+  backup_job="${4:-manual:enshrouded}"
+  empty_label="${5:-<empty>}"
 
   if [[ -z "$file" ]]; then
-    ui_warn_line "menu_edit_user_groups_from_spec: missing --file"
+    ui_warn_line "menu_edit_user_groups_from_spec: missing file"
     ui_pause
     return 1
   fi
@@ -1592,12 +1527,8 @@ menu_edit_user_groups_from_spec() {
       continue
     fi
 
-    local -a options
-    options=()
-
     for idx in $(seq 0 $((count - 1))); do
       name="$(jq -r ".userGroups[$idx].name | if . == null or . == \"\" then \"Group $idx\" else . end" "$file" 2>/dev/null || echo "Group $idx")"
-      options+=("$idx")
       printf "%s[%s]%s %s%s%s\n" \
         "${C_MAGENTA}" "$((idx + 1))" "${C_RESET}" \
         "${C_GREEN}" "$name" "${C_RESET}$(menu_spec_editor__template_index_locked_badge "$template" "$env_prefix" "$idx")"
@@ -1635,32 +1566,31 @@ menu_edit_user_groups_from_spec() {
 
 menu_edit_json_from_spec() {
   # Interactive spec-driven editor.
-  #
-  # Required args:
-  #   --title <title>
-  #   --file <json_file>
-  #   --metaField <meta_field>         # e.g. managerJsonPath, enshroudedMenuJsonPath, enshroudedJsonPath
-  #
-  # Optional args:
-  #   --labelMode var|path             # how to render field labels (default: var)
-  #   --labelStripPrefix <prefix>      # when labelMode=path, strip this prefix from the JSON path
-  #   --filterPrefix <jsonPathPrefix>  # only include env values where jsonPath starts with this prefix
-  #   --backupJob <supervisor_job>     # create one backup per edit session on first write
-  #   --emptyAction cancel|null        # empty input behavior for scalar values (default: cancel)
-  #   --boolToggle true|false          # allow empty input to toggle bools (default: false)
-  #   --emptyLabel <text>              # placeholder for empty values (default: <empty>)
-  #   --extra <token> <label> <group> <callback_fn>
+  # Args:
+  #   1  title
+  #   2  file
+  #   3  meta_field
+  #   4  label_mode (var|path, default var)
+  #   5  label_strip_prefix
+  #   6  filter_prefix
+  #   7  backup_job
+  #   8  empty_action (cancel|null, default cancel)
+  #   9  bool_toggle (true|false, default false)
+  #   10 empty_label (default <empty>)
+  #   11+ extras as "token|label|group|callback_fn"
   local title file meta_field label_mode label_strip_prefix filter_prefix backup_job empty_action bool_toggle empty_label
-  title=""
-  file=""
-  meta_field=""
-  label_mode="var"
-  label_strip_prefix=""
-  filter_prefix=""
-  backup_job=""
-  empty_action="cancel"
-  bool_toggle="false"
-  empty_label="<empty>"
+  local extra packed token label group callback
+  title="${1-}"
+  file="${2-}"
+  meta_field="${3-}"
+  label_mode="${4:-var}"
+  label_strip_prefix="${5-}"
+  filter_prefix="${6-}"
+  backup_job="${7-}"
+  empty_action="${8:-cancel}"
+  bool_toggle="${9:-false}"
+  empty_label="${10:-<empty>}"
+  shift 10 2>/dev/null || true
 
   local -a extra_tokens extra_labels extra_groups extra_callbacks
   extra_tokens=()
@@ -1668,65 +1598,17 @@ menu_edit_json_from_spec() {
   extra_groups=()
   extra_callbacks=()
 
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --title)
-        title="${2-}"
-        shift 2
-        ;;
-      --file)
-        file="${2-}"
-        shift 2
-        ;;
-      --metaField|--meta-field|--meta)
-        meta_field="${2-}"
-        shift 2
-        ;;
-      --labelMode|--label-mode)
-        label_mode="${2-}"
-        shift 2
-        ;;
-      --labelStripPrefix|--label-strip-prefix)
-        label_strip_prefix="${2-}"
-        shift 2
-        ;;
-      --filterPrefix|--filter-prefix)
-        filter_prefix="${2-}"
-        shift 2
-        ;;
-      --backupJob|--backup-job)
-        backup_job="${2-}"
-        shift 2
-        ;;
-      --emptyAction|--empty-action)
-        empty_action="${2-}"
-        shift 2
-        ;;
-      --boolToggle|--bool-toggle)
-        bool_toggle="${2-}"
-        shift 2
-        ;;
-      --emptyLabel|--empty-label)
-        empty_label="${2-}"
-        shift 2
-        ;;
-      --extra)
-        extra_tokens+=("${2-}")
-        extra_labels+=("${3-}")
-        extra_groups+=("${4-}")
-        extra_callbacks+=("${5-}")
-        shift 5
-        ;;
-      *)
-        ui_warn_line "Unknown arg: $1"
-        ui_pause
-        return 1
-        ;;
-    esac
+  for packed in "$@"; do
+    IFS='|' read -r token label group callback <<<"$packed"
+    [[ -n "$token" && -n "$label" && -n "$callback" ]] || continue
+    extra_tokens+=("$token")
+    extra_labels+=("$label")
+    extra_groups+=("$group")
+    extra_callbacks+=("$callback")
   done
 
   if [[ -z "$file" || -z "$meta_field" ]]; then
-    ui_warn_line "menu_edit_json_from_spec: missing --file or --metaField"
+    ui_warn_line "menu_edit_json_from_spec: missing file or meta field"
     ui_pause
     return 1
   fi
@@ -1884,27 +1766,27 @@ enshrouded_editor_game_settings_menu() {
   local file
   file="$1"
   menu_edit_json_from_spec \
-    --title "Edit Game Settings" \
-    --file "$file" \
-    --metaField "enshroudedJsonPath" \
-    --labelMode "path" \
-    --labelStripPrefix ".gameSettings." \
-    --filterPrefix ".gameSettings." \
-    --backupJob "manual:enshrouded" \
-    --emptyAction "cancel" \
-    --boolToggle "false" \
-    --emptyLabel "<empty>"
+    "Edit Game Settings" \
+    "$file" \
+    "enshroudedJsonPath" \
+    "path" \
+    ".gameSettings." \
+    ".gameSettings." \
+    "manual:enshrouded" \
+    "cancel" \
+    "false" \
+    "<empty>"
 }
 
 enshrouded_editor_user_groups_menu() {
   local file
   file="$1"
   menu_edit_user_groups_from_spec \
-    --file "$file" \
-    --template "ENSHROUDED_ROLE" \
-    --envPrefix "ENSHROUDED_ROLE" \
-    --backupJob "manual:enshrouded" \
-    --emptyLabel "<empty>"
+    "$file" \
+    "ENSHROUDED_ROLE" \
+    "ENSHROUDED_ROLE" \
+    "manual:enshrouded" \
+    "<empty>"
 }
 
 editor_enshrouded_json() {
@@ -1928,16 +1810,18 @@ editor_enshrouded_json() {
   fi
 
   menu_edit_json_from_spec \
-    --title "Edit Enshrouded Settings" \
-    --file "$config_file" \
-    --metaField "enshroudedMenuJsonPath" \
-    --labelMode "path" \
-    --backupJob "manual:enshrouded" \
-    --emptyAction "cancel" \
-    --boolToggle "true" \
-    --emptyLabel "<empty>" \
-    --extra "__submenu_game_settings" "gameSettings (submenu)" "Game" "enshrouded_editor_game_settings_menu" \
-    --extra "__submenu_user_groups" "userGroups (submenu)" "Access" "enshrouded_editor_user_groups_menu"
+    "Edit Enshrouded Settings" \
+    "$config_file" \
+    "enshroudedMenuJsonPath" \
+    "path" \
+    "" \
+    "" \
+    "manual:enshrouded" \
+    "cancel" \
+    "true" \
+    "<empty>" \
+    "__submenu_game_settings|gameSettings (submenu)|Game|enshrouded_editor_game_settings_menu" \
+    "__submenu_user_groups|userGroups (submenu)|Access|enshrouded_editor_user_groups_menu"
 }
 
 menu_profile_actions_after_change() {
@@ -1949,12 +1833,12 @@ menu_profile_actions_after_change() {
   echo
   case "$(ui_prompt_number "Action")" in
     1)
-      /usr/local/etc/enshrouded/jobs/cmd restart || true
+      cmd_run restart || true
       ui_success "Restart requested."
       ui_pause
       ;;
     2)
-      /usr/local/etc/enshrouded/jobs/cmd bootstrap || true
+      cmd_run bootstrap || true
       ui_success "Bootstrap started."
       ui_note "Note: bootstrap does not start the server."
       if menu_wait_for_program_exit "bootstrap" 600; then
@@ -2015,8 +1899,11 @@ menu_run_profile_job() {
   target="$1"
   action="$2"
   profile="$3"
-
-  /usr/local/etc/enshrouded/jobs/cmd profile --target "$target" --action "$action" --profile "$profile" >/dev/null 2>&1
+  if [[ "$action" == "apply" ]]; then
+    cmd_run profile --target "$target" --action "$action" --profile "$profile" --create-backup true >/dev/null 2>&1
+  else
+    cmd_run profile --target "$target" --action "$action" --create-backup true >/dev/null 2>&1
+  fi
 }
 
 menu_apply_profile_flow() {
@@ -2071,7 +1958,7 @@ menu_apply_profile_flow() {
 
     profile="${profiles[$((selected - 1))]}"
 
-    if checkRunning "server" || [[ -f "$config_file" ]]; then
+    if is_supervisor_running "server" || [[ -f "$config_file" ]]; then
       ui_warn_line "This will replace the active ${label} config with the selected profile."
       ui_warn_line "All players will be disconnected."
       echo
@@ -2131,50 +2018,6 @@ menu_reset_profile_flow() {
   return 0
 }
 
-menu_profile_settings_menu() {
-  local title target edit_fn choice
-  title="$1"
-  target="$2"
-  edit_fn="$3"
-
-  while :; do
-    if menu_nav_is_set; then
-      return 0
-    fi
-    ui_header "$title"
-    ui_opt 1 "Edit current settings"
-    ui_opt 2 "Reset current profile"
-    ui_opt 3 "Select and apply profile"
-    echo
-    ui_actions_bar "0 Back" "m Main" "x Exit"
-    echo
-    choice="$(ui_prompt_choice "Choice")"
-    choice="$(echo "$choice" | tr '[:upper:]' '[:lower:]' | xargs)"
-    case "$choice" in
-      1)
-        if declare -F "$edit_fn" >/dev/null 2>&1; then
-          "$edit_fn"
-        else
-          ui_error "Missing editor function: $edit_fn"
-          ui_pause
-        fi
-        ;;
-      2) menu_reset_profile_flow "$target" || true ;;
-      3) menu_apply_profile_flow "$target" || true ;;
-      0) return 0 ;;
-      m) menu_nav_set "main"; return 0 ;;
-      x|q) menu_nav_set "exit"; return 0 ;;
-      *)
-        ui_warn_line "Invalid selection."
-        ui_pause
-        ;;
-    esac
-  done
-}
-
-menu_enshrouded_settings() { menu_profile_settings_menu "Enshrouded Server Settings" "enshrouded" "editor_enshrouded_json"; }
-
-
 # --- inlined menu module: manager ---
 editor_manager_json() {
   local config_file backed_up
@@ -2197,18 +2040,17 @@ editor_manager_json() {
   fi
 
   menu_edit_json_from_spec \
-    --title "Edit Server Manager Settings" \
-    --file "$config_file" \
-    --metaField "managerJsonPath" \
-    --labelMode "var" \
-    --backupJob "manual:manager" \
-    --emptyAction "null" \
-    --boolToggle "false" \
-    --emptyLabel "<null>"
+    "Edit Server Manager Settings" \
+    "$config_file" \
+    "managerJsonPath" \
+    "var" \
+    "" \
+    "" \
+    "manual:manager" \
+    "null" \
+    "false" \
+    "<null>"
 }
-
-
-menu_manager_settings() { menu_profile_settings_menu "Server Manager Settings" "manager" "editor_manager_json"; }
 
 
 MENU_NAV=""
@@ -2254,7 +2096,7 @@ menu_execute_action_by_type() {
   fi
 
   requires_running="$(jq -r '(.requiresRunning // false) | tostring' <<<"$action_json" 2>/dev/null || echo "false")"
-  if [[ "$requires_running" == "true" ]] && ! checkRunning "server"; then
+  if [[ "$requires_running" == "true" ]] && ! is_supervisor_running "server"; then
     ui_warn_line "Action '${action_name}' requires the server to be running."
     ui_pause
     return 1
@@ -2306,7 +2148,7 @@ menu_execute_action_by_type() {
         ui_note "Running: cmd $cmd"
       fi
       echo
-      /usr/local/etc/enshrouded/jobs/cmd "$cmd" "${cmd_args[@]}" || true
+      cmd_run "$cmd" "${cmd_args[@]}" || true
       echo
       ui_pause
       ;;
@@ -2504,14 +2346,14 @@ main() {
   case "${MENU_NAV:-}" in
     exit)
       # On exit, offer to start the server if it is currently stopped.
-      if ! checkRunning "server"; then
+      if ! is_supervisor_running "server"; then
         ui_clear
         ui_banner
         ui_warn_line "The Enshrouded server is currently STOPPED."
         echo
         if ui_confirm_yes_no "Do you want me to start server before exiting?"; then
           ui_note "Starting server..."
-          /usr/local/etc/enshrouded/jobs/cmd start >/dev/null 2>&1 || true
+          cmd_run start >/dev/null 2>&1 || true
           ui_success "Start requested."
         else
           ui_note "Server remains stopped."

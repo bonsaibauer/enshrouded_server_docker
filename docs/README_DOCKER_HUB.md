@@ -27,20 +27,21 @@ docker run \
 ## Commands
 
 ```bash
-docker exec enshroudedserver status
-docker exec enshroudedserver start
-docker exec enshroudedserver stop
-docker exec enshroudedserver restart
-docker exec enshroudedserver update
-docker exec enshroudedserver backup
-docker exec enshroudedserver backup-config
-docker exec enshroudedserver restore-backup
-docker exec enshroudedserver profile
-docker exec enshroudedserver password-view
-docker exec enshroudedserver scheduled-restart
-docker exec enshroudedserver force-update
-docker exec enshroudedserver bootstrap
-docker exec enshroudedserver cron-start
-docker exec enshroudedserver cron-stop
-docker exec enshroudedserver cron-restart
+docker exec enshroudedserver cmd status
+docker exec -it enshroudedserver cmd menu
+docker exec enshroudedserver cmd start
+docker exec enshroudedserver cmd stop
+docker exec enshroudedserver cmd restart
+docker exec enshroudedserver cmd update
+docker exec enshroudedserver cmd backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false
+docker exec enshroudedserver cmd restore-backup --zip /home/enshrouded/server/backups/manual/<file>.zip --restore all --safety-backup false
+docker exec enshroudedserver cmd profile --target enshrouded --action apply --profile default --create-backup true
+docker exec enshroudedserver cmd password-view
+docker exec enshroudedserver cmd env-validation verify
+docker exec enshroudedserver cmd scheduled-restart
+docker exec enshroudedserver cmd force-update
+docker exec enshroudedserver cmd bootstrap
+docker exec enshroudedserver cmd cron-start
+docker exec enshroudedserver cmd cron-stop
+docker exec enshroudedserver cmd cron-restart
 ```

@@ -12,12 +12,6 @@ Replace `enshroudedserver` with your container name (see `docker ps`).
 docker exec -it enshroudedserver cmd menu
 ```
 
-There is also a direct command alias:
-
-```bash
-docker exec -it enshroudedserver menu
-```
-
 ## Navigation
 
 - Enter a number (or command letter) and press Enter
@@ -193,7 +187,7 @@ Backups are created when you:
 
 - change a value in the JSON editors (exactly one backup per edit session, created on the first write)
 - apply a profile template (`Select and apply profile`)
-- run profile reset/apply via menu flows (internally triggers `cmd profile` with request JSON)
+- run profile reset/apply via menu flows (internally runs `cmd profile --target ... --action ... --create-backup true`)
 
 Retention:
 

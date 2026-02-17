@@ -108,10 +108,17 @@ restore_enshrouded_config="false"
 restore_manager_config="false"
 create_safety_backup="false"
 
+parse_bool_arg() {
+  case "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" in
+    true|false) echo "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" ;;
+    *) echo "" ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 Usage:
-  restore-backup --zip <path> --restore <savegame|enshrouded|manager|all> [--safety-backup|--no-safety-backup]
+  restore-backup --zip <path> --restore <savegame|enshrouded|manager|all> [--safety-backup true|false]
 EOF
 }
 
@@ -134,10 +141,10 @@ apply_restore_selection() {
       savegame)
         restore_savegame="true"
         ;;
-      enshrouded|enshrouded-config)
+      enshrouded)
         restore_enshrouded_config="true"
         ;;
-      manager|manager-config)
+      manager)
         restore_manager_config="true"
         ;;
       "")
@@ -151,6 +158,7 @@ apply_restore_selection() {
 
 parse_args() {
   local restore_selector
+  local parsed_bool
   restore_selector=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -165,12 +173,10 @@ parse_args() {
         shift 2
         ;;
       --safety-backup)
-        create_safety_backup="true"
-        shift
-        ;;
-      --no-safety-backup)
-        create_safety_backup="false"
-        shift
+        parsed_bool="$(parse_bool_arg "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --safety-backup (expected true|false)"
+        create_safety_backup="$parsed_bool"
+        shift 2
         ;;
       --help|-h)
         usage

@@ -79,13 +79,15 @@ The initial ENV selectors are captured once for transparency:
 
 ## Profile Reset/Apply
 
-Profile reset/apply is now handled by the unified `profile` job (request-driven):
+Profile reset/apply is handled by the unified `profile` job (arg-driven):
 
 - Interactive way (recommended): use `cmd menu` and choose profile reset/apply flows.
-- CLI way: write `server_manager/requests/profile.json` and trigger `cmd profile`.
+- CLI way: run `cmd profile` directly with args, for example:
+  - `cmd profile --target enshrouded --action apply --profile default --create-backup true`
+  - `cmd profile --target manager --action reset --create-backup true`
 
 The job will:
 
 - stop `server` if needed
 - create config backups in `BACKUP_DIR/profiles`
-- apply/reset either `server_manager.json` or `enshrouded_server.json` based on the request payload
+- apply/reset either `server_manager.json` or `enshrouded_server.json` based on the passed args

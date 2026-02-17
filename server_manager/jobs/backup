@@ -135,14 +135,15 @@ usage() {
   cat <<'EOF'
 Usage:
   backup [--mode scheduled|manual]
-         [--with-savegame|--without-savegame]
-         [--with-enshrouded-config|--without-enshrouded-config]
-         [--with-manager-config|--without-manager-config]
-         [--cleanup|--no-cleanup]
+         [--savegame true|false]
+         [--enshrouded-config true|false]
+         [--manager-config true|false]
+         [--cleanup true|false]
 EOF
 }
 
 parse_args() {
+  local parsed_bool
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --mode)
@@ -150,37 +151,29 @@ parse_args() {
         [[ -n "$mode" ]] || fatal "Missing value for --mode"
         shift 2
         ;;
-      --with-savegame)
-        include_savegame="true"
-        shift
+      --savegame)
+        parsed_bool="$(to_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --savegame (expected true|false)"
+        include_savegame="$parsed_bool"
+        shift 2
         ;;
-      --without-savegame)
-        include_savegame="false"
-        shift
+      --enshrouded-config)
+        parsed_bool="$(to_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --enshrouded-config (expected true|false)"
+        include_enshrouded_config="$parsed_bool"
+        shift 2
         ;;
-      --with-enshrouded-config)
-        include_enshrouded_config="true"
-        shift
-        ;;
-      --without-enshrouded-config)
-        include_enshrouded_config="false"
-        shift
-        ;;
-      --with-manager-config)
-        include_manager_config="true"
-        shift
-        ;;
-      --without-manager-config)
-        include_manager_config="false"
-        shift
+      --manager-config)
+        parsed_bool="$(to_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --manager-config (expected true|false)"
+        include_manager_config="$parsed_bool"
+        shift 2
         ;;
       --cleanup)
-        run_cleanup="true"
-        shift
-        ;;
-      --no-cleanup)
-        run_cleanup="false"
-        shift
+        parsed_bool="$(to_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --cleanup (expected true|false)"
+        run_cleanup="$parsed_bool"
+        shift 2
         ;;
       --help|-h)
         usage

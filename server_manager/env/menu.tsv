@@ -1,14 +1,22 @@
 section	id	parent	key	title	action	type	cmd	fn	requiresRunning	confirm	program	requestFile	timeoutSec	payloadJson	argsJson	env	group	field	jsonPath	order
-action	enshrouded_settings					internal		menu_enshrouded_settings												
-action	manager_settings					internal		menu_manager_settings												
-action	backups_menu					internal		menu_backups_menu												
+action	enshrouded_settings					internal		menu_load_screen							["enshroudedSettings","Enshrouded Server Settings"]					
+action	manager_settings					internal		menu_load_screen							["managerSettings","Server Manager Settings"]					
+action	backups_menu					internal		menu_load_screen							["backups","Backups"]					
+action	enshrouded_edit					internal		editor_enshrouded_json												
+action	enshrouded_reset					internal		menu_reset_profile_flow							["enshrouded"]					
+action	enshrouded_apply					internal		menu_apply_profile_flow							["enshrouded"]					
+action	manager_edit					internal		editor_manager_json												
+action	manager_reset					internal		menu_reset_profile_flow							["manager"]					
+action	manager_apply					internal		menu_apply_profile_flow							["manager"]					
+action	restore_backup					internal		menu_restore_backup												
+action	create_full_backup					internal		menu_run_savegame_backup												
+action	create_config_backup					internal		menu_run_config_backup_now												
 action	start_server					cmd	start													
 action	stop_server					cmd	stop		true											
 action	restart_server					cmd	restart		true											
 action	update_server					cmd	update													
 action	force_update_server					cmd	force-update			true										
 action	view_passwords					cmd	password-view													
-action	backup_now					cmd	backup		true						["--mode","manual","--with-savegame","--with-enshrouded-config","--with-manager-config","--no-cleanup"]					
 action	open_other_commands					internal		menu_load_screen							["otherCommands","Other Commands"]					
 action	status					cmd	status													
 action	scheduled_restart					cmd	scheduled-restart													
@@ -25,8 +33,17 @@ screen		main	6	Restart Server	restart_server															6
 screen		main	7	Update Server	update_server															7
 screen		main	8	Force Update Server	force_update_server															8
 screen		main	9	View Passwords	view_passwords															9
-screen		main	10	Create Manual Backup (.zip)	backup_now															10
+screen		main	10	Create Manual Backup (.zip)	create_full_backup															10
 screen		main	11	Other Commands	open_other_commands															11
+screen		enshroudedSettings	1	Edit current settings	enshrouded_edit															1
+screen		enshroudedSettings	2	Reset current profile	enshrouded_reset															2
+screen		enshroudedSettings	3	Select and apply profile	enshrouded_apply															3
+screen		managerSettings	1	Edit current settings	manager_edit															1
+screen		managerSettings	2	Reset current profile	manager_reset															2
+screen		managerSettings	3	Select and apply profile	manager_apply															3
+screen		backups	1	Restore from backup ZIP	restore_backup															1
+screen		backups	2	Create manual full backup now	create_full_backup															2
+screen		backups	3	Create config backup now	create_config_backup															3
 screen		otherCommands	1	Status	status															1
 screen		otherCommands	2	Scheduled Restart	scheduled_restart															2
 screen		otherCommands	3	Bootstrap	bootstrap															3

@@ -423,14 +423,22 @@ action=""
 profile_name=""
 create_backup="true"
 
+parse_bool_arg() {
+  case "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" in
+    true|false) echo "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" ;;
+    *) echo "" ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 Usage:
-  profile --target <manager|enshrouded> --action <apply|reset> [--profile <name>] [--create-backup|--no-create-backup]
+  profile --target <manager|enshrouded> --action <apply|reset> [--profile <name>] [--create-backup true|false]
 EOF
 }
 
 parse_args() {
+  local parsed_bool
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --target)
@@ -449,12 +457,10 @@ parse_args() {
         shift 2
         ;;
       --create-backup)
-        create_backup="true"
-        shift
-        ;;
-      --no-create-backup)
-        create_backup="false"
-        shift
+        parsed_bool="$(parse_bool_arg "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --create-backup (expected true|false)"
+        create_backup="$parsed_bool"
+        shift 2
         ;;
       --help|-h)
         usage
@@ -644,4 +650,6 @@ main() {
   run_profile_hook "profile post" "${PROFILE_POST_HOOK:-}"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
