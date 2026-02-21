@@ -9,6 +9,7 @@ skip_update="false"
 usage() {
   cat <<'EOF'
 Usage:
+  bootstrap [job] [no-update] [entrypoint]
   bootstrap [--job] [--no-update]
   bootstrap --entrypoint
 EOF
@@ -17,6 +18,18 @@ EOF
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      entrypoint)
+        mode="entrypoint"
+        shift
+        ;;
+      job)
+        mode="job"
+        shift
+        ;;
+      no-update)
+        skip_update="true"
+        shift
+        ;;
       --entrypoint)
         mode="entrypoint"
         shift
@@ -28,6 +41,10 @@ parse_args() {
       --no-update)
         skip_update="true"
         shift
+        ;;
+      help)
+        usage
+        exit 0
         ;;
       --help|-h)
         usage
@@ -230,15 +247,15 @@ run_job_mode() {
   prepare_enshrouded_app_folders
   update_or_create_enshrouded_server_config
   prepare_steam_a2s_python_library
-  server_run cron --sync --update-cron "${UPDATE_CRON:-}" --backup-cron "${BACKUP_CRON:-}" --restart-cron "${RESTART_CRON:-}"
+  server_run cron sync --update-cron "${UPDATE_CRON:-}" --backup-cron "${BACKUP_CRON:-}" --restart-cron "${RESTART_CRON:-}"
   bootstrap_pre_hook="${BOOTSTRAP_PRE_HOOK:-${BOOTSTRAP_HOOK:-}}"
-  server_run hook-run --name "bootstrap pre" --command "$bootstrap_pre_hook"
+  server_run hook-run "bootstrap pre" "$bootstrap_pre_hook"
   if [[ "$skip_update" == "true" ]]; then
     info "Skipping updater start (--no-update)"
   else
     server_run update
   fi
-  server_run hook-run --name "bootstrap post" --command "${BOOTSTRAP_POST_HOOK:-}"
+  server_run hook-run "bootstrap post" "${BOOTSTRAP_POST_HOOK:-}"
   info "Bootstrap job mode complete"
 }
 

@@ -478,6 +478,8 @@ parse_bool_arg() {
 usage() {
   cat <<'EOF'
 Usage:
+  profile <manager|enshrouded> <apply|reset> [profile]
+  profile passwords [text|json]
   profile --target <manager|enshrouded> --action <apply|reset> [--profile <name>] [--create-backup true|false]
   profile --password-view [--format text|json]
 EOF
@@ -487,6 +489,36 @@ parse_args() {
   local parsed_bool
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      manager|enshrouded)
+        target="$1"
+        action="${2-}"
+        case "$action" in
+          apply)
+            profile_name="${3-}"
+            [[ -n "$profile_name" ]] || fatal "Missing profile name (usage: profile $target apply <profile>)"
+            shift 3
+            ;;
+          reset)
+            shift 2
+            ;;
+          *)
+            fatal "Invalid profile action (expected apply|reset): ${action:-<empty>}"
+            ;;
+        esac
+        ;;
+      passwords|password-view)
+        PROFILE_MODE="password-view"
+        if [[ $# -ge 2 && "${2#-}" == "$2" ]]; then
+          password_view_format="$2"
+          shift 2
+        else
+          shift
+        fi
+        ;;
+      help)
+        usage
+        exit 0
+        ;;
       --target)
         target="${2-}"
         [[ -n "$target" ]] || fatal "Missing value for --target"
@@ -666,7 +698,7 @@ profile_password_view() {
     fatal "Invalid JSON: $config_file"
   fi
 
-  "$SERVER_JOB_BIN" hook-run --name "password-view pre" --command "${PASSWORD_VIEW_PRE_HOOK:-}"
+  "$SERVER_JOB_BIN" hook-run "password-view pre" "${PASSWORD_VIEW_PRE_HOOK:-}"
 
   if [[ "$password_view_format" == "json" ]]; then
     jq -c '
@@ -720,7 +752,7 @@ profile_password_view() {
     ' "$config_file"
   fi
 
-  "$SERVER_JOB_BIN" hook-run --name "password-view post" --command "${PASSWORD_VIEW_POST_HOOK:-}"
+  "$SERVER_JOB_BIN" hook-run "password-view post" "${PASSWORD_VIEW_POST_HOOK:-}"
 }
 
 load_runtime_values() {
@@ -754,7 +786,7 @@ main() {
   export PROFILE_TARGET="$target"
   export PROFILE_ACTION="$action"
   export PROFILE_NAME="$profile_name"
-  "$SERVER_JOB_BIN" hook-run --name "profile pre" --command "${PROFILE_PRE_HOOK:-}"
+  "$SERVER_JOB_BIN" hook-run "profile pre" "${PROFILE_PRE_HOOK:-}"
 
   stop_server_now
   if [[ "$target" == "manager" ]]; then
@@ -763,7 +795,7 @@ main() {
     apply_enshrouded_profile "$profile_name"
   fi
 
-  "$SERVER_JOB_BIN" hook-run --name "profile post" --command "${PROFILE_POST_HOOK:-}"
+  "$SERVER_JOB_BIN" hook-run "profile post" "${PROFILE_POST_HOOK:-}"
   info "Profile job complete (target=${target}, action=${action}, profile=${profile_name})"
 }
 

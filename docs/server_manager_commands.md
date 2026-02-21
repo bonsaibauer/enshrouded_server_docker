@@ -3,6 +3,31 @@
 Use your container name instead of `enshroudedserver`.
 
 Note: All commands below are shown without the `server` prefix. Internally, they are aliases to the same script. If needed, you can still run them as `docker exec enshroudedserver server <command>`.
+Most commands can run without extra arguments and then use defaults from `server_manager.json` / `enshrouded_server.json` (for example cron schedules and player-check behavior).
+
+## Simple Commands (Quick Readme)
+
+- `docker exec enshroudedserver status`: Shows supervisor status for all jobs (`server`, `updater`, `crond`, ...).
+- `docker exec -it enshroudedserver menu`: Opens the interactive management menu.
+- `docker exec enshroudedserver start`: Starts the server job.
+- `docker exec enshroudedserver stop`: Stops the server job.
+- `docker exec enshroudedserver restart`: Direct restart of the server job (no explicit player-check mode set).
+- `docker exec enshroudedserver restart [force|player-check|no-player-check]`: Restart with explicit restart behavior.
+- `docker exec enshroudedserver update`: Runs normal updater flow (install if needed, then start server).
+- `docker exec enshroudedserver update force`: Forces full update path.
+- `docker exec enshroudedserver update check`: Check-only mode (no install/start).
+- `docker exec enshroudedserver update [player-check|no-player-check]`: Overrides player-check behavior for this update run.
+- `docker exec enshroudedserver scheduled-restart [force|player-check|no-player-check]`: Runs scheduled restart flow manually.
+- `docker exec enshroudedserver scheduled-backup`: Runs scheduled backup flow manually.
+- `docker exec enshroudedserver backup`: Creates a manual backup with default includes (savegame + both config files).
+- `docker exec enshroudedserver backup [manual|scheduled]`: Creates backup in selected mode.
+- `docker exec enshroudedserver backup list`: Lists available backup ZIP files (manual + scheduled).
+- `docker exec enshroudedserver backup inspect <backup.zip>`: Shows which components are in a backup ZIP.
+- `docker exec enshroudedserver backup restore <backup.zip> [savegame|enshrouded|manager|all]`: Restores selected parts (default target is `all`).
+- `docker exec enshroudedserver profile <manager|enshrouded> <apply|reset> [profile]`: Applies/resets profile (with config backup).
+- `docker exec enshroudedserver password-view`:ows user group rights/passwords (`text` default).
+- `docker exec enshroudedserver cron sync`: Rewrites cron table from current `server_manager.json`.
+- `docker exec enshroudedserver cron [start|stop|restart|status]`: Controls `crond` service.
 
 ## Chapter 1 - Core Commands
 
@@ -52,50 +77,47 @@ docker exec enshroudedserver stop
 ### 1.5 `restart`
 
 ```bash
-docker exec enshroudedserver restart [--check-players|--no-check-players] [--force]
+docker exec enshroudedserver restart [force|player-check|no-player-check]
 ```
 
 - What this command does: Runs the controlled restart job.
-- `docker exec enshroudedserver restart --check-players`: Restarts only when no players are online.
+- `docker exec enshroudedserver restart player-check`: Restarts only when no players are online.
 - Args:
-- `--check-players`: Enforces player check before restart.
-- `--no-check-players`: Restarts without player check.
-- `--force`: Forces restart (effectively like no player check).
+- `force`: Forces restart.
+- `player-check`: Enforces player check before restart.
+- `no-player-check`: Restarts without player check.
+- Advanced also supported: `--force`, `--player-check`, `--no-player-check`.
 
 ### 1.6 `update`
 
 ```bash
-docker exec enshroudedserver update
+docker exec enshroudedserver update [force|check|player-check|no-player-check]
 ```
 
 - What this command does: Starts the updater job.
-- `docker exec enshroudedserver update`: Checks/applies a normal update and starts the server afterward.
-- Args: None.
+- `docker exec enshroudedserver update force`: Forces a full update (useful for broken installs or branch mismatch issues).
+- Args:
+- `force`: Force full update path.
+- `check`: Check update availability only (no install/start).
+- `player-check`: Enforce player check before update.
+- `no-player-check`: Skip online player check before update.
+- Advanced also supported: `--force`, `--check-only`, `--player-check`, `--no-player-check`.
 
-### 1.7 `force-update`
-
-```bash
-docker exec enshroudedserver force-update
-```
-
-- What this command does: Forces a full update.
-- `docker exec enshroudedserver force-update`: Useful for broken installs or branch mismatch issues.
-- Args: None.
-
-### 1.8 `scheduled-restart`
+### 1.7 `scheduled-restart`
 
 ```bash
-docker exec enshroudedserver scheduled-restart [--check-players|--no-check-players] [--force]
+docker exec enshroudedserver scheduled-restart [force|player-check|no-player-check]
 ```
 
 - What this command does: Manually runs the scheduled restart path.
-- `docker exec enshroudedserver scheduled-restart --force`: Tests the same restart flow used by cron.
+- `docker exec enshroudedserver scheduled-restart force`: Tests the same restart flow used by cron.
 - Args:
-- `--check-players`: Restarts only when empty.
-- `--no-check-players`: Restarts without player check.
-- `--force`: Forces restart.
+- `force`: Forces restart.
+- `player-check`: Restarts only when empty.
+- `no-player-check`: Restarts without player check.
+- Advanced also supported: `--force`, `--player-check`, `--no-player-check`.
 
-### 1.9 `scheduled-backup`
+### 1.8 `scheduled-backup`
 
 ```bash
 docker exec enshroudedserver scheduled-backup
@@ -110,54 +132,51 @@ docker exec enshroudedserver scheduled-backup
 ### 2.1 `backup` (scheduled/manual)
 
 ```bash
-docker exec enshroudedserver backup --mode scheduled|manual [--savegame true|false] [--enshrouded-config true|false] [--manager-config true|false] [--cleanup true|false]
+docker exec enshroudedserver backup [manual|scheduled]
 ```
 
 - What this command does: Creates a backup with controlled content selection.
-- `docker exec enshroudedserver backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false`: Creates a full manual backup without cleanup.
+- `docker exec enshroudedserver backup`: Creates a default manual backup (simple mode).
 - Args:
-- `--mode scheduled|manual`: Backup type.
-- `--savegame true|false`: Include/exclude savegame.
-- `--enshrouded-config true|false`: Include/exclude `enshrouded_server.json`.
-- `--manager-config true|false`: Include/exclude `server_manager.json`.
-- `--cleanup true|false`: Cleanup old backups according to retention.
+- `manual`: Manual backup mode.
+- `scheduled`: Scheduled profile backup mode.
+- Advanced also supported: `--mode`, `--savegame`, `--enshrouded-config`, `--manager-config`, `--cleanup`.
 
-### 2.2 `backup --mode list`
+### 2.2 `backup list`
 
 ```bash
-docker exec enshroudedserver backup --mode list
+docker exec enshroudedserver backup list
 ```
 
 - What this command does: Lists available backup ZIP files.
-- `docker exec enshroudedserver backup --mode list`: Useful to get names for `inspect` and `restore`.
+- `docker exec enshroudedserver backup list`: Useful to get names for `inspect` and `restore`.
 - Args:
-- `--mode list`: List only, no backup/restore execution.
+- `list`: List only, no backup/restore execution.
+- Advanced also supported: `--mode list`.
 
-### 2.3 `backup --mode inspect`
+### 2.3 `backup inspect`
 
 ```bash
-docker exec enshroudedserver backup --mode inspect --zip <backup.zip>
+docker exec enshroudedserver backup inspect <backup.zip>
 ```
 
 - What this command does: Shows which content is available inside a backup ZIP.
-- `docker exec enshroudedserver backup --mode inspect --zip my-backup.zip`: Verifies savegame/config presence before restore.
+- `docker exec enshroudedserver backup inspect my-backup.zip`: Verifies savegame/config presence before restore.
 - Args:
-- `--mode inspect`: Inspection mode.
-- `--zip <backup.zip>`: ZIP filename or path.
+- `inspect <backup.zip>`: Inspection mode with ZIP filename/path.
+- Advanced also supported: `--mode inspect --zip <backup.zip>`.
 
-### 2.4 `backup --mode restore`
+### 2.4 `backup restore`
 
 ```bash
-docker exec enshroudedserver backup --mode restore --zip <backup.zip> --restore <savegame|enshrouded|manager|all> [--safety-backup true|false]
+docker exec enshroudedserver backup restore <backup.zip> [savegame|enshrouded|manager|all]
 ```
 
 - What this command does: Restores selected parts from a backup ZIP.
-- `docker exec enshroudedserver backup --mode restore --zip my-backup.zip --restore all --safety-backup false`: Full restore without creating an additional safety backup.
+- `docker exec enshroudedserver backup restore my-backup.zip all`: Full restore from ZIP.
 - Args:
-- `--mode restore`: Restore mode.
-- `--zip <backup.zip>`: ZIP filename or path.
-- `--restore <...>`: Target `savegame|enshrouded|manager|all` (also comma-combinable).
-- `--safety-backup true|false`: Create an extra safety backup before restore.
+- `restore <backup.zip> [target]`: Restore mode (default target is `all`).
+- Advanced also supported: `--mode restore --zip <backup.zip> --restore <target> [--safety-backup true|false]`.
 
 ### 2.5 `backup-config`
 
@@ -172,11 +191,11 @@ docker exec enshroudedserver backup-config
 ### 2.6 ZIP resolution for `inspect` and `restore`
 
 ```bash
-docker exec enshroudedserver backup --mode restore --zip my-backup.zip --restore savegame
+docker exec enshroudedserver backup restore my-backup.zip savegame
 ```
 
 - What this command does: Uses only the ZIP filename, without full path.
-- `docker exec enshroudedserver backup --mode restore --zip manual/my-backup.zip --restore manager`: If the same filename exists multiple times, use `manual/...` or `scheduled/...`.
+- `docker exec enshroudedserver backup restore manual/my-backup.zip manager`: If the same filename exists multiple times, use `manual/...` or `scheduled/...`.
 - Args note:
 - The job searches `BACKUP_DIR/manual` and `BACKUP_DIR/scheduled` first.
 - If the filename is unique, plain filename is enough.
@@ -186,27 +205,29 @@ docker exec enshroudedserver backup --mode restore --zip my-backup.zip --restore
 ### 3.1 `profile`
 
 ```bash
-docker exec enshroudedserver profile --target <manager|enshrouded> --action <apply|reset> [--profile <name>] [--create-backup true|false]
+docker exec enshroudedserver profile <manager|enshrouded> <apply|reset> [profile]
 ```
 
 - What this command does: Applies profiles or resets to defaults.
-- `docker exec enshroudedserver profile --target enshrouded --action apply --profile default --create-backup true`: Applies the `default` Enshrouded profile and creates a config backup first.
+- `docker exec enshroudedserver profile enshrouded apply default`: Applies the `default` Enshrouded profile.
 - Args:
-- `--target <manager|enshrouded>`: Target profile type.
-- `--action <apply|reset>`: Apply or reset action.
-- `--profile <name>`: Profile name, required for `apply`.
-- `--create-backup true|false`: Create config backup before profile change.
+- `<manager|enshrouded>`: Profile target.
+- `<apply|reset>`: Operation mode.
+- `[profile]`: Profile name (required for `apply`).
+- Note: A config backup is created by default before profile changes.
+- Advanced also supported: `--target`, `--action`, `--profile`, `--create-backup true|false`.
 
 ### 3.2 `password-view`
 
 ```bash
-docker exec enshroudedserver password-view [--format text|json]
+docker exec enshroudedserver password-view [text|json]
 ```
 
 - What this command does: Shows group rights and passwords from server config.
-- `docker exec enshroudedserver password-view --format json`: Machine-readable output for scripts/checks.
+- `docker exec enshroudedserver password-view json`: Machine-readable output for scripts/checks.
 - Args:
-- `--format text|json`: Output format.
+- `text|json`: Output format (`text` by default).
+- Advanced also supported: `--format text|json`.
 
 ## Chapter 4 - Validation, Bootstrap, Cron
 
@@ -226,53 +247,56 @@ docker exec enshroudedserver env-validation [verify|init-runtime|check <name> <v
 ### 4.2 `bootstrap`
 
 ```bash
-docker exec enshroudedserver bootstrap [--job] [--no-update]
+docker exec enshroudedserver bootstrap [job] [no-update] [entrypoint]
 ```
 
 - What this command does: Runs the bootstrap job.
-- `docker exec enshroudedserver bootstrap --job --no-update`: Initializes config/jobs and skips initial update.
+- `docker exec enshroudedserver bootstrap job no-update`: Initializes config/jobs and skips initial update.
 - Args:
-- `--job`: Force job mode.
-- `--no-update`: Skip initial updater start.
+- `job`: Run bootstrap in job mode.
+- `no-update`: Skip initial updater start.
+- `entrypoint`: Run entrypoint mode.
+- Advanced also supported: `--job`, `--no-update`, `--entrypoint`.
 
 ### 4.3 `cron`
 
 ```bash
-docker exec enshroudedserver cron [--sync] [--update-cron "<expr>"] [--backup-cron "<expr>"] [--restart-cron "<expr>"]
+docker exec enshroudedserver cron [sync|start|stop|restart|status]
 ```
 
-- What this command does: Writes/updates cron schedules.
-- `docker exec enshroudedserver cron --sync --update-cron "0 */6 * * *" --backup-cron "0 3 * * *" --restart-cron "0 5 * * *"`: Sets fixed schedules for update/backup/restart.
+- What this command does: Syncs cron schedules or controls the cron daemon.
+- `docker exec enshroudedserver cron restart`: Restarts the cron daemon.
 - Args:
-- `--sync`: Rewrite cron table.
-- `--update-cron "<expr>"`: Update schedule.
-- `--backup-cron "<expr>"`: Backup schedule.
-- `--restart-cron "<expr>"`: Restart schedule.
+- `sync`: Rewrite cron table from current config in `server_manager.json`.
+- `start|stop|restart|status`: Cron daemon service actions.
+- Advanced also supported: `--sync`, `--service <...>`, `--update-cron`, `--backup-cron`, `--restart-cron`.
 
-### 4.4 `cron --service`
+### 4.4 `cron` service actions
 
 ```bash
-docker exec enshroudedserver cron --service <start|stop|restart|status>
+docker exec enshroudedserver cron <start|stop|restart|status>
 ```
 
 - What this command does: Controls the `crond` service.
-- `docker exec enshroudedserver cron --service restart`: Restarts cron service cleanly.
+- `docker exec enshroudedserver cron restart`: Restarts cron service cleanly.
 - Args:
-- `--service <start|stop|restart|status>`: Service action.
+- `<start|stop|restart|status>`: Service action.
+- Advanced also supported: `cron --service <start|stop|restart|status>`.
 
 ## Chapter 5 - Advanced/Internal Commands
 
 ### 5.1 `hook-run`
 
 ```bash
-docker exec enshroudedserver hook-run --name <name> --command <cmd>
+docker exec enshroudedserver hook-run <name> [command...]
 ```
 
 - What this command does: Executes a named hook command.
-- `docker exec enshroudedserver hook-run --name "manual test" --command "echo hook-ok"`: Tests hook integration and logging.
+- `docker exec enshroudedserver hook-run "manual test" "echo hook-ok"`: Tests hook integration and logging.
 - Args:
-- `--name <name>`: Log/display name.
-- `--command <cmd>`: Shell command to run.
+- `<name>`: Log/display name.
+- `[command...]`: Optional shell command to execute.
+- Advanced also supported: `--name <name> [--command <command>]`.
 
 ### 5.2 `guard-run`
 

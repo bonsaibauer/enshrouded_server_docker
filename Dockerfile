@@ -78,7 +78,6 @@ RUN ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/server \
     && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/env-validation \
     && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/scheduled-backup \
     && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/scheduled-restart \
-    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/force-update \
     && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/bootstrap \
     && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/cron
 RUN find /usr/local/etc/enshrouded -type f -exec sed -i 's/\r$//' {} +

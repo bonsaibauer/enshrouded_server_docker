@@ -8,6 +8,7 @@ latest_version="-1"
 FORCE_UPDATE="false"
 CHECK_ONLY="false"
 NO_PLAYER_CHECK="false"
+PLAYER_CHECK_FORCE=""
 
 debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && echo "DEBUG - $*" || true; }
 
@@ -65,13 +66,35 @@ clearLock() {
 usage() {
   cat <<'EOF'
 Usage:
-  updater [--force] [--check-only] [--no-player-check]
+  updater [force|check|player-check|no-player-check]
+  updater [--force] [--check-only] [--player-check|--no-player-check]
 EOF
 }
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      force)
+        FORCE_UPDATE="true"
+        shift
+        ;;
+      check)
+        CHECK_ONLY="true"
+        shift
+        ;;
+      player-check)
+        PLAYER_CHECK_FORCE="true"
+        shift
+        ;;
+      no-player-check)
+        PLAYER_CHECK_FORCE="false"
+        NO_PLAYER_CHECK="true"
+        shift
+        ;;
+      help)
+        usage
+        exit 0
+        ;;
       --force)
         FORCE_UPDATE="true"
         shift
@@ -80,7 +103,12 @@ parse_args() {
         CHECK_ONLY="true"
         shift
         ;;
+      --player-check)
+        PLAYER_CHECK_FORCE="true"
+        shift
+        ;;
       --no-player-check)
+        PLAYER_CHECK_FORCE="false"
         NO_PLAYER_CHECK="true"
         shift
         ;;
@@ -96,7 +124,7 @@ parse_args() {
 }
 
 update() {
-  local players_check_rc
+  local players_check_rc players_check_arg
   if [[ -f "$pidfile" ]]; then
     info "Found existing PID file - checking process"
     checkLock "$pidfile"
@@ -112,7 +140,11 @@ update() {
     return 0
   fi
 
-  "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --players-check --check-players "${UPDATE_CHECK_PLAYERS:-true}" --query-port "${ENSHROUDED_QUERY_PORT:-15637}"
+  players_check_arg="--player-check"
+  if [[ "${UPDATE_CHECK_PLAYERS:-true}" != "true" ]]; then
+    players_check_arg="--no-player-check"
+  fi
+  "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --players-check "$players_check_arg" --query-port "${ENSHROUDED_QUERY_PORT:-15637}"
   players_check_rc=$?
   case "$players_check_rc" in
     0)
@@ -133,7 +165,7 @@ update() {
 }
 
 run_update_flow() {
-  "${SCRIPT_DIR}/server" hook-run --name "update pre" --command "${UPDATE_PRE_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run "update pre" "${UPDATE_PRE_HOOK:-}"
   if checkRunning "server"; then
     "${SCRIPT_DIR}/server" stop
   fi
@@ -153,7 +185,7 @@ run_update_flow() {
 
   set_current_version
   "${SCRIPT_DIR}/server" start
-  "${SCRIPT_DIR}/server" hook-run --name "update post" --command "${UPDATE_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run "update post" "${UPDATE_POST_HOOK:-}"
   clearLock "$pidfile"
 }
 
@@ -249,7 +281,9 @@ main() {
   parse_args "$@"
   init_runtime_env
 
-  if [[ "$NO_PLAYER_CHECK" == "true" ]]; then
+  if [[ -n "$PLAYER_CHECK_FORCE" ]]; then
+    UPDATE_CHECK_PLAYERS="$PLAYER_CHECK_FORCE"
+  elif [[ "$NO_PLAYER_CHECK" == "true" ]]; then
     UPDATE_CHECK_PLAYERS="false"
   fi
 

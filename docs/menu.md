@@ -36,7 +36,7 @@ Exit behavior:
 5. `stop`
 6. `restart`
 7. `update`
-8. `force-update`
+8. `update_force`
 9. `password-view`
 10. `Create Savegame Backup (.zip)`
 11. `Other Commands`
@@ -44,7 +44,8 @@ Exit behavior:
 Notes:
 
 - `Create Savegame Backup (.zip)` is a shortcut for `Backups -> Create savegame backup now (.zip)`.
-- The items `start/stop/restart/update/force-update/password-view` are the same actions as `server <command>` and are shown in the main menu for convenience.
+- The items `start/stop/restart/update/password-view` are the same actions as `server <command>` and are shown in the main menu for convenience.
+- `update_force` in the menu maps to `update force`.
 
 ## Enshrouded Server Settings
 
@@ -149,7 +150,7 @@ This submenu is a convenience wrapper around existing `server` commands:
 - `status`
 - `scheduled-restart`
 - `bootstrap`
-- `cron --sync`
+- `cron sync`
 
 Note: explicit reset commands are intentionally not listed here, because profile reset/apply is handled through the unified `profile` job and menu flows.
 
@@ -185,7 +186,7 @@ Backups are created when you:
 
 - change a value in the JSON editors (exactly one backup per edit session, created on the first write)
 - apply a profile template (`Select and apply profile`)
-- run profile reset/apply via menu flows (internally runs `server profile --target ... --action ... --create-backup true`)
+- run profile reset/apply via menu flows (internally runs `server profile <target> <apply|reset> [profile]`)
 
 Retention:
 

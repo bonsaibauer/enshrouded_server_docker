@@ -79,6 +79,17 @@ load_runtime_values() {
 usage() {
   cat <<'EOF'
 Usage:
+  backup [manual|scheduled]
+         [--savegame true|false]
+         [--enshrouded-config true|false]
+         [--manager-config true|false]
+         [--cleanup true|false]
+
+  backup list
+  backup inspect <zip>
+  backup restore <zip> [savegame|enshrouded|manager|all]
+         [--safety-backup true|false]
+
   backup [--mode scheduled|manual]
          [--savegame true|false]
          [--enshrouded-config true|false]
@@ -131,6 +142,32 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      manual|scheduled|list)
+        mode="$1"
+        shift
+        ;;
+      inspect)
+        mode="inspect"
+        zip_path="${2-}"
+        [[ -n "$zip_path" ]] || fatal "Missing zip filename (usage: backup inspect <zip>)"
+        shift 2
+        ;;
+      restore)
+        mode="restore"
+        zip_path="${2-}"
+        [[ -n "$zip_path" ]] || fatal "Missing zip filename (usage: backup restore <zip> [savegame|enshrouded|manager|all])"
+        if [[ $# -ge 3 && "${3#-}" == "$3" ]]; then
+          restore_selector="$3"
+          shift 3
+        else
+          restore_selector="all"
+          shift 2
+        fi
+        ;;
+      help)
+        usage
+        exit 0
+        ;;
       --mode)
         mode="${2-}"
         [[ -n "$mode" ]] || fatal "Missing value for --mode"
@@ -506,14 +543,14 @@ cleanup_old_scheduled_backups() {
 
 run_backup_operation() {
   export BACKUP_MODE="$mode"
-  "${SCRIPT_DIR}/server" hook-run --name "backup pre" --command "${BACKUP_PRE_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run "backup pre" "${BACKUP_PRE_HOOK:-}"
 
   stage_dir="$(mktemp -d)"
   prepare_stage_content
   create_zip_from_stage
   cleanup_old_scheduled_backups
 
-  "${SCRIPT_DIR}/server" hook-run --name "backup post" --command "${BACKUP_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run "backup post" "${BACKUP_POST_HOOK:-}"
   info "Backup job complete: $backup_file"
 }
 
@@ -707,7 +744,7 @@ restore_manager_config_from_zip() {
 }
 
 run_restore_operation() {
-  "${SCRIPT_DIR}/server" hook-run --name "restore pre" --command "${RESTORE_PRE_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run "restore pre" "${RESTORE_PRE_HOOK:-}"
   stop_server_now
   run_safety_backup_if_requested
 
@@ -716,7 +753,7 @@ run_restore_operation() {
   [[ "$restore_enshrouded_config" == "true" ]] && restore_enshrouded_config_from_zip
   [[ "$restore_manager_config" == "true" ]] && restore_manager_config_from_zip
 
-  "${SCRIPT_DIR}/server" hook-run --name "restore post" --command "${RESTORE_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run "restore post" "${RESTORE_POST_HOOK:-}"
   info "Restore operation complete: $zip_path"
 }
 

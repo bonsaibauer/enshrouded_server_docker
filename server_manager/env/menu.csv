@@ -15,13 +15,13 @@ action,start_server,null,null,null,null,server,start,null,null,null,null,null,nu
 action,stop_server,null,null,null,null,server,stop,null,true,null,null,null,null,null,null,null,null,null,null,null
 action,restart_server,null,null,null,null,server,restart,null,true,null,null,null,null,null,null,null,null,null,null,null
 action,update_server,null,null,null,null,server,update,null,null,null,null,null,null,null,null,null,null,null,null,null
-action,force_update_server,null,null,null,null,server,force-update,null,null,true,null,null,null,null,null,null,null,null,null,null
+action,update_force,null,null,null,null,server,update,null,null,true,null,null,null,null,"[""force""]",null,null,null,null,null
 action,view_passwords,null,null,null,null,server,password-view,null,null,null,null,null,null,null,null,null,null,null,null,null
 action,open_other_commands,null,null,null,null,internal,null,menu_load_screen,null,null,null,null,null,null,"[""otherCommands"",""Other Commands""]",null,null,null,null,null
 action,status,null,null,null,null,server,status,null,null,null,null,null,null,null,null,null,null,null,null,null
 action,scheduled_restart,null,null,null,null,server,scheduled-restart,null,null,null,null,null,null,null,null,null,null,null,null,null
 action,bootstrap,null,null,null,null,server,bootstrap,null,null,null,null,null,null,null,null,null,null,null,null,null
-action,cron,null,null,null,null,server,cron,null,null,null,null,null,null,"[""--sync""]",null,null,null,null,null,null
+action,cron,null,null,null,null,server,cron,null,null,null,null,null,null,"[""sync""]",null,null,null,null,null,null
 screen,null,main,1,Enshrouded Server Settings,enshrouded_settings,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1
 screen,null,main,2,Server Manager Settings,manager_settings,null,null,null,null,null,null,null,null,null,null,null,null,null,null,2
 screen,null,main,3,Backup Menu,backups_menu,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3
@@ -29,7 +29,7 @@ screen,null,main,4,Start Server,start_server,null,null,null,null,null,null,null,
 screen,null,main,5,Stop Server,stop_server,null,null,null,null,null,null,null,null,null,null,null,null,null,null,5
 screen,null,main,6,Restart Server,restart_server,null,null,null,null,null,null,null,null,null,null,null,null,null,null,6
 screen,null,main,7,Update Server,update_server,null,null,null,null,null,null,null,null,null,null,null,null,null,null,7
-screen,null,main,8,Force Update Server,force_update_server,null,null,null,null,null,null,null,null,null,null,null,null,null,null,8
+screen,null,main,8,update_force,update_force,null,null,null,null,null,null,null,null,null,null,null,null,null,null,8
 screen,null,main,9,View Passwords,view_passwords,null,null,null,null,null,null,null,null,null,null,null,null,null,null,9
 screen,null,main,10,Create Manual Backup (.zip),create_full_backup,null,null,null,null,null,null,null,null,null,null,null,null,null,null,10
 screen,null,main,11,Other Commands,open_other_commands,null,null,null,null,null,null,null,null,null,null,null,null,null,null,11

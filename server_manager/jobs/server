@@ -27,9 +27,17 @@ usage_server() {
 Usage:
   server [--wait-download|--no-wait-download]
   server --stop-safe [--shutdown-timeout <seconds>]
-  server --players-check [--check-players true|false] [--query-port <port>]
+  server --players-check [--player-check|--no-player-check] [--query-port <port>]
   server --render-banner
   server --startup-ui
+EOF
+}
+
+usage_hook_run() {
+  cat <<'EOF'
+Usage:
+  hook-run <name> [command...]
+  hook-run --name <name> [--command <command>]
 EOF
 }
 
@@ -39,33 +47,32 @@ Usage:
   docker exec CONTAINER_NAME server <command> [args...]
 
 Commands:
-  hook-run       Internal: execute a named hook command
+  hook-run       Execute hook (simple: hook-run <name> [command...])
   guard-run      Internal: run a guarded call (server_guard_run API)
   guard-require  Internal: run guard, fail hard when blocked
   status         Show supervisor program status
   menu           Start interactive Server Manager menu
   start          Start server
   stop           Stop server
-  restart        Restart server
-  update         Trigger updater
+  restart        Restart server (simple: restart | restart force | restart player-check | restart no-player-check)
+  update         Trigger updater (simple: update | update force | update check | update player-check | update no-player-check)
   scheduled-backup
                  Trigger backup job via supervisor
-  backup         Trigger backup job (requires args, e.g. --mode manual --savegame true ...)
-  profile        Trigger profile job (requires args, e.g. --target ... --action ...)
-  password-view  Show user group rights and passwords from enshrouded_server.json
+  backup         Trigger backup job (simple: backup | backup list | backup inspect <zip> | backup restore <zip> [target])
+  profile        Trigger profile job (simple: profile <manager|enshrouded> <apply|reset> [profile] | profile passwords [text|json])
+  password-view  Show user group rights and passwords from enshrouded_server.json (simple: password-view [text|json])
   env-validation Run ENV validation job
   scheduled-restart
                  Trigger restart job
-  force-update   Trigger updater in force mode
-  bootstrap      Trigger bootstrap
-  cron           Manage cron sync/service (e.g. --sync, --service restart)
+  bootstrap      Trigger bootstrap (simple: bootstrap | bootstrap job | bootstrap no-update | bootstrap entrypoint)
+  cron           Manage cron (simple: cron sync | cron start|stop|restart|status)
   help           Show this help
 EOF
 }
 
 is_server_command() {
   case "$1" in
-    hook-run|guard-run|guard-require|status|menu|start|stop|restart|update|scheduled-backup|backup|backup-config|profile|password-view|env-validation|scheduled-restart|force-update|bootstrap|cron|help|--help|-h)
+    hook-run|guard-run|guard-require|status|menu|start|stop|restart|update|scheduled-backup|backup|backup-config|profile|password-view|env-validation|scheduled-restart|bootstrap|cron|help|--help|-h)
       return 0
       ;;
     *)
@@ -304,6 +311,10 @@ require_no_args() {
   fi
 }
 
+is_non_flag_token() {
+  [[ $# -gt 0 && -n "$1" && "${1#-}" == "$1" ]]
+}
+
 run_hook() {
   local hook_name hook_cmd
   hook_name="$1"
@@ -319,6 +330,19 @@ run_hook_command() {
   local hook_name hook_cmd
   hook_name=""
   hook_cmd=""
+  if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then
+    if [[ "$1" == "help" && "$#" -eq 1 ]]; then
+      usage_hook_run
+      return 0
+    fi
+    hook_name="$1"
+    shift
+    if [[ "$#" -gt 0 ]]; then
+      hook_cmd="$*"
+    fi
+    run_hook "$hook_name" "$hook_cmd"
+    return 0
+  fi
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --name)
@@ -333,14 +357,19 @@ run_hook_command() {
         hook_cmd="${2-}"
         shift 2
         ;;
+      --help|-h)
+        usage_hook_run
+        exit 0
+        ;;
       *)
         echo "Unknown argument for hook-run: $1" >&2
+        usage_hook_run >&2
         exit 1
         ;;
     esac
   done
   [[ -n "$hook_name" ]] || {
-    echo "Missing --name" >&2
+    echo "Missing hook name (usage: hook-run <name> [command...])" >&2
     exit 1
   }
   run_hook "$hook_name" "$hook_cmd"
@@ -381,15 +410,66 @@ run_server_command() {
       server_guard_run "core_ready" -- run_supervisorctl stop server
       ;;
     restart)
-      if [[ "$#" -gt 0 ]]; then
-        run_job_script "restart" "$@"
-      else
+      if [[ "$#" -eq 0 ]]; then
         server_guard_run "server_ready" -- run_supervisorctl restart server
+      else
+        if is_non_flag_token "$1"; then
+          case "$1" in
+            force)
+              shift
+              set -- --force "$@"
+              ;;
+            player-check)
+              shift
+              set -- --player-check "$@"
+              ;;
+            no-player-check)
+              shift
+              set -- --no-player-check "$@"
+              ;;
+            help)
+              shift
+              set -- --help "$@"
+              ;;
+            *)
+              echo "Unknown restart mode: $1 (use: force|player-check|no-player-check)" >&2
+              exit 1
+              ;;
+          esac
+        fi
+        run_job_script "restart" "$@"
       fi
       ;;
     update)
-      require_no_args "$command_name" "$@"
-      run_job_or_supervisor_start "updater" "updater"
+      if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then
+        case "$1" in
+          force)
+            shift
+            set -- --force "$@"
+            ;;
+          check)
+            shift
+            set -- --check-only "$@"
+            ;;
+          player-check)
+            shift
+            set -- --player-check "$@"
+            ;;
+          no-player-check)
+            shift
+            set -- --no-player-check "$@"
+            ;;
+          help)
+            shift
+            set -- --help "$@"
+            ;;
+          *)
+            echo "Unknown update mode: $1 (use: force|check|player-check|no-player-check)" >&2
+            exit 1
+            ;;
+        esac
+      fi
+      run_job_or_supervisor_start "updater" "updater" "$@"
       ;;
     scheduled-backup)
       require_no_args "$command_name" "$@"
@@ -397,8 +477,52 @@ run_server_command() {
       ;;
     backup)
       if [[ "$#" -eq 0 ]]; then
-        echo "backup requires args (examples: server backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false | server backup --mode list | server backup --mode inspect --zip <path> | server backup --mode restore --zip <path> --restore all --safety-backup false)" >&2
-        exit 1
+        run_job_script "backup" --mode manual
+        return $?
+      fi
+      if is_non_flag_token "$1"; then
+        case "$1" in
+          manual|scheduled|list)
+            local _mode
+            _mode="$1"
+            shift
+            set -- --mode "$_mode" "$@"
+            ;;
+          inspect)
+            local _zip
+            _zip="${2-}"
+            [[ -n "$_zip" ]] || {
+              echo "Missing zip filename (usage: backup inspect <zip>)" >&2
+              exit 1
+            }
+            shift 2
+            set -- --mode inspect --zip "$_zip" "$@"
+            ;;
+          restore)
+            local _zip _target
+            _zip="${2-}"
+            [[ -n "$_zip" ]] || {
+              echo "Missing zip filename (usage: backup restore <zip> [savegame|enshrouded|manager|all])" >&2
+              exit 1
+            }
+            if [[ $# -ge 3 && "${3#-}" == "$3" ]]; then
+              _target="$3"
+              shift 3
+            else
+              _target="all"
+              shift 2
+            fi
+            set -- --mode restore --zip "$_zip" --restore "$_target" "$@"
+            ;;
+          help)
+            shift
+            set -- --help "$@"
+            ;;
+          *)
+            echo "Unknown backup mode: $1 (use: manual|scheduled|list|inspect|restore)" >&2
+            exit 1
+            ;;
+        esac
       fi
       run_job_script "backup" "$@"
       ;;
@@ -407,29 +531,162 @@ run_server_command() {
       run_job_script "backup" --mode manual --savegame false --enshrouded-config true --manager-config true --cleanup false
       ;;
     profile)
+      if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then
+        case "$1" in
+          manager|enshrouded)
+            local _target _action _profile
+            _target="$1"
+            _action="${2-}"
+            case "$_action" in
+              apply)
+                _profile="${3-}"
+                [[ -n "$_profile" ]] || {
+                  echo "Missing profile name (usage: profile $_target apply <profile>)" >&2
+                  exit 1
+                }
+                shift 3
+                set -- --target "$_target" --action apply --profile "$_profile" "$@"
+                ;;
+              reset)
+                shift 2
+                set -- --target "$_target" --action reset "$@"
+                ;;
+              *)
+                echo "Unknown profile action: ${_action:-<empty>} (use: apply|reset)" >&2
+                exit 1
+                ;;
+            esac
+            ;;
+          passwords|password-view)
+            local _fmt
+            _fmt="${2-}"
+            if [[ -n "$_fmt" ]] && is_non_flag_token "$_fmt"; then
+              shift 2
+              set -- --password-view --format "$_fmt" "$@"
+            else
+              shift
+              set -- --password-view "$@"
+            fi
+            ;;
+          help)
+            shift
+            set -- --help "$@"
+            ;;
+          *)
+            echo "Unknown profile mode: $1 (use: manager|enshrouded|passwords)" >&2
+            exit 1
+            ;;
+        esac
+      fi
       if [[ "$#" -eq 0 ]]; then
-        echo "profile requires args (example: server profile --target manager --action reset --create-backup true)" >&2
+        echo "profile requires args (simple: profile <manager|enshrouded> <apply|reset> [profile])" >&2
         exit 1
       fi
       run_job_script "profile" "$@"
       ;;
     password-view)
+      if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then
+        case "$1" in
+          text|json)
+            local _fmt
+            _fmt="$1"
+            shift
+            set -- --format "$_fmt" "$@"
+            ;;
+          help)
+            shift
+            set -- --help "$@"
+            ;;
+          *)
+            echo "Unknown password-view mode: $1 (use: text|json)" >&2
+            exit 1
+            ;;
+        esac
+      fi
       run_job_script "profile" --password-view "$@"
       ;;
     env-validation)
       run_job_or_supervisor_start "env-validation" "env-validation" "$@"
       ;;
     scheduled-restart)
+      if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then
+        case "$1" in
+          force)
+            shift
+            set -- --force "$@"
+            ;;
+          player-check)
+            shift
+            set -- --player-check "$@"
+            ;;
+          no-player-check)
+            shift
+            set -- --no-player-check "$@"
+            ;;
+          help)
+            shift
+            set -- --help "$@"
+            ;;
+          *)
+            echo "Unknown scheduled-restart mode: $1 (use: force|player-check|no-player-check)" >&2
+            exit 1
+            ;;
+        esac
+      fi
       run_job_or_supervisor_start "restart" "restart" "$@"
       ;;
-    force-update)
-      require_no_args "$command_name" "$@"
-      run_job_or_supervisor_start "updater" "force-update"
-      ;;
     bootstrap)
+      if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then
+        local -a _bootstrap_args
+        _bootstrap_args=()
+        while [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; do
+          case "$1" in
+            job)
+              _bootstrap_args+=(--job)
+              ;;
+            no-update)
+              _bootstrap_args+=(--no-update)
+              ;;
+            entrypoint)
+              _bootstrap_args+=(--entrypoint)
+              ;;
+            help)
+              _bootstrap_args+=(--help)
+              ;;
+            *)
+              echo "Unknown bootstrap mode: $1 (use: job|no-update|entrypoint)" >&2
+              exit 1
+              ;;
+          esac
+          shift
+        done
+        set -- "${_bootstrap_args[@]}" "$@"
+      fi
       run_job_or_supervisor_start "bootstrap" "bootstrap" "$@"
       ;;
     cron)
+      if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then
+        case "$1" in
+          sync)
+            shift
+            set -- --sync "$@"
+            ;;
+          start|stop|restart|status)
+            local _svc
+            _svc="$1"
+            shift
+            set -- --service "$_svc" "$@"
+            ;;
+          help)
+            shift
+            set -- --help "$@"
+            ;;
+          *)
+            echo "Unknown cron mode: $1 (use: sync|start|stop|restart|status)" >&2
+            exit 1
+            ;;
+        esac
+      fi
       run_job_script "cron" "$@"
       ;;
     help|--help|-h)
@@ -559,7 +816,6 @@ server_startup_ui() {
 }
 
 parse_server_args() {
-  local parsed_bool
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --wait-download)
@@ -585,11 +841,13 @@ parse_server_args() {
         SERVER_ACTION="players-check"
         shift
         ;;
-      --check-players)
-        parsed_bool="$(parse_bool_arg "${2-}")"
-        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --check-players (expected true|false)"
-        CHECK_PLAYERS="$parsed_bool"
-        shift 2
+      --player-check)
+        CHECK_PLAYERS="true"
+        shift
+        ;;
+      --no-player-check)
+        CHECK_PLAYERS="false"
+        shift
         ;;
       --query-port)
         SERVER_QUERY_PORT="${2-}"
@@ -647,7 +905,7 @@ run_server_process() {
   debug "server with PID $enshrouded_server_pid stopped"
 
   cleanup_wine
-  "${SCRIPT_DIR}/server" hook-run --name "server post" --command "${SERVER_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run "server post" "${SERVER_POST_HOOK:-}"
   info "Shutdown complete"
   exit 0
 }
@@ -764,9 +1022,12 @@ main() {
   local command_name invoked_name players_rc
 
   invoked_name="$(basename "$0")"
-  if [[ "$invoked_name" != "server" ]] && is_server_command "$invoked_name"; then
-    run_server_command_entry "$invoked_name" "$@"
-    return $?
+  if [[ "$invoked_name" != "server" ]]; then
+    if is_server_command "$invoked_name"; then
+      run_server_command_entry "$invoked_name" "$@"
+      return $?
+    fi
+    fatal "Unknown command alias: $invoked_name"
   fi
 
   if [[ $# -gt 0 && "${1#-}" == "$1" ]] && is_server_command "$1"; then
@@ -815,7 +1076,7 @@ main() {
   init_runtime_env
   cd "$install_path" || fatal "Could not cd $install_path"
   enshrouded_server="$install_path/$enshrouded_binary_path"
-  "${SCRIPT_DIR}/server" hook-run --name "server pre" --command "${SERVER_PRE_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run "server pre" "${SERVER_PRE_HOOK:-}"
   if [[ "$WAIT_FOR_DOWNLOAD" == "true" ]]; then
     wait_for_server_download
   elif [[ ! -f "$enshrouded_server" ]]; then

@@ -754,7 +754,7 @@ menu_run_backup_job() {
 
   cmd_args=(
     backup
-    --mode "$mode"
+    "$mode"
     --savegame "$include_savegame"
     --enshrouded-config "$include_ens"
     --manager-config "$include_mgr"
@@ -878,7 +878,7 @@ menu_restore_backup() {
   while :; do
     local -a files lines
     files=()
-    mapfile -t lines < <(server_run backup --mode list 2>/dev/null || true)
+    mapfile -t lines < <(server_run backup list 2>/dev/null || true)
     for line in "${lines[@]}"; do
       [[ -n "$line" ]] || continue
       files+=("$line")
@@ -933,7 +933,7 @@ menu_restore_backup() {
     selected="${files[$selected_idx]}"
 
     local has_savegame has_enshrouded has_manager
-    read -r has_savegame has_enshrouded has_manager <<<"$(server_run backup --mode inspect --zip "$selected" 2>/dev/null || true)"
+    read -r has_savegame has_enshrouded has_manager <<<"$(server_run backup inspect "$selected" 2>/dev/null || true)"
     [[ "$has_savegame" == "true" || "$has_savegame" == "false" ]] || has_savegame="false"
     [[ "$has_enshrouded" == "true" || "$has_enshrouded" == "false" ]] || has_enshrouded="false"
     [[ "$has_manager" == "true" || "$has_manager" == "false" ]] || has_manager="false"
@@ -991,7 +991,7 @@ menu_restore_backup() {
     [[ "$restore_manager" == "true" ]] && restore_parts+=("manager")
     restore_selector="$(IFS=,; echo "${restore_parts[*]}")"
 
-    restore_cmd=(backup --mode restore --zip "$selected" --restore "$restore_selector" --safety-backup "$safety")
+    restore_cmd=(backup restore "$selected" "$restore_selector" --safety-backup "$safety")
 
     if ! server_run "${restore_cmd[@]}" >/dev/null 2>&1; then
       ui_error "Restore command failed."
@@ -1813,8 +1813,8 @@ menu_run_profile_job() {
   target="$1"
   action="$2"
   profile="$3"
-  cmd_args=(profile --target "$target" --action "$action" --create-backup true)
-  [[ -n "$profile" ]] && cmd_args+=(--profile "$profile")
+  cmd_args=(profile "$target" "$action")
+  [[ -n "$profile" ]] && cmd_args+=("$profile")
   server_run "${cmd_args[@]}" >/dev/null 2>&1
 }
 
@@ -2004,7 +2004,7 @@ menu_run_post_hook_once() {
     rm -f "$MENU_SPEC_TMP_FILE" 2>/dev/null || true
     MENU_SPEC_TMP_FILE=""
   fi
-  server_run hook-run --name "menu post" --command "${MENU_POST_HOOK:-}"
+  server_run hook-run "menu post" "${MENU_POST_HOOK:-}"
 }
 
 menu_execute_action_by_type() {
@@ -2250,7 +2250,7 @@ main() {
   fi
 
   trap menu_run_post_hook_once EXIT
-  server_run hook-run --name "menu pre" --command "${MENU_PRE_HOOK:-}"
+  server_run hook-run "menu pre" "${MENU_PRE_HOOK:-}"
   if [[ "$MENU_START_SCREEN" == "main" ]]; then
     menu_load_screen "$MENU_START_SCREEN" "Main Menu"
   else

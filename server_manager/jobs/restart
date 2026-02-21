@@ -35,11 +35,15 @@ load_runtime_values() {
 }
 
 run_restart() {
-  local players_check_rc
-  "${SCRIPT_DIR}/server" hook-run --name "restart pre" --command "${RESTART_PRE_HOOK:-}"
+  local players_check_rc players_check_arg
+  "${SCRIPT_DIR}/server" hook-run "restart pre" "${RESTART_PRE_HOOK:-}"
 
   if [[ "$RESTART_FORCE" != "true" ]]; then
-    "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --players-check --check-players "$RESTART_CHECK_PLAYERS" --query-port "$ENSHROUDED_QUERY_PORT"
+    players_check_arg="--player-check"
+    if [[ "$RESTART_CHECK_PLAYERS" != "true" ]]; then
+      players_check_arg="--no-player-check"
+    fi
+    "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --players-check "$players_check_arg" --query-port "$ENSHROUDED_QUERY_PORT"
     players_check_rc=$?
     case "$players_check_rc" in
       0)
@@ -57,24 +61,41 @@ run_restart() {
   info "Restarting Enshrouded server"
   "${SCRIPT_DIR}/server" restart >/dev/null 2>&1
 
-  "${SCRIPT_DIR}/server" hook-run --name "restart post" --command "${RESTART_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run "restart post" "${RESTART_POST_HOOK:-}"
 }
 
 usage() {
   cat <<'EOF'
 Usage:
-  restart [--check-players|--no-check-players] [--force]
+  restart [force|player-check|no-player-check]
+  restart [--player-check|--no-player-check] [--force]
 EOF
 }
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --check-players)
+      force)
+        RESTART_FORCE="true"
+        shift
+        ;;
+      player-check)
         RESTART_CHECK_PLAYERS_OVERRIDE="true"
         shift
         ;;
-      --no-check-players)
+      no-player-check)
+        RESTART_CHECK_PLAYERS_OVERRIDE="false"
+        shift
+        ;;
+      help)
+        usage
+        exit 0
+        ;;
+      --player-check)
+        RESTART_CHECK_PLAYERS_OVERRIDE="true"
+        shift
+        ;;
+      --no-player-check)
         RESTART_CHECK_PLAYERS_OVERRIDE="false"
         shift
         ;;

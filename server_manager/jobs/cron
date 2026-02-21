@@ -12,6 +12,8 @@ SERVER_JOB_BIN="${SERVER_JOB_BIN:-${SCRIPT_DIR}/server}"
 usage() {
   cat <<'EOF'
 Usage:
+  cron [sync] [--update-cron "<expr>"] [--backup-cron "<expr>"] [--restart-cron "<expr>"]
+  cron <start|stop|restart|status>
   cron [--sync] [--update-cron "<expr>"] [--backup-cron "<expr>"] [--restart-cron "<expr>"]
   cron --service <start|stop|restart|status>
 EOF
@@ -20,6 +22,17 @@ EOF
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      sync)
+        shift
+        ;;
+      start|stop|restart|status)
+        service_action="$1"
+        shift
+        ;;
+      help)
+        usage
+        exit 0
+        ;;
       --sync)
         shift
         ;;
@@ -89,7 +102,7 @@ main() {
     info "Running cron service action: ${service_action}"
     case "$service_action" in
       start|stop|restart|status) run_crond_service_action "$service_action" ;;
-      *) fatal "Invalid --service action: $service_action" ;;
+      *) fatal "Invalid service action: $service_action" ;;
     esac
     info "Cron service action complete: ${service_action}"
     return 0
