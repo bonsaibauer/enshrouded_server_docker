@@ -11,7 +11,7 @@ Most commands can run without extra arguments and then use defaults from `server
 - `docker exec -it enshroudedserver menu`: Opens the interactive management menu.
 - `docker exec enshroudedserver start`: Starts the server job.
 - `docker exec enshroudedserver stop`: Stops the server job.
-- `docker exec enshroudedserver restart`: Direct restart of the server job (no explicit player-check mode set).
+- `docker exec enshroudedserver restart`: Runs the restart job with defaults from `server_manager.json`.
 - `docker exec enshroudedserver update`: Runs normal updater flow (install if needed, then start server).
 - `docker exec enshroudedserver update force`: Forces full update path.
 - `docker exec enshroudedserver backup`: Creates a manual backup with default includes (savegame + both config files).
@@ -76,6 +76,7 @@ docker exec enshroudedserver restart [force|player-check|no-player-check]
 
 - What this command does: Runs the controlled restart job.
 - `docker exec enshroudedserver restart player-check`: Restarts only when no players are online.
+- `docker exec enshroudedserver restart`: Uses configured defaults (for example `restartCheckPlayers`).
 - Args:
 - `force`: Forces restart.
 - `player-check`: Enforces player check before restart.

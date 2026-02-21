@@ -410,35 +410,31 @@ run_server_command() {
       server_guard_run "core_ready" -- run_supervisorctl stop server
       ;;
     restart)
-      if [[ "$#" -eq 0 ]]; then
-        server_guard_run "server_ready" -- run_supervisorctl restart server
-      else
-        if is_non_flag_token "$1"; then
-          case "$1" in
-            force)
-              shift
-              set -- --force "$@"
-              ;;
-            player-check)
-              shift
-              set -- --player-check "$@"
-              ;;
-            no-player-check)
-              shift
-              set -- --no-player-check "$@"
-              ;;
-            help)
-              shift
-              set -- --help "$@"
-              ;;
-            *)
-              echo "Unknown restart mode: $1 (use: force|player-check|no-player-check)" >&2
-              exit 1
-              ;;
-          esac
-        fi
-        run_job_script "restart" "$@"
+      if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then
+        case "$1" in
+          force)
+            shift
+            set -- --force "$@"
+            ;;
+          player-check)
+            shift
+            set -- --player-check "$@"
+            ;;
+          no-player-check)
+            shift
+            set -- --no-player-check "$@"
+            ;;
+          help)
+            shift
+            set -- --help "$@"
+            ;;
+          *)
+            echo "Unknown restart mode: $1 (use: force|player-check|no-player-check)" >&2
+            exit 1
+            ;;
+        esac
       fi
+      run_job_script "restart" "$@"
       ;;
     update)
       if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then

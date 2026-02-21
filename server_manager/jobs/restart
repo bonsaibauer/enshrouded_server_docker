@@ -59,7 +59,9 @@ run_restart() {
   fi
 
   info "Restarting Enshrouded server"
-  "${SCRIPT_DIR}/server" restart >/dev/null 2>&1
+  if ! "${SCRIPT_DIR}/server" guard-run server_ready -- supervisorctl restart server >/dev/null 2>&1; then
+    fatal "Failed to restart Enshrouded server via supervisor"
+  fi
 
   "${SCRIPT_DIR}/server" hook-run "restart post" "${RESTART_POST_HOOK:-}"
 }
