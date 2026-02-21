@@ -506,14 +506,23 @@ startup_ui_state() {
 }
 
 server_wait_for_supervisor_jobs() {
-  local deadline now state_crond state_rsyslogd state_bootstrap
+  local deadline now started_at elapsed remaining state_crond state_rsyslogd state_bootstrap report_idx step
+  local -a report_steps
 
   if ! run_supervisorctl pid >/dev/null 2>&1; then
     warn "Supervisor is not reachable - skipping startup wait"
     return 0
   fi
 
-  deadline=$(( $(date +%s) + STARTUP_UI_WAIT_TIMEOUT ))
+  report_steps=(5 10 15 20 30 45 60)
+  step=90
+  while [[ "$step" -lt "$STARTUP_UI_WAIT_TIMEOUT" ]]; do
+    report_steps+=("$step")
+    step=$(( step + 30 ))
+  done
+  report_idx=0
+  started_at="$(date +%s)"
+  deadline=$(( started_at + STARTUP_UI_WAIT_TIMEOUT ))
   while :; do
     state_crond="$(startup_ui_state "crond")"
     state_rsyslogd="$(startup_ui_state "rsyslogd")"
@@ -527,6 +536,19 @@ server_wait_for_supervisor_jobs() {
     fi
 
     now="$(date +%s)"
+    elapsed=$(( now - started_at ))
+    remaining=$(( deadline - now ))
+    if [[ "$remaining" -lt 0 ]]; then
+      remaining=0
+    fi
+
+    if [[ "$report_idx" -lt "${#report_steps[@]}" ]] && [[ "$elapsed" -ge "${report_steps[$report_idx]}" ]]; then
+      info "Waiting for supervisor startup jobs... (${elapsed}s elapsed, ${remaining}s remaining; crond=${state_crond:-unknown}, rsyslogd=${state_rsyslogd:-unknown}, bootstrap=${state_bootstrap:-unknown})"
+      while [[ "$report_idx" -lt "${#report_steps[@]}" ]] && [[ "$elapsed" -ge "${report_steps[$report_idx]}" ]]; do
+        report_idx=$(( report_idx + 1 ))
+      done
+    fi
+
     if [[ "$now" -ge "$deadline" ]]; then
       warn "Timeout while waiting for supervisor startup jobs (crond=${state_crond:-unknown}, rsyslogd=${state_rsyslogd:-unknown}, bootstrap=${state_bootstrap:-unknown})"
       return 0
