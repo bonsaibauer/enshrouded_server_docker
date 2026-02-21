@@ -1177,7 +1177,7 @@ profiles_env_set_if_empty_validated() {
       return 1
       ;;
     *)
-      warn "Validation unavailable for $var in $source: $VALIDATION_LAST_ERROR"
+      warn "Validation unavailable for $var in $source: ${VALIDATION_LAST_ERROR:-rule_lookup_failed}"
       return 1
       ;;
   esac
@@ -1242,8 +1242,16 @@ update_or_create_manager_config() {
     # ENV override (docker-compose/container environment) wins.
     if [[ "$env_is_set" == "true" ]]; then
       if [[ -z "$env_value" ]]; then
-        fatal "ENV $var is set but empty. Empty ENV values are not allowed."
+        if [[ "$env_mode" == "hard" ]]; then
+          fatal "ENV $var is set but empty (env_mode=hard)."
+        fi
+        # Optional ENV with empty value behaves as "not set":
+        # fall back to config/profile defaults.
+        env_is_set="false"
       fi
+    fi
+
+    if [[ "$env_is_set" == "true" ]]; then
       if manager_value_is_valid "$var" "$env_value"; then
         value="$env_value"
       else
@@ -1443,10 +1451,6 @@ env_validate_var() {
   var="$1"
   value="${2-}"
   is_set="${3:-false}"
-
-  if [[ "$is_set" == "true" && -z "$value" ]]; then
-    fatal "$var is set but empty"
-  fi
 
   if validation_check "$var" "$value"; then
     return 0

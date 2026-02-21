@@ -243,7 +243,6 @@ run_job_mode() {
 main() {
   parse_args "$@"
   if [[ "$mode" == "entrypoint" ]]; then
-    init_runtime_env
     run_entrypoint_mode
   else
     run_job_mode
