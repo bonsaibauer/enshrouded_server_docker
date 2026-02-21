@@ -604,7 +604,7 @@ apply_manager_profile() {
   profiles_env_set_if_missing "MANAGER_PROFILE" "$old_env_manager" || true
   profiles_env_set_if_missing "EN_PROFILE" "$old_env_enshrouded" || true
 
-  info "Server Manager profile ${action} completed: $profile"
+  info "Server Manager profile ${action} complete: $profile"
 }
 
 resolve_enshrouded_profile_path() {
@@ -651,7 +651,7 @@ apply_enshrouded_profile() {
   profiles_ensure_schema || true
   profiles_config_set "enshrouded" "$profile" || true
 
-  info "Enshrouded profile ${action} completed: $profile"
+  info "Enshrouded profile ${action} complete: $profile"
 }
 
 profile_password_view() {

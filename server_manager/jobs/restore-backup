@@ -400,7 +400,7 @@ main() {
 
   "${SCRIPT_DIR}/server" hook-run --name "restore post" --command "${RESTORE_POST_HOOK:-}"
 
-  info "Restore finished from: $zip_path"
+  info "Restore-backup job complete: $zip_path"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

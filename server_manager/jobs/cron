@@ -95,7 +95,7 @@ main() {
     return 0
   fi
 
-  info "Syncing cron schedules (update=${update_cron:-<empty>}, backup=${backup_cron:-<empty>}, restart=${restart_cron:-<empty>})"
+  info "Running cron schedule sync (update=${update_cron:-<empty>}, backup=${backup_cron:-<empty>}, restart=${restart_cron:-<empty>})"
   init_runtime_env
   sync_crontab
   info "Cron schedule sync complete"

@@ -328,7 +328,7 @@ main() {
 
   "${SCRIPT_DIR}/server" hook-run --name "backup post" --command "${BACKUP_POST_HOOK:-}"
 
-  info "Backup complete: $backup_file"
+  info "Backup job complete: $backup_file"
 }
 
 main "$@"

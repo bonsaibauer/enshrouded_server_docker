@@ -212,21 +212,20 @@ EOF
 }
 
 run_entrypoint_mode() {
-  info "Bootstrap entrypoint mode: preparing runtime dependencies before supervisord handoff"
+  info "Running bootstrap entrypoint mode"
   verify_variables
   create_folders
   apply_permissions
   setup_syslog
-  info "Bootstrap entrypoint mode complete: handing off to supervisord"
+  info "Bootstrap entrypoint mode complete"
   exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
 }
 
 run_job_mode() {
   local bootstrap_pre_hook
-  info "Starting bootstrap job mode (skip_update=${skip_update})"
+  info "Running bootstrap job mode (skip_update=${skip_update})"
   server_run guard-require core_ready -- "${SCRIPT_DIR}/server" --startup-ui
   init_runtime_env
-  info "Running bootstrap job"
   verify_variables
   prepare_enshrouded_app_folders
   update_or_create_enshrouded_server_config
@@ -240,14 +239,11 @@ run_job_mode() {
     server_run update
   fi
   server_run hook-run --name "bootstrap post" --command "${BOOTSTRAP_POST_HOOK:-}"
-  info "Bootstrap complete"
+  info "Bootstrap job mode complete"
 }
 
 main() {
   parse_args "$@"
-  if [[ "$mode" == "entrypoint" ]]; then
-    info "Starting bootstrap entrypoint mode (skip_update=${skip_update})"
-  fi
   if [[ "$mode" == "entrypoint" ]]; then
     run_entrypoint_mode
   else

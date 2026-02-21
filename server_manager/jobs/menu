@@ -2241,7 +2241,7 @@ menu_load_screen() {
 
 main() {
   parse_args "$@"
-  info "Starting interactive menu (start_screen=${MENU_START_SCREEN}, once=${MENU_ONCE})"
+  info "Running interactive menu (start_screen=${MENU_START_SCREEN}, once=${MENU_ONCE})"
   init_runtime_env
 
   if ! menu_spec_init; then
@@ -2277,7 +2277,7 @@ main() {
   esac
 
   menu_run_post_hook_once
-  info "Interactive menu session finished (nav=${MENU_NAV:-unknown})"
+  info "Interactive menu complete (nav=${MENU_NAV:-unknown})"
 }
 
 main "$@"
