@@ -312,6 +312,26 @@ validation_rule_json() {
   return 2
 }
 
+validation_rule_json_read() {
+  # Usage: validation_rule_json_read <out_var_name> <VAR_NAME>
+  # Reads rule JSON without command-substitution, so VALIDATION_LAST_ERROR
+  # from validation_rule_json remains available in the current shell.
+  local out_var var tmp rc
+  out_var="$1"
+  var="$2"
+  tmp="$(mktemp)"
+  if validation_rule_json "$var" >"$tmp"; then
+    printf -v "$out_var" '%s' "$(<"$tmp")"
+    rm -f "$tmp"
+    return 0
+  fi
+  rc=$?
+  printf -v "$out_var" '%s' "$(<"$tmp")"
+  rm -f "$tmp"
+  [[ -n "${VALIDATION_LAST_ERROR:-}" ]] || validation__set_error "No validation rule for: $var"
+  return "$rc"
+}
+
 validation_list_envs() {
   # Prints all known environment names from CSV env specs.
   validation__has_python3 || return 0
@@ -395,7 +415,7 @@ validation_list_template_fields() {
 validation_env_type() {
   local var rule type
   var="$1"
-  rule="$(validation_rule_json "$var")" || return $?
+  validation_rule_json_read rule "$var" || return $?
   type="$(jq -r '.val_type // "string"' <<<"$rule" 2>/dev/null || echo "string")"
   [[ "$type" == "null" || -z "$type" ]] && type="string"
   printf "%s" "$type"
@@ -404,7 +424,7 @@ validation_env_type() {
 validation_env_description() {
   local var rule desc
   var="$1"
-  rule="$(validation_rule_json "$var")" || return $?
+  validation_rule_json_read rule "$var" || return $?
   desc="$(jq -r '.meta_description // empty' <<<"$rule" 2>/dev/null || true)"
   [[ "$desc" == "null" ]] && desc=""
   printf "%s" "$desc"
@@ -416,7 +436,7 @@ validation_env_mode() {
   # - soft: optional ENV (fallback allowed)
   local var rule mode
   var="$1"
-  rule="$(validation_rule_json "$var")" || return $?
+  validation_rule_json_read rule "$var" || return $?
   mode="$(jq -r '.env_mode // "soft"' <<<"$rule" 2>/dev/null || echo "soft")"
   [[ "$mode" == "null" || -z "$mode" ]] && mode="soft"
   printf "%s" "$mode"
@@ -432,7 +452,7 @@ validation_snake_to_lower_camel() {
 validation_env_allowed_hint() {
   local var rule hint
   var="$1"
-  rule="$(validation_rule_json "$var")" || return $?
+  validation_rule_json_read rule "$var" || return $?
 
   hint="$(jq -r '.meta_allowed // empty' <<<"$rule" 2>/dev/null || true)"
   [[ "$hint" == "null" ]] && hint=""
@@ -447,7 +467,7 @@ validation_check() {
   value="${2-}"
 
   validation__clear_error
-  rule="$(validation_rule_json "$var")" || return $?
+  validation_rule_json_read rule "$var" || return $?
 
   mode="$(jq -r '.env_mode // "soft"' <<<"$rule" 2>/dev/null || echo "soft")"
   [[ "$mode" == "null" || -z "$mode" ]] && mode="soft"
@@ -1173,7 +1193,7 @@ manager_profile_value_for_var() {
 }
 
 update_or_create_manager_config() {
-  local config_file profile value env_value var created_config env_mode env_is_set
+  local config_file profile value env_value var created_config env_mode env_is_set env_rule
   created_config="false"
 
   if ! command -v jq >/dev/null 2>&1; then
@@ -1203,7 +1223,11 @@ update_or_create_manager_config() {
 
   while IFS= read -r var; do
     [[ -z "$var" ]] && continue
-    env_mode="$(validation_env_mode "$var" 2>/dev/null)" || fatal "Validation unavailable for $var: $VALIDATION_LAST_ERROR"
+    if ! validation_rule_json_read env_rule "$var"; then
+      fatal "Validation unavailable for $var: ${VALIDATION_LAST_ERROR:-rule_lookup_failed}"
+    fi
+    env_mode="$(jq -r '.env_mode // "soft"' <<<"$env_rule" 2>/dev/null || echo "soft")"
+    [[ "$env_mode" == "null" || -z "$env_mode" ]] && env_mode="soft"
     if [[ "$env_mode" != "hard" && "$env_mode" != "soft" ]]; then
       fatal "Invalid env_mode for $var: $env_mode (expected: hard|soft)"
     fi
@@ -1434,7 +1458,7 @@ env_validate_var() {
       fatal "$VALIDATION_LAST_ERROR"
       ;;
     *)
-      fatal "Validation unavailable for $var: $VALIDATION_LAST_ERROR"
+      fatal "Validation unavailable for $var: ${VALIDATION_LAST_ERROR:-rule_lookup_failed}"
       ;;
   esac
 }

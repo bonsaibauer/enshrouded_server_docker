@@ -221,6 +221,7 @@ run_entrypoint_mode() {
 run_job_mode() {
   local bootstrap_pre_hook
   server_run guard-require core_ready -- "${SCRIPT_DIR}/server" --startup-ui
+  init_runtime_env
   info "Running bootstrap job"
   verify_variables
   prepare_enshrouded_app_folders
@@ -240,8 +241,8 @@ run_job_mode() {
 
 main() {
   parse_args "$@"
-  init_runtime_env
   if [[ "$mode" == "entrypoint" ]]; then
+    init_runtime_env
     run_entrypoint_mode
   else
     run_job_mode
