@@ -71,6 +71,36 @@ validation__has_jq() {
   command -v jq >/dev/null 2>&1
 }
 
+validation__has_python3() {
+  command -v python3 >/dev/null 2>&1
+}
+
+validation__csv_rows() {
+  local file
+  file="$1"
+  [[ -f "$file" ]] || return 0
+  validation__has_python3 || return 1
+  python3 - "$file" <<'PY'
+import csv
+import sys
+
+path = sys.argv[1]
+with open(path, newline="", encoding="utf-8") as f:
+    for row in csv.reader(f):
+        out = []
+        for cell in row:
+            if cell is None or cell == "null":
+                cell = ""
+            cell = cell.replace("\t", " ").replace("\r", " ").replace("\n", " ")
+            out.append(cell)
+        print("\t".join(out))
+PY
+}
+
+validation__csv_data_rows() {
+  validation__csv_rows "$1" | awk 'NR > 1'
+}
+
 validation__is_bool() {
   case "$1" in
     true|false) return 0 ;;
@@ -213,8 +243,9 @@ validation__rule_for_var_from_specs() {
   fi
 
   validation__has_jq || return 1
+  validation__has_python3 || return 1
   [[ -f "$file" ]] || return 1
-  row="$(jq -Rr --arg var "$var" 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == $var) | join("\t")' "$file" | head -n 1)"
+  row="$(validation__csv_data_rows "$file" | awk -F'\t' -v var="$var" '$1 == var { print; exit }')"
   if [[ -n "$row" ]]; then
     validation__rule_from_env_row "$row"
     return 0
@@ -229,8 +260,9 @@ validation__template_field_rule_from_specs() {
   field="$2"
 
   validation__has_jq || return 1
+  validation__has_python3 || return 1
   [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 1
-  row="$(jq -Rr --arg key "${template}__${field}" 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == $key) | join("\t")' "$VALIDATION_ENSHROUDED_SPEC_FILE" | head -n 1)"
+  row="$(validation__csv_data_rows "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk -F'\t' -v key="${template}__${field}" '$1 == key { print; exit }')"
   if [[ -n "$row" ]]; then
     validation__rule_from_env_row "$row"
     return 0
@@ -282,37 +314,33 @@ validation_rule_json() {
 
 validation_list_envs() {
   # Prints all known environment names from CSV env specs.
-  validation__has_jq || return 0
+  validation__has_python3 || return 0
   {
-    [[ -f "$VALIDATION_SERVER_MANAGER_SPEC_FILE" ]] && jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") != "") | .[0]' "$VALIDATION_SERVER_MANAGER_SPEC_FILE"
-    [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] && jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") != "" and (((.[0] // "") | contains("__")) | not)) | .[0]' "$VALIDATION_ENSHROUDED_SPEC_FILE"
+    [[ -f "$VALIDATION_SERVER_MANAGER_SPEC_FILE" ]] && validation__csv_data_rows "$VALIDATION_SERVER_MANAGER_SPEC_FILE" | awk -F'\t' '$1 != "" { print $1 }'
+    [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] && validation__csv_data_rows "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk -F'\t' '$1 != "" && $1 !~ /__/ { print $1 }'
   } | awk 'NF > 0' | sort -u || true
 }
 
 validation_list_templates() {
   # Prints all known template names.
-  validation__has_jq || return 0
+  validation__has_python3 || return 0
   if [[ -f "$VALIDATION_MENU_SPEC_FILE" ]]; then
-    jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == "editor_template" and (.[2] // "") != "") | .[2]' "$VALIDATION_MENU_SPEC_FILE" | awk 'NF > 0' | sort -u || true
+    validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" | awk -F'\t' '$1 == "editor_template" && $3 != "" { print $3 }' | awk 'NF > 0' | sort -u || true
     return 0
   fi
   [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 0
-  jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (((.[0] // "") | contains("__")))) | (.[0] | split("__") | .[0])' "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk 'NF > 0' | sort -u || true
+  validation__csv_data_rows "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk -F'\t' '$1 ~ /__/ { split($1, p, "__"); if (p[1] != "") print p[1] }' | awk 'NF > 0' | sort -u || true
 }
 
 validation_list_envs_by_meta_field() {
   # Prints variable names based on menu editor mapping (menu.csv).
   local field
   field="$1"
-  validation__has_jq || return 0
+  validation__has_python3 || return 0
   [[ -f "$VALIDATION_MENU_SPEC_FILE" ]] || return 0
 
-  jq -Rr --arg mf "$field" '
-    fromcsv? | map(if . == "null" then "" else . end)
-    | select(input_line_number > 1 and (.[0] // "") == "editor_env" and (.[2] // "") == $mf and (.[19] // "") != "")
-    | [((.[20] // "") | if . == "" then "999999999" else . end), (.[16] // "")]
-    | join("\t")
-  ' "$VALIDATION_MENU_SPEC_FILE" \
+  validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" \
+    | awk -F'\t' -v mf="$field" '$1 == "editor_env" && $3 == mf && $20 != "" { o=$21; if (o == "") o="999999999"; print o "\t" $17 }' \
     | sort -n -k1,1 -k2,2 \
     | cut -f2 \
     | awk 'NF > 0 && !seen[$0]++' || true
@@ -324,17 +352,17 @@ validation_env_meta_field() {
   local var field value
   var="$1"
   field="$2"
-  validation__has_jq || return 0
+  validation__has_python3 || return 0
   [[ -f "$VALIDATION_MENU_SPEC_FILE" ]] || return 0
 
   case "$field" in
     managerJsonPath|enshroudedJsonPath|enshroudedMenuJsonPath)
-      value="$(jq -Rr --arg mf "$field" --arg env "$var" 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == "editor_env" and (.[2] // "") == $mf and (.[16] // "") == $env) | (.[19] // "")' "$VALIDATION_MENU_SPEC_FILE" | head -n 1)"
+      value="$(validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" | awk -F'\t' -v mf="$field" -v env="$var" '$1 == "editor_env" && $3 == mf && $17 == env { print $20; exit }')"
       printf "%s" "$value"
       return 0
       ;;
     menuOrder)
-      value="$(jq -Rr --arg env "$var" 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == "editor_env" and (.[16] // "") == $env and (.[20] // "") != "") | (.[20] // "")' "$VALIDATION_MENU_SPEC_FILE" | head -n 1)"
+      value="$(validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" | awk -F'\t' -v env="$var" '$1 == "editor_env" && $17 == env && $21 != "" { print $21; exit }')"
       printf "%s" "$value"
       return 0
       ;;
@@ -350,14 +378,10 @@ validation_list_template_fields() {
   local template
   template="$1"
 
-  validation__has_jq || return 0
+  validation__has_python3 || return 0
   if [[ -f "$VALIDATION_MENU_SPEC_FILE" ]]; then
-    jq -Rr --arg t "$template" '
-      fromcsv? | map(if . == "null" then "" else . end)
-      | select(input_line_number > 1 and (.[0] // "") == "editor_template" and (.[2] // "") == $t and (.[18] // "") != "")
-      | [((.[20] // "") | if . == "" then "999999999" else . end), (.[18] // "")]
-      | join("\t")
-    ' "$VALIDATION_MENU_SPEC_FILE" \
+    validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" \
+      | awk -F'\t' -v t="$template" '$1 == "editor_template" && $3 == t && $19 != "" { o=$21; if (o == "") o="999999999"; print o "\t" $19 }' \
       | sort -n -k1,1 -k2,2 \
       | cut -f2 \
       | awk 'NF > 0 && !seen[$0]++' || true
@@ -365,13 +389,7 @@ validation_list_template_fields() {
   fi
 
   [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 0
-  jq -Rr --arg t "$template" '
-    fromcsv? | map(if . == "null" then "" else . end)
-    | select(input_line_number > 1 and (((.[0] // "") | contains("__"))))
-    | (.[0] | split("__"))
-    | select((.[0] // "") == $t and (.[1] // "") != "")
-    | .[1]
-  ' "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk 'NF > 0 && !seen[$0]++' || true
+  validation__csv_data_rows "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk -F'\t' -v t="$template" '$1 ~ /__/ { split($1, p, "__"); if (p[1] == t && p[2] != "") print p[2] }' | awk 'NF > 0 && !seen[$0]++' || true
 }
 
 validation_env_type() {

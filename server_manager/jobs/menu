@@ -150,6 +150,31 @@ menu_spec__append_editor_template_row() {
   ' "$json_file" >"${json_file}.tmp" && mv "${json_file}.tmp" "$json_file"
 }
 
+menu_csv_data_rows() {
+  local csv_file
+  csv_file="$1"
+  [[ -f "$csv_file" ]] || return 0
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 - "$csv_file" <<'PY'
+import csv
+import sys
+
+path = sys.argv[1]
+with open(path, newline="", encoding="utf-8") as f:
+    reader = csv.reader(f)
+    for idx, row in enumerate(reader):
+        if idx == 0:
+            continue
+        out = []
+        for cell in row:
+            if cell is None or cell == "null":
+                cell = ""
+            cell = cell.replace("\t", " ").replace("\r", " ").replace("\n", " ")
+            out.append(cell)
+        print("\t".join(out))
+PY
+}
+
 menu_spec_build_json_from_csv() {
   local csv_file out_file
   local section id parent key title action type command_name fn requires_running confirm _program _request_file _timeout_sec _payload_json args_json env_name group field json_path order
@@ -179,7 +204,7 @@ menu_spec_build_json_from_csv() {
         menu_spec__append_editor_template_row "$out_file" "$parent" "$field" "$group" "$order"
         ;;
     esac
-  done < <(jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1) | join("\t")' "$csv_file")
+  done < <(menu_csv_data_rows "$csv_file")
 }
 
 menu_spec_init() {

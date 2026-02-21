@@ -220,7 +220,7 @@ run_entrypoint_mode() {
 
 run_job_mode() {
   local bootstrap_pre_hook
-  server_run guard-require core_ready -- "${SCRIPT_DIR}/server" --startup-ui || fatal "Bootstrap guard check failed before startup-ui"
+  server_run guard-require core_ready -- "${SCRIPT_DIR}/server" --startup-ui
   info "Running bootstrap job"
   verify_variables
   prepare_enshrouded_app_folders

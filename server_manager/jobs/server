@@ -117,7 +117,7 @@ server_guard_classify_reason() {
     supervisor_unreachable|server_not_running:*)
       echo "not_ready"
       ;;
-    missing_tool:*|jq_fromcsv_unsupported|missing_var:*|missing_function:*|invalid_guard_mode:*)
+    missing_tool:*|missing_var:*|missing_function:*|invalid_guard_mode:*)
       echo "config_error"
       ;;
     *)
@@ -146,8 +146,8 @@ server_guard_check_core_ready() {
     server_guard_set_reason "missing_tool:jq"
     return 1
   }
-  printf '%s\n' 'a,b' | jq -Rr 'fromcsv? | .[0]' >/dev/null 2>&1 || {
-    server_guard_set_reason "jq_fromcsv_unsupported"
+  command -v python3 >/dev/null 2>&1 || {
+    server_guard_set_reason "missing_tool:python3"
     return 1
   }
   run_supervisorctl pid >/dev/null 2>&1 || {
