@@ -150,58 +150,52 @@ validation__list_to_json() {
 }
 
 validation__build_rule_json() {
-  local type required allow_empty env_mode min max regex enum_spec list_spec description allowed
+  local env_mode val_type val_min val_max val_regex val_enum_spec val_list_spec meta_description meta_allowed
   local enum_json list_json
 
-  type="$1"
-  required="$2"
-  allow_empty="$3"
-  env_mode="$4"
-  min="$5"
-  max="$6"
-  regex="$7"
-  enum_spec="$8"
-  list_spec="$9"
-  description="${10}"
-  allowed="${11}"
+  env_mode="$1"
+  val_type="$2"
+  val_min="$3"
+  val_max="$4"
+  val_regex="$5"
+  val_enum_spec="$6"
+  val_list_spec="$7"
+  meta_description="$8"
+  meta_allowed="$9"
 
-  enum_json="$(validation__enum_to_json "$enum_spec")"
-  list_json="$(validation__list_to_json "$list_spec")"
+  enum_json="$(validation__enum_to_json "$val_enum_spec")"
+  list_json="$(validation__list_to_json "$val_list_spec")"
 
   jq -cn \
-    --arg type "$type" \
-    --arg required "$required" \
-    --arg allow_empty "$allow_empty" \
     --arg env_mode "$env_mode" \
-    --arg min "$min" \
-    --arg max "$max" \
-    --arg regex "$regex" \
-    --arg description "$description" \
-    --arg allowed "$allowed" \
+    --arg type "$val_type" \
+    --arg min "$val_min" \
+    --arg max "$val_max" \
+    --arg regex "$val_regex" \
+    --arg description "$meta_description" \
+    --arg allowed "$meta_allowed" \
     --argjson enum_json "$enum_json" \
     --argjson list_json "$list_json" \
     '{
-      type: (if $type == "" then "string" else $type end),
-      required: ($required == "true"),
-      allowEmpty: (if $allow_empty == "" then true else ($allow_empty == "true") end),
-      envMode: (if $env_mode == "" then null else $env_mode end),
-      min: (if $min == "" then null else ($min | tonumber) end),
-      max: (if $max == "" then null else ($max | tonumber) end),
-      regex: (if $regex == "" then null else $regex end),
-      enum: $enum_json,
-      list: $list_json,
-      description: (if $description == "" then "" else $description end),
-      allowed: (if $allowed == "" then "" else $allowed end)
+      env_mode: (if ($env_mode == "" or $env_mode == "null") then "soft" else $env_mode end),
+      val_type: (if $type == "" then "string" else $type end),
+      val_min: (if $min == "" then null else ($min | tonumber) end),
+      val_max: (if $max == "" then null else ($max | tonumber) end),
+      val_regex: (if $regex == "" then null else $regex end),
+      val_enum: $enum_json,
+      val_list: $list_json,
+      meta_description: (if $description == "" then "" else $description end),
+      meta_allowed: (if $allowed == "" then "" else $allowed end)
     }'
 }
 
 validation__rule_from_env_row() {
-  local row name type required allow_empty env_mode min max regex enum_spec list_spec description allowed
+  local row env_name env_mode val_type val_min val_max val_regex val_enum_spec val_list_spec meta_description meta_allowed
   row="$1"
-  IFS=$'\t' read -r name type required allow_empty env_mode min max regex enum_spec list_spec description allowed <<<"$row"
+  IFS=$'\t' read -r env_name env_mode val_type val_min val_max val_regex val_enum_spec val_list_spec meta_description meta_allowed <<<"$row"
   validation__build_rule_json \
-    "$type" "$required" "$allow_empty" "$env_mode" "$min" "$max" "$regex" \
-    "$enum_spec" "$list_spec" "$description" "$allowed"
+    "$env_mode" "$val_type" "$val_min" "$val_max" "$val_regex" \
+    "$val_enum_spec" "$val_list_spec" "$meta_description" "$meta_allowed"
 }
 
 validation__has_spec_files() {
@@ -384,7 +378,7 @@ validation_env_type() {
   local var rule type
   var="$1"
   rule="$(validation_rule_json "$var")" || return $?
-  type="$(jq -r '.type // "string"' <<<"$rule" 2>/dev/null || echo "string")"
+  type="$(jq -r '.val_type // "string"' <<<"$rule" 2>/dev/null || echo "string")"
   [[ "$type" == "null" || -z "$type" ]] && type="string"
   printf "%s" "$type"
 }
@@ -393,39 +387,21 @@ validation_env_description() {
   local var rule desc
   var="$1"
   rule="$(validation_rule_json "$var")" || return $?
-  desc="$(jq -r '.description // empty' <<<"$rule" 2>/dev/null || true)"
+  desc="$(jq -r '.meta_description // empty' <<<"$rule" 2>/dev/null || true)"
   [[ "$desc" == "null" ]] && desc=""
   printf "%s" "$desc"
 }
 
 validation_env_mode() {
-  # Returns "hard" or "soft" if defined in the rule (empty if not set).
+  # Returns env policy mode:
+  # - hard: required ENV (no fallback)
+  # - soft: optional ENV (fallback allowed)
   local var rule mode
   var="$1"
   rule="$(validation_rule_json "$var")" || return $?
-  mode="$(jq -r '.envMode // empty' <<<"$rule" 2>/dev/null || true)"
-  [[ "$mode" == "null" ]] && mode=""
+  mode="$(jq -r '.env_mode // "soft"' <<<"$rule" 2>/dev/null || echo "soft")"
+  [[ "$mode" == "null" || -z "$mode" ]] && mode="soft"
   printf "%s" "$mode"
-}
-
-validation_env_required() {
-  # Returns "true" or "false" based on the rule (false if not set).
-  local var rule required
-  var="$1"
-  rule="$(validation_rule_json "$var")" || return $?
-  required="$(jq -r '.required // false' <<<"$rule" 2>/dev/null || echo "false")"
-  [[ "$required" == "null" || -z "$required" ]] && required="false"
-  printf "%s" "$required"
-}
-
-validation_env_allow_empty() {
-  # Returns "true" or "false" based on the rule (true if not set).
-  local var rule allow_empty
-  var="$1"
-  rule="$(validation_rule_json "$var")" || return $?
-  allow_empty="$(jq -r '.allowEmpty // true' <<<"$rule" 2>/dev/null || echo "true")"
-  [[ "$allow_empty" == "null" || -z "$allow_empty" ]] && allow_empty="true"
-  printf "%s" "$allow_empty"
 }
 
 validation_snake_to_lower_camel() {
@@ -440,7 +416,7 @@ validation_env_allowed_hint() {
   var="$1"
   rule="$(validation_rule_json "$var")" || return $?
 
-  hint="$(jq -r '.allowed // empty' <<<"$rule" 2>/dev/null || true)"
+  hint="$(jq -r '.meta_allowed // empty' <<<"$rule" 2>/dev/null || true)"
   [[ "$hint" == "null" ]] && hint=""
   printf "%s" "$hint"
   return 0
@@ -448,32 +424,29 @@ validation_env_allowed_hint() {
 
 validation_check() {
   # Returns: 0 valid, 1 invalid, 2 unknown/unavailable.
-  local var value rule required allow_empty type regex min max
+  local var value rule mode type regex min max
   var="$1"
   value="${2-}"
 
   validation__clear_error
   rule="$(validation_rule_json "$var")" || return $?
 
-  required="$(jq -r '.required // false' <<<"$rule" 2>/dev/null || echo "false")"
-  [[ "$required" == "null" || -z "$required" ]] && required="false"
-
-  allow_empty="$(jq -r '.allowEmpty // true' <<<"$rule" 2>/dev/null || echo "true")"
-  [[ "$allow_empty" == "null" || -z "$allow_empty" ]] && allow_empty="true"
-
-  if [[ -z "$value" ]]; then
-    if [[ "$required" == "true" ]]; then
-      validation__set_error "$var must be set"
-      return 1
-    fi
-    if [[ "$allow_empty" == "true" ]]; then
-      return 0
-    fi
-    validation__set_error "$var must not be empty"
-    return 1
+  mode="$(jq -r '.env_mode // "soft"' <<<"$rule" 2>/dev/null || echo "soft")"
+  [[ "$mode" == "null" || -z "$mode" ]] && mode="soft"
+  if [[ "$mode" != "hard" && "$mode" != "soft" ]]; then
+    validation__set_error "$var has invalid env_mode in CSV: $mode (expected: hard|soft)"
+    return 2
   fi
 
-  type="$(jq -r '.type // \"string\"' <<<"$rule" 2>/dev/null || echo "string")"
+  if [[ -z "$value" ]]; then
+    if [[ "$mode" == "hard" ]]; then
+      validation__set_error "$var must be set (env_mode=hard)"
+      return 1
+    fi
+    return 0
+  fi
+
+  type="$(jq -r '.val_type // \"string\"' <<<"$rule" 2>/dev/null || echo "string")"
   [[ "$type" == "null" || -z "$type" ]] && type="string"
 
   case "$type" in
@@ -488,8 +461,8 @@ validation_check() {
         validation__set_error "$var must be an integer (actual: $value)"
         return 1
       fi
-      min="$(jq -r '.min // empty' <<<"$rule" 2>/dev/null || true)"
-      max="$(jq -r '.max // empty' <<<"$rule" 2>/dev/null || true)"
+      min="$(jq -r '.val_min // empty' <<<"$rule" 2>/dev/null || true)"
+      max="$(jq -r '.val_max // empty' <<<"$rule" 2>/dev/null || true)"
       if [[ -n "$min" && "$value" -lt "$min" ]]; then
         validation__set_error "$var must be an integer >= $min (actual: $value)"
         return 1
@@ -504,8 +477,8 @@ validation_check() {
         validation__set_error "$var must be numeric (actual: $value)"
         return 1
       fi
-      min="$(jq -r '.min // empty' <<<"$rule" 2>/dev/null || true)"
-      max="$(jq -r '.max // empty' <<<"$rule" 2>/dev/null || true)"
+      min="$(jq -r '.val_min // empty' <<<"$rule" 2>/dev/null || true)"
+      max="$(jq -r '.val_max // empty' <<<"$rule" 2>/dev/null || true)"
       if [[ -n "$min" && -n "$max" ]]; then
         if ! validation__number_in_range "$value" "$min" "$max"; then
           validation__set_error "$var must be between $min and $max (actual: $value)"
@@ -524,7 +497,7 @@ validation_check() {
       fi
       ;;
     *)
-      regex="$(jq -r '.regex // empty' <<<"$rule" 2>/dev/null || true)"
+      regex="$(jq -r '.val_regex // empty' <<<"$rule" 2>/dev/null || true)"
       [[ "$regex" == "null" ]] && regex=""
       if [[ -n "$regex" ]] && ! [[ "$value" =~ $regex ]]; then
         validation__set_error "$var has invalid format (actual: $value)"
@@ -534,27 +507,27 @@ validation_check() {
   esac
 
   # Enum constraint (after base type validation).
-  if jq -e '(.enum|type) == "array"' <<<"$rule" >/dev/null 2>&1; then
+  if jq -e '(.val_enum|type) == "array"' <<<"$rule" >/dev/null 2>&1; then
     local allowed ok
     ok="false"
     while IFS= read -r allowed; do
       [[ "$value" == "$allowed" ]] && ok="true" && break
-    done < <(jq -r '.enum[] | tostring' <<<"$rule" 2>/dev/null || true)
+    done < <(jq -r '.val_enum[] | tostring' <<<"$rule" 2>/dev/null || true)
 
     if [[ "$ok" != "true" ]]; then
-      allowed="$(jq -r '.enum | map(tostring) | join(\" \")' <<<"$rule" 2>/dev/null || true)"
+      allowed="$(jq -r '.val_enum | map(tostring) | join(\" \")' <<<"$rule" 2>/dev/null || true)"
       validation__set_error "$var must be one of: $allowed (actual: $value)"
       return 1
     fi
   fi
 
   # CSV/list constraint (after base type validation).
-  if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+  if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
     local sep trim no_empty item_regex item item_trimmed
-    sep="$(jq -r '.list.separator // \",\"' <<<"$rule" 2>/dev/null || echo ",")"
-    trim="$(jq -r '.list.trim // false' <<<"$rule" 2>/dev/null || echo "false")"
-    no_empty="$(jq -r '.list.itemNoEmpty // false' <<<"$rule" 2>/dev/null || echo "false")"
-    item_regex="$(jq -r '.list.itemRegex // empty' <<<"$rule" 2>/dev/null || true)"
+    sep="$(jq -r '.val_list.separator // \",\"' <<<"$rule" 2>/dev/null || echo ",")"
+    trim="$(jq -r '.val_list.trim // false' <<<"$rule" 2>/dev/null || echo "false")"
+    no_empty="$(jq -r '.val_list.itemNoEmpty // false' <<<"$rule" 2>/dev/null || echo "false")"
+    item_regex="$(jq -r '.val_list.itemRegex // empty' <<<"$rule" 2>/dev/null || true)"
     [[ "$item_regex" == "null" ]] && item_regex=""
 
     # Only comma is supported right now (keeps behavior predictable in bash).
@@ -693,7 +666,7 @@ apply_env_to_json() {
       if [[ "$apply_empty" != "true" ]]; then
         continue
       fi
-      if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+      if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
         if ! spec_apply__jq_set "$file" "$json_path = []"; then
           any_fail="true"
         fi
@@ -706,7 +679,7 @@ apply_env_to_json() {
     fi
 
     # List env values (CSV) -> JSON array.
-    if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+    if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
       # Keep behavior predictable in bash: only comma separated lists are supported.
       # Spec currently only uses this for ENSHROUDED_TAGS.
       if ! spec_apply__jq_set "$file" --arg val "$value" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))"; then
@@ -753,7 +726,7 @@ spec_apply__template_default_object_json() {
     rule="$(validation_rule_json "$var" 2>/dev/null || true)"
     [[ -z "$rule" ]] && continue
 
-    type="$(jq -r '.type // "string"' <<<"$rule" 2>/dev/null || echo "string")"
+    type="$(jq -r '.val_type // "string"' <<<"$rule" 2>/dev/null || echo "string")"
     [[ "$type" == "null" || -z "$type" ]] && type="string"
 
     json_key="$(validation_snake_to_lower_camel "$field")"
@@ -762,7 +735,7 @@ spec_apply__template_default_object_json() {
         value="false"
         ;;
       int|number)
-        min="$(jq -r '.min // empty' <<<"$rule" 2>/dev/null || true)"
+        min="$(jq -r '.val_min // empty' <<<"$rule" 2>/dev/null || true)"
         [[ "$min" == "null" ]] && min=""
         if [[ -n "$min" ]]; then
           value="$min"
@@ -918,7 +891,7 @@ apply_env_template_to_json_array() {
       if [[ "$apply_empty" != "true" ]]; then
         continue
       fi
-      if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+      if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
         if ! spec_apply__jq_set "$file" --argjson idx "$idx" "$json_path = []"; then
           any_fail="true"
         fi
@@ -931,7 +904,7 @@ apply_env_template_to_json_array() {
     fi
 
     # List env values (CSV) -> JSON array.
-    if jq -e '(.list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
+    if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
       if ! spec_apply__jq_set "$file" --argjson idx "$idx" --arg val "$value" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))"; then
         any_fail="true"
       fi
@@ -1092,19 +1065,11 @@ manager_json_get() {
 }
 
 manager_value_is_valid() {
-  local var value rc
+  local var value
   var="$1"
   value="$2"
 
-  if validation_check "$var" "$value"; then
-    return 0
-  fi
-  rc=$?
-  case "$rc" in
-    0) return 0 ;;
-    1) return 1 ;;
-    *) return 0 ;; # Unknown rule/unavailable validator: do not block bootstrap.
-  esac
+  validation_check "$var" "$value"
 }
 
 manager_config_set() {
@@ -1174,9 +1139,8 @@ profiles_env_set_if_empty_validated() {
       return 1
       ;;
     *)
-      # Unknown rule/unavailable validator: accept candidate (keeps older behavior).
-      printf -v "$var" '%s' "$candidate"
-      return 0
+      warn "Validation unavailable for $var in $source: $VALIDATION_LAST_ERROR"
+      return 1
       ;;
   esac
 }
@@ -1191,7 +1155,7 @@ manager_profile_value_for_var() {
 }
 
 update_or_create_manager_config() {
-  local config_file profile value env_value var created_config
+  local config_file profile value env_value var created_config env_mode env_is_set
   created_config="false"
 
   if ! command -v jq >/dev/null 2>&1; then
@@ -1221,29 +1185,43 @@ update_or_create_manager_config() {
 
   while IFS= read -r var; do
     [[ -z "$var" ]] && continue
-    env_value="$(printenv "$var" 2>/dev/null || true)"
+    env_mode="$(validation_env_mode "$var" 2>/dev/null)" || fatal "Validation unavailable for $var: $VALIDATION_LAST_ERROR"
+    if [[ "$env_mode" != "hard" && "$env_mode" != "soft" ]]; then
+      fatal "Invalid env_mode for $var: $env_mode (expected: hard|soft)"
+    fi
+    env_is_set="false"
+    env_value=""
+    if printenv "$var" >/dev/null 2>&1; then
+      env_is_set="true"
+      env_value="$(printenv "$var" 2>/dev/null || true)"
+    fi
     value=""
 
-    # ENV override (docker-compose/container environment) wins, but should never poison config.
-    if [[ -n "$env_value" ]]; then
+    # ENV override (docker-compose/container environment) wins.
+    if [[ "$env_is_set" == "true" ]]; then
+      if [[ -z "$env_value" ]]; then
+        fatal "ENV $var is set but empty. Empty ENV values are not allowed."
+      fi
       if manager_value_is_valid "$var" "$env_value"; then
         value="$env_value"
       else
-        warn "Invalid ENV value for $var (actual: $env_value) - ignoring"
+        fatal "Invalid ENV value for $var (actual: $env_value). ${VALIDATION_LAST_ERROR:-Validation failed.}"
       fi
+    elif [[ "$env_mode" == "hard" ]]; then
+      fatal "Missing required ENV $var (env_mode=hard). No fallback from config/profile is allowed."
     fi
 
     # Fallback: active config -> profile template.
-    if [[ -z "$value" ]]; then
+    if [[ -z "$value" && "$env_mode" == "soft" ]]; then
       value="$(manager_json_get "$config_file" "$var")"
       if [[ -n "$value" ]] && ! manager_value_is_valid "$var" "$value"; then
-        warn "Invalid server_manager.json value for $var (actual: $value) - resetting to profile/default"
+        warn "Invalid server_manager.json value for $var (actual: $value) - resetting to profile/default (${VALIDATION_LAST_ERROR:-validation failed})"
         value=""
       fi
       if [[ -z "$value" ]]; then
         value="$(manager_profile_value_for_var "$profile" "$var")"
         if [[ -n "$value" ]] && ! manager_value_is_valid "$var" "$value"; then
-          warn "Invalid manager profile value for $var (profile: $profile, actual: $value)"
+          warn "Invalid manager profile value for $var (profile: $profile, actual: $value) (${VALIDATION_LAST_ERROR:-validation failed})"
           value=""
         fi
       fi
@@ -1275,7 +1253,7 @@ load_enshrouded_env_from_profile() {
   config_file="${install_path}/enshrouded_server.json"
 
   # Prefer existing runtime config as the source of truth for runtime defaults.
-  # This keeps manual edits (e.g. via cmd menu) consistent across restarts.
+  # This keeps manual edits (e.g. via server menu) consistent across restarts.
   if command -v jq >/dev/null 2>&1 && [[ -f "$config_file" ]] && jq -e '.' "$config_file" >/dev/null 2>&1; then
     local var path candidate
     while IFS= read -r var; do
@@ -1330,6 +1308,9 @@ init_runtime_env() {
   if ! load_enshrouded_env_from_profile; then
     fatal "Failed to load Enshrouded profile defaults"
   fi
+
+  # Re-initialize ANSI colors after runtime env values (incl. LOG_COLOR) were loaded.
+  init_colors
 
   savefile_name="$SAVEFILE_NAME"
   steam_app_id="$STEAM_APP_ID"
@@ -1386,17 +1367,19 @@ validate_template_env_values() {
     for var_name in $(compgen -A variable "${template}_" || true); do
       [[ "$var_name" =~ ^${template}_[0-9]+_ ]] || continue
       value="${!var_name-}"
-      env_validate_var_from_spec "$var_name" "$value" || true
+      env_validate_var_from_spec "$var_name" "$value" "true" || true
     done
   done < <(validation_list_templates)
 }
 
 validate_known_env_from_spec() {
-  local var_name value
+  local var_name value is_set
   while IFS= read -r var_name; do
     [[ -z "$var_name" ]] && continue
+    is_set="false"
+    [[ -n "${!var_name+x}" ]] && is_set="true"
     value="${!var_name-}"
-    env_validate_var_from_spec "$var_name" "$value" || true
+    env_validate_var_from_spec "$var_name" "$value" "$is_set" || true
   done < <(validation_list_envs)
 }
 
@@ -1413,11 +1396,15 @@ validate_unknown_game_settings_env_values() {
 }
 
 env_validate_var() {
-  # Usage: env_validate_var <var_name> <value> hard|soft
-  local var value mode rc
+  # Usage: env_validate_var <var_name> <value> [is_set]
+  local var value is_set rc
   var="$1"
   value="${2-}"
-  mode="$3"
+  is_set="${3:-false}"
+
+  if [[ "$is_set" == "true" && -z "$value" ]]; then
+    fatal "$var is set but empty"
+  fi
 
   if validation_check "$var" "$value"; then
     return 0
@@ -1425,35 +1412,22 @@ env_validate_var() {
   rc=$?
   case "$rc" in
     1)
-      if [[ "$mode" == "hard" ]]; then
-        fatal "$VALIDATION_LAST_ERROR"
-      fi
-      warn "$VALIDATION_LAST_ERROR"
-      return 1
+      # For both modes, invalid provided values are fatal.
+      fatal "$VALIDATION_LAST_ERROR"
       ;;
     *)
-      # Unknown rule / unavailable validator: warn but do not block bootstrap.
-      warn "$VALIDATION_LAST_ERROR"
-      return 0
+      fatal "Validation unavailable for $var: $VALIDATION_LAST_ERROR"
       ;;
   esac
 }
 
 env_validate_var_from_spec() {
-  # Usage: env_validate_var_from_spec <var_name> <value>
-  local var value mode required
+  # Usage: env_validate_var_from_spec <var_name> <value> [is_set]
+  local var value is_set
   var="$1"
   value="${2-}"
-  mode="$(validation_env_mode "$var" 2>/dev/null || true)"
-  if [[ "$mode" != "hard" && "$mode" != "soft" ]]; then
-    required="$(validation_env_required "$var" 2>/dev/null || true)"
-    if [[ "$required" == "true" ]]; then
-      mode="hard"
-    else
-      mode="soft"
-    fi
-  fi
-  env_validate_var "$var" "$value" "$mode"
+  is_set="${3:-false}"
+  env_validate_var "$var" "$value" "$is_set"
 }
 
 verify_variables() {

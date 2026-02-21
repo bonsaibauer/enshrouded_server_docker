@@ -11,7 +11,6 @@ load_runtime_values() {
   require_cmd zip
   require_cmd tar
   require_cmd python3
-  require_cmd supervisorctl
 
   RESTORE_PRE_HOOK="$(resolve_from_env_or_manager "RESTORE_PRE_HOOK" ".restorePreHook" "")"
   RESTORE_POST_HOOK="$(resolve_from_env_or_manager "RESTORE_POST_HOOK" ".restorePostHook" "")"
@@ -149,7 +148,8 @@ trap cleanup_on_exit EXIT
 trap 'exit 1' SIGINT SIGTERM
 
 stop_server_now() {
-  "${SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 90
+  "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 90 \
+    || fatal "Failed to stop server safely before restore"
 }
 
 save_dir_resolve() {
@@ -388,7 +388,7 @@ main() {
       ;;
   esac
 
-  "${SCRIPT_DIR}/cmd" hook-run --name "restore pre" --command "${RESTORE_PRE_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run --name "restore pre" --command "${RESTORE_PRE_HOOK:-}"
   stop_server_now
   run_safety_backup_if_requested
 
@@ -397,7 +397,7 @@ main() {
   [[ "$restore_enshrouded_config" == "true" ]] && restore_enshrouded_config_from_zip
   [[ "$restore_manager_config" == "true" ]] && restore_manager_config_from_zip
 
-  "${SCRIPT_DIR}/cmd" hook-run --name "restore post" --command "${RESTORE_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run --name "restore post" --command "${RESTORE_POST_HOOK:-}"
 
   info "Restore finished from: $zip_path"
 }

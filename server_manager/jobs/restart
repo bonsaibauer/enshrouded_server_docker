@@ -23,7 +23,6 @@ enshrouded_get_text() {
 
 load_runtime_values() {
   require_cmd jq
-  require_cmd supervisorctl
 
   RESTART_CHECK_PLAYERS="${RESTART_CHECK_PLAYERS:-$(manager_get_text ".restartCheckPlayers")}"
   [[ -n "$RESTART_CHECK_PLAYERS" ]] || RESTART_CHECK_PLAYERS="true"
@@ -36,17 +35,29 @@ load_runtime_values() {
 }
 
 run_restart() {
-  "${SCRIPT_DIR}/cmd" hook-run --name "restart pre" --command "${RESTART_PRE_HOOK:-}"
+  local players_check_rc
+  "${SCRIPT_DIR}/server" hook-run --name "restart pre" --command "${RESTART_PRE_HOOK:-}"
 
-  if [[ "$RESTART_FORCE" != "true" ]] && ! "${SCRIPT_DIR}/server" --players-check --check-players "$RESTART_CHECK_PLAYERS" --query-port "$ENSHROUDED_QUERY_PORT"; then
-    warn "Enshrouded server is not empty - restart will not be performed"
-    return
+  if [[ "$RESTART_FORCE" != "true" ]]; then
+    "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --players-check --check-players "$RESTART_CHECK_PLAYERS" --query-port "$ENSHROUDED_QUERY_PORT"
+    players_check_rc=$?
+    case "$players_check_rc" in
+      0)
+        ;;
+      10)
+        warn "Enshrouded server is not empty - restart will not be performed"
+        return
+        ;;
+      *)
+        fatal "players-check failed (rc=$players_check_rc)"
+        ;;
+    esac
   fi
 
   info "Restarting Enshrouded server"
-  supervisorctl restart server >/dev/null 2>&1
+  "${SCRIPT_DIR}/server" restart >/dev/null 2>&1
 
-  "${SCRIPT_DIR}/cmd" hook-run --name "restart post" --command "${RESTART_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run --name "restart post" --command "${RESTART_POST_HOOK:-}"
 }
 
 usage() {

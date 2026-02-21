@@ -61,23 +61,23 @@ COPY ./server_manager/supervisor/supervisord.conf /etc/supervisor/supervisord.co
 COPY --chmod=755 ./server_manager/jobs/ /usr/local/etc/enshrouded/jobs/
 COPY --chmod=755 ./server_manager/env/ /usr/local/etc/enshrouded/env/
 COPY ./server_manager/profiles/ /usr/local/etc/enshrouded/profiles/
-RUN ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/cmd \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/menu \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/status \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/start \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/stop \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/restart \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/update \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/backup \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/backup-config \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/restore-backup \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/profile \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/password-view \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/env-validation \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/scheduled-restart \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/force-update \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/bootstrap \
-    && ln -sf /usr/local/etc/enshrouded/jobs/cmd /usr/local/bin/cron
+RUN ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/server \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/menu \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/status \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/start \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/stop \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/restart \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/update \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/backup \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/backup-config \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/restore-backup \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/profile \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/password-view \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/env-validation \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/scheduled-restart \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/force-update \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/bootstrap \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/cron
 RUN find /usr/local/etc/enshrouded -type f -exec sed -i 's/\r$//' {} +
 
 WORKDIR /usr/local/etc/enshrouded

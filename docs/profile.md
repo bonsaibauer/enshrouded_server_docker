@@ -43,14 +43,14 @@ Naming rules:
 1. Copy `server_manager/profiles/enshrouded/default_enshrouded_server.json` to `server_manager/profiles/enshrouded/<name>_enshrouded_server.json`
 2. Edit the JSON (must stay valid JSON)
 3. Put the file into the volume catalog: `/home/enshrouded/server/profiles/enshrouded/` (or rebuild the image to ship it)
-4. Select it with `EN_PROFILE=<name>` or via `cmd menu`
+4. Select it with `EN_PROFILE=<name>` or via `server menu`
 
 ### Server Manager Profile
 
 1. Copy `server_manager/profiles/manager/default_server_manager.json` to `server_manager/profiles/manager/<name>_server_manager.json`
 2. Edit the JSON (see `docs/environment.md` for variable meanings)
 3. Put the file into the volume catalog: `/home/enshrouded/server/profiles/manager/` (or rebuild the image to ship it)
-4. Select it with `MANAGER_PROFILE=<name>` or via `cmd menu`
+4. Select it with `MANAGER_PROFILE=<name>` or via `server menu`
 
 When selected, the Server Manager template is copied into the persistent profile store at:
 
@@ -63,7 +63,7 @@ When selected, the Server Manager template is copied into the persistent profile
 
 If a profile name is missing/invalid, it falls back to `default`.
 
-### Persisted Selection (via `cmd menu`)
+### Persisted Selection (via `server menu`)
 
 Profile selection is stored directly in the Server Manager config file:
 
@@ -81,10 +81,10 @@ The initial ENV selectors are captured once for transparency:
 
 Profile reset/apply is handled by the unified `profile` job (arg-driven):
 
-- Interactive way (recommended): use `cmd menu` and choose profile reset/apply flows.
-- CLI way: run `cmd profile` directly with args, for example:
-  - `cmd profile --target enshrouded --action apply --profile default --create-backup true`
-  - `cmd profile --target manager --action reset --create-backup true`
+- Interactive way (recommended): use `server menu` and choose profile reset/apply flows.
+- CLI way: run `server profile` directly with args, for example:
+  - `server profile --target enshrouded --action apply --profile default --create-backup true`
+  - `server profile --target manager --action reset --create-backup true`
 
 The job will:
 

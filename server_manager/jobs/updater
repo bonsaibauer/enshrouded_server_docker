@@ -9,6 +9,33 @@ FORCE_UPDATE="false"
 CHECK_ONLY="false"
 NO_PLAYER_CHECK="false"
 
+debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && echo "DEBUG - $*" || true; }
+
+checkRunning() {
+  is_supervisor_running "$1"
+}
+
+checkLock() {
+  local lock_file pid
+  lock_file="$1"
+  [[ -n "$lock_file" ]] || return 0
+  [[ -f "$lock_file" ]] || return 0
+  pid="$(cat "$lock_file" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && [[ "$pid" =~ ^[0-9]+$ ]] && [[ -d "/proc/$pid" ]]; then
+    fatal "Lock active: $lock_file (pid=$pid)"
+  fi
+  rm -f "$lock_file" 2>/dev/null || true
+  return 0
+}
+
+clearLock() {
+  local lock_file
+  lock_file="$1"
+  [[ -n "$lock_file" ]] || return 0
+  rm -f "$lock_file" 2>/dev/null || true
+  return 0
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -43,6 +70,7 @@ parse_args() {
 }
 
 update() {
+  local players_check_rc
   if [[ -f "$pidfile" ]]; then
     info "Found existing PID file - checking process"
     checkLock "$pidfile"
@@ -53,15 +81,24 @@ update() {
   if ! check_for_updates; then
     if ! checkRunning "server"; then
       info "Enshrouded server is not running - starting"
-      supervisorctl start server
+      "${SCRIPT_DIR}/server" start
     fi
     return 0
   fi
 
-  if ! "${SCRIPT_DIR}/server" --players-check --check-players "${UPDATE_CHECK_PLAYERS:-true}" --query-port "${ENSHROUDED_QUERY_PORT:-15637}"; then
-    warn "Enshrouded server is not empty - update will not be performed"
-    return 0
-  fi
+  "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --players-check --check-players "${UPDATE_CHECK_PLAYERS:-true}" --query-port "${ENSHROUDED_QUERY_PORT:-15637}"
+  players_check_rc=$?
+  case "$players_check_rc" in
+    0)
+      ;;
+    10)
+      warn "Enshrouded server is not empty - update will not be performed"
+      return 0
+      ;;
+    *)
+      fatal "players-check failed (rc=$players_check_rc)"
+      ;;
+  esac
 
   run_update_flow &
   enshrouded_updater_pid=$!
@@ -70,9 +107,9 @@ update() {
 }
 
 run_update_flow() {
-  "${SCRIPT_DIR}/cmd" hook-run --name "update pre" --command "${UPDATE_PRE_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run --name "update pre" --command "${UPDATE_PRE_HOOK:-}"
   if checkRunning "server"; then
-    supervisorctl stop server
+    "${SCRIPT_DIR}/server" stop
   fi
 
   verify_cpu_mhz
@@ -83,15 +120,15 @@ run_update_flow() {
 
     if ! download_enshrouded; then
       warn "Download of Enshrouded server failed - aborting update"
-      supervisorctl start server
+      "${SCRIPT_DIR}/server" start
       clearLock "$pidfile"
       return 1
     fi
   fi
 
   set_current_version
-  supervisorctl start server
-  "${SCRIPT_DIR}/cmd" hook-run --name "update post" --command "${UPDATE_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" start
+  "${SCRIPT_DIR}/server" hook-run --name "update post" --command "${UPDATE_POST_HOOK:-}"
   clearLock "$pidfile"
 }
 

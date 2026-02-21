@@ -40,8 +40,8 @@ parse_args() {
   done
 }
 
-cmd_run() {
-  "${SCRIPT_DIR}/cmd" "$@"
+server_run() {
+  "${SCRIPT_DIR}/server" "$@"
 }
 
 prepare_enshrouded_app_folders() {
@@ -220,20 +220,21 @@ run_entrypoint_mode() {
 
 run_job_mode() {
   local bootstrap_pre_hook
+  server_run guard-require core_ready -- "${SCRIPT_DIR}/server" --startup-ui || fatal "Bootstrap guard check failed before startup-ui"
   info "Running bootstrap job"
   verify_variables
   prepare_enshrouded_app_folders
   update_or_create_enshrouded_server_config
   prepare_steam_a2s_python_library
-  cmd_run cron --sync --update-cron "${UPDATE_CRON:-}" --backup-cron "${BACKUP_CRON:-}" --restart-cron "${RESTART_CRON:-}"
+  server_run cron --sync --update-cron "${UPDATE_CRON:-}" --backup-cron "${BACKUP_CRON:-}" --restart-cron "${RESTART_CRON:-}"
   bootstrap_pre_hook="${BOOTSTRAP_PRE_HOOK:-${BOOTSTRAP_HOOK:-}}"
-  cmd_run hook-run --name "bootstrap pre" --command "$bootstrap_pre_hook"
+  server_run hook-run --name "bootstrap pre" --command "$bootstrap_pre_hook"
   if [[ "$skip_update" == "true" ]]; then
     info "Skipping updater start (--no-update)"
   else
-    supervisorctl start updater
+    server_run update
   fi
-  cmd_run hook-run --name "bootstrap post" --command "${BOOTSTRAP_POST_HOOK:-}"
+  server_run hook-run --name "bootstrap post" --command "${BOOTSTRAP_POST_HOOK:-}"
   info "Bootstrap complete"
 }
 

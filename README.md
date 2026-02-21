@@ -21,10 +21,6 @@ docker run \
   -p 15637:15637/udp \
   -e PUID="$(id -u enshrouded)" \
   -e PGID="$(id -g enshrouded)" \
-  -e EN_PROFILE="default" \
-  -e MANAGER_PROFILE="default" \
-  -e ENSHROUDED_NAME="Enshrouded Server" \
-  -e ENSHROUDED_ROLE_0_PASSWORD="ChangeMeAdminPassword" \
   -v /home/enshrouded/server_1:/home/enshrouded/server \
   bonsaibauer/enshrouded_server_docker:dev_latest
 ```
@@ -32,7 +28,7 @@ docker run \
 ### Interactive Menu
 
 ```bash
-docker exec -it enshroudedserver menu
+docker exec -it enshroudedserver server menu
 ```
 
 If your container has a different name, replace `enshroudedserver` (see `docker ps`).

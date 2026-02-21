@@ -1,4 +1,4 @@
-# Interactive Shell Menu (`cmd menu`)
+# Interactive Shell Menu (`server menu`)
 
 The Server Manager includes an interactive shell menu to manage profiles and edit the persistent JSON configs inside the container volume.
 
@@ -9,7 +9,7 @@ The menu requires a TTY. Always use `-it`.
 Replace `enshroudedserver` with your container name (see `docker ps`).
 
 ```bash
-docker exec -it enshroudedserver cmd menu
+docker exec -it enshroudedserver server menu
 ```
 
 ## Navigation
@@ -44,7 +44,7 @@ Exit behavior:
 Notes:
 
 - `Create Savegame Backup (.zip)` is a shortcut for `Backups -> Create savegame backup now (.zip)`.
-- The items `start/stop/restart/update/force-update/password-view` are the same actions as `cmd <command>` and are shown in the main menu for convenience.
+- The items `start/stop/restart/update/force-update/password-view` are the same actions as `server <command>` and are shown in the main menu for convenience.
 
 ## Enshrouded Server Settings
 
@@ -136,7 +136,7 @@ Menu options:
 
 Notes:
 
-- Savegame zip backups are always created by the same Supervisor job (`backup`), no matter if you trigger it manually (menu / `cmd backup`), via cron (`BACKUP_CRON`), or as a safety backup before restore.
+- Savegame zip backups are always created by the same Supervisor job (`backup`), no matter if you trigger it manually (menu / `server backup`), via cron (`BACKUP_CRON`), or as a safety backup before restore.
 - `BACKUP_MAX_COUNT` keeps the newest N zip backups and deletes older ones (nothing is overwritten). Manual/safety backups count toward the same limit.
 - Config JSON backups under `BACKUP_DIR/profiles` are not affected by `BACKUP_MAX_COUNT`.
 
@@ -146,7 +146,7 @@ If `BACKUP_MAX_COUNT=7` and cron creates one backup per day, you will keep the n
 
 ## Other Commands
 
-This submenu is a convenience wrapper around existing `cmd` commands:
+This submenu is a convenience wrapper around existing `server` commands:
 
 - `status`
 - `scheduled-restart`
@@ -187,7 +187,7 @@ Backups are created when you:
 
 - change a value in the JSON editors (exactly one backup per edit session, created on the first write)
 - apply a profile template (`Select and apply profile`)
-- run profile reset/apply via menu flows (internally runs `cmd profile --target ... --action ... --create-backup true`)
+- run profile reset/apply via menu flows (internally runs `server profile --target ... --action ... --create-backup true`)
 
 Retention:
 
@@ -211,4 +211,4 @@ Behavior in the menu:
 - If the menu looks broken or does not accept input:
   - Use `docker exec -it ...`
 - If you change settings but they do not take effect:
-  - Restart the server (`cmd restart`) or run bootstrap (`cmd bootstrap`)
+  - Restart the server (`server restart`) or run bootstrap (`server bootstrap`)

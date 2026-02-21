@@ -7,6 +7,16 @@ Value resolution order (most settings):
 2. Runtime files (`/home/enshrouded/server/server_manager/server_manager.json`, `/home/enshrouded/server/enshrouded_server.json`)
 3. Profile templates (only during initialization)
 
+Minimum required ENV values for initial container setup:
+- `PUID`
+- `PGID`
+
+`PUID` and `PGID` must be passed explicitly as container ENV values.
+There is no fallback to profile templates or `server_manager.json` for these two values.
+In CSV these two are configured with `env_mode=hard`; other variables default to `env_mode=soft`.
+
+All other environment variables are optional and can be added later as needed.
+
 Profile selection is special:
 - The menu persists profile selection in `server_manager.json` under `actualProfilManager` / `actualProfilEnshrouded`.
 - `EN_PROFILE` / `MANAGER_PROFILE` environment values are mainly used for the first bootstrap (fresh volume / deleted config).
@@ -30,10 +40,19 @@ If you want to adjust menu flow/grouping/path-ordering, edit `menu.csv`.
 
 The rules support:
 
-- `required`: if `true`, empty/unset is invalid.
-- `allowEmpty`: if `false`, empty string is invalid (but the variable can still be unset unless `required=true`).
-- `envMode`: `hard` will abort bootstrap on invalid values, `soft` will only warn.
-- `allowed`: single source of truth for menu hints (no auto-derived fallback).
+- `env_mode`: ENV policy only.
+- `hard`: required ENV, no fallback to config/profile.
+- `soft`: optional ENV, fallback to config/profile allowed.
+- If an ENV value is provided (hard or soft), it must pass validation; invalid values fail bootstrap.
+- If an ENV variable is set, empty values are also treated as invalid.
+- `val_*`: value validation (`val_type`, `val_min`, `val_max`, `val_regex`, `val_enum`, `val_list`).
+- `meta_allowed`: single source of truth for menu hints (no auto-derived fallback).
+
+Naming prefixes used in CSV specs:
+
+- `env_*`: environment-source behavior (required, mode, variable identity).
+- `val_*`: value validation (type/range/regex/enum/list).
+- `meta_*`: descriptions, UI mapping, and editor metadata.
 
 ## Spec Domains
 
@@ -55,7 +74,7 @@ The source of truth is the CSV spec:
 There are two backup types:
 
 1. Savegame backups (zip)
-   - Triggered by `cmd backup` / `supervisorctl start backup`
+   - Triggered by `server backup` / `supervisorctl start backup`
    - The same Supervisor job is used for manual backups, cron backups (`BACKUP_CRON`), and safety backups before restore.
    - Stored in `BACKUP_DIR` (default: `/home/enshrouded/server/backups`)
    - Filename pattern: `YYYY-MM-DD_HH-MM-SS-$SAVEFILE_NAME.zip`
@@ -76,4 +95,4 @@ There are two backup types:
 
 | Variable | Description | Default |
 |---|---|---|
-| `SUPERVISORCTL_BIN` | Binary for the `cmd` wrapper | `supervisorctl` |
+| `SUPERVISORCTL_BIN` | Binary used by the `server` command dispatcher | `supervisorctl` |

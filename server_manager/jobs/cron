@@ -7,6 +7,7 @@ update_cron="${UPDATE_CRON:-}"
 backup_cron="${BACKUP_CRON:-}"
 restart_cron="${RESTART_CRON:-}"
 service_action=""
+SERVER_JOB_BIN="${SERVER_JOB_BIN:-${SCRIPT_DIR}/server}"
 
 usage() {
   cat <<'EOF'
@@ -51,27 +52,34 @@ parse_args() {
 }
 
 cron_append() {
-  local out_file schedule cmd label
+  local out_file schedule command_line label
   out_file="$1"
   schedule="$2"
-  cmd="$3"
+  command_line="$3"
   label="$4"
 
   [[ -n "$schedule" ]] || return 0
   info "creating cron for ${label} (schedule: $schedule)"
-  printf "%s %s >/dev/null 2>&1\n" "$schedule" "$cmd" >>"$out_file"
+  printf "%s %s >/dev/null 2>&1\n" "$schedule" "$command_line" >>"$out_file"
 }
 
 sync_crontab() {
   local crontab_file
   crontab_file="$(mktemp)"
 
-  cron_append "$crontab_file" "$update_cron" "supervisorctl start updater" "update checks"
-  cron_append "$crontab_file" "$backup_cron" "supervisorctl start backup" "backups"
-  cron_append "$crontab_file" "$restart_cron" "supervisorctl start restart" "server restarts"
+  cron_append "$crontab_file" "$update_cron" "$SERVER_JOB_BIN update" "update checks"
+  cron_append "$crontab_file" "$backup_cron" "$SERVER_JOB_BIN scheduled-backup" "backups"
+  cron_append "$crontab_file" "$restart_cron" "$SERVER_JOB_BIN scheduled-restart" "server restarts"
 
   crontab "$crontab_file"
   rm -f "$crontab_file"
+}
+
+run_crond_service_action() {
+  local action
+  action="$1"
+  [[ -x "$SERVER_JOB_BIN" ]] || fatal "Server job is not executable: $SERVER_JOB_BIN"
+  "$SERVER_JOB_BIN" guard-run core_ready -- supervisorctl "$action" crond
 }
 
 main() {
@@ -79,7 +87,7 @@ main() {
 
   if [[ -n "$service_action" ]]; then
     case "$service_action" in
-      start|stop|restart|status) supervisorctl "$service_action" crond ;;
+      start|stop|restart|status) run_crond_service_action "$service_action" ;;
       *) fatal "Invalid --service action: $service_action" ;;
     esac
     return 0

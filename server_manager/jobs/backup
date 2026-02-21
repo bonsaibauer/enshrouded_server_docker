@@ -318,14 +318,14 @@ main() {
   resolve_mode_defaults
 
   export BACKUP_MODE="$mode"
-  "${SCRIPT_DIR}/cmd" hook-run --name "backup pre" --command "${BACKUP_PRE_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run --name "backup pre" --command "${BACKUP_PRE_HOOK:-}"
 
   stage_dir="$(mktemp -d)"
   prepare_stage_content
   create_zip
   cleanup_old_scheduled_backups
 
-  "${SCRIPT_DIR}/cmd" hook-run --name "backup post" --command "${BACKUP_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run --name "backup post" --command "${BACKUP_POST_HOOK:-}"
 
   info "Backup complete: $backup_file"
 }

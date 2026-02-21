@@ -3,6 +3,8 @@ SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null
 # shellcheck source=server_manager/jobs/env-validation
 . "${SCRIPT_DIR}/env-validation"
 
+SUPERVISORCTL_BIN="${SUPERVISORCTL_BIN:-supervisorctl}"
+
 enshrouded_server_pid=-1
 timeout=60
 kill_signal=INT
@@ -12,16 +14,528 @@ SERVER_ACTION="run"
 CHECK_PLAYERS="true"
 SERVER_QUERY_PORT=""
 
-usage() {
+STARTUP_UI_WAIT_TIMEOUT="${SUPERVISOR_STARTUP_WAIT_TIMEOUT:-180}"
+STARTUP_UI_WAIT_INTERVAL="${SUPERVISOR_STARTUP_WAIT_INTERVAL:-1}"
+SERVER_GUARD_BACKOFFS=("1" "2" "4" "8")
+SERVER_GUARD_LAST_REASON=""
+SERVER_GUARD_RC_NOT_READY=10
+SERVER_GUARD_RC_CONFIG=20
+SERVER_GUARD_RC_INTERNAL=30
+
+usage_server() {
   cat <<'EOF'
 Usage:
   server [--wait-download|--no-wait-download]
   server --stop-safe [--shutdown-timeout <seconds>]
   server --players-check [--check-players true|false] [--query-port <port>]
+  server --render-banner
+  server --startup-ui
 EOF
 }
 
-parse_args() {
+usage_commands() {
+  cat <<'EOF'
+Usage:
+  docker exec CONTAINER_NAME server <command> [args...]
+
+Commands:
+  hook-run       Internal: execute a named hook command
+  guard-run      Internal: run a guarded call (server_guard_run API)
+  guard-require  Internal: run guard, fail hard when blocked
+  status         Show supervisor program status
+  menu           Start interactive Server Manager menu
+  start          Start server
+  stop           Stop server
+  restart        Restart server
+  update         Trigger updater
+  scheduled-backup
+                 Trigger backup job via supervisor
+  backup         Trigger backup job (requires args, e.g. --mode manual --savegame true ...)
+  restore-backup Trigger restore-backup job (requires args, e.g. --zip ... --restore ...)
+  profile        Trigger profile job (requires args, e.g. --target ... --action ...)
+  password-view  Show user group rights and passwords from enshrouded_server.json
+  env-validation Run ENV validation job
+  scheduled-restart
+                 Trigger restart job
+  force-update   Trigger updater in force mode
+  bootstrap      Trigger bootstrap
+  cron           Manage cron sync/service (e.g. --sync, --service restart)
+  help           Show this help
+EOF
+}
+
+is_server_command() {
+  case "$1" in
+    hook-run|guard-run|guard-require|status|menu|start|stop|restart|update|scheduled-backup|backup|backup-config|restore-backup|profile|password-view|env-validation|scheduled-restart|force-update|bootstrap|cron|help|--help|-h)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+run_supervisorctl() {
+  "$SUPERVISORCTL_BIN" "$@"
+}
+
+debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && echo "DEBUG - $*" || true; }
+
+checkRunning() {
+  is_supervisor_running "$1"
+}
+
+checkLock() {
+  local pidfile pid
+  pidfile="$1"
+  [[ -n "$pidfile" ]] || return 0
+  [[ -f "$pidfile" ]] || return 0
+  pid="$(cat "$pidfile" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && [[ "$pid" =~ ^[0-9]+$ ]] && [[ -d "/proc/$pid" ]]; then
+    fatal "Lock active: $pidfile (pid=$pid)"
+  fi
+  rm -f "$pidfile" 2>/dev/null || true
+  return 0
+}
+
+clearLock() {
+  local pidfile
+  pidfile="$1"
+  [[ -n "$pidfile" ]] || return 0
+  rm -f "$pidfile" 2>/dev/null || true
+  return 0
+}
+
+server_guard_set_reason() {
+  SERVER_GUARD_LAST_REASON="$1"
+}
+
+server_guard_classify_reason() {
+  local reason
+  reason="${1:-unknown}"
+  case "$reason" in
+    supervisor_unreachable|server_not_running:*)
+      echo "not_ready"
+      ;;
+    missing_tool:*|jq_fromcsv_unsupported|missing_var:*|missing_function:*|invalid_guard_mode:*)
+      echo "config_error"
+      ;;
+    *)
+      echo "internal_error"
+      ;;
+  esac
+}
+
+server_guard_rc_for_class() {
+  case "$1" in
+    not_ready) echo "$SERVER_GUARD_RC_NOT_READY" ;;
+    config_error) echo "$SERVER_GUARD_RC_CONFIG" ;;
+    *) echo "$SERVER_GUARD_RC_INTERNAL" ;;
+  esac
+}
+
+server_guard_check_core_ready() {
+  local fn
+  server_guard_set_reason ""
+
+  command -v "$SUPERVISORCTL_BIN" >/dev/null 2>&1 || {
+    server_guard_set_reason "missing_tool:${SUPERVISORCTL_BIN}"
+    return 1
+  }
+  command -v jq >/dev/null 2>&1 || {
+    server_guard_set_reason "missing_tool:jq"
+    return 1
+  }
+  printf '%s\n' 'a,b' | jq -Rr 'fromcsv? | .[0]' >/dev/null 2>&1 || {
+    server_guard_set_reason "jq_fromcsv_unsupported"
+    return 1
+  }
+  run_supervisorctl pid >/dev/null 2>&1 || {
+    server_guard_set_reason "supervisor_unreachable"
+    return 1
+  }
+  [[ -n "${SCRIPT_DIR:-}" ]] || {
+    server_guard_set_reason "missing_var:SCRIPT_DIR"
+    return 1
+  }
+  [[ -n "${install_path:-}" ]] || {
+    server_guard_set_reason "missing_var:install_path"
+    return 1
+  }
+
+  for fn in info warn fatal run_supervisorctl; do
+    declare -F "$fn" >/dev/null 2>&1 || {
+      server_guard_set_reason "missing_function:${fn}"
+      return 1
+    }
+  done
+
+  return 0
+}
+
+server_guard_check_server_ready() {
+  local state
+  server_guard_check_core_ready || return 1
+  state="$(startup_ui_state "server")"
+  if [[ "$state" != "RUNNING" ]]; then
+    server_guard_set_reason "server_not_running:${state:-unknown}"
+    return 1
+  fi
+  return 0
+}
+
+server_guard_check_job_ready() {
+  local job
+  job="$1"
+  server_guard_check_core_ready || return 1
+
+  case "$job" in
+    updater)
+      [[ -n "${steamcmd_path:-}" ]] || {
+        server_guard_set_reason "missing_var:steamcmd_path"
+        return 1
+      }
+      ;;
+  esac
+
+  return 0
+}
+
+server_guard_check_mode() {
+  local mode job
+  mode="$1"
+
+  case "$mode" in
+    core_ready)
+      server_guard_check_core_ready
+      ;;
+    server_ready)
+      server_guard_check_server_ready
+      ;;
+    job_ready:*)
+      job="${mode#job_ready:}"
+      server_guard_check_job_ready "$job"
+      ;;
+    *)
+      server_guard_set_reason "invalid_guard_mode:${mode}"
+      return 1
+      ;;
+  esac
+}
+
+server_guard_run() {
+  local mode wait reason class rc
+  local -a cmd
+  mode="${1-}"
+  shift || true
+
+  [[ -n "$mode" ]] || fatal "server_guard_run requires <guard_mode>"
+  [[ "${1-}" == "--" ]] || fatal "server_guard_run usage: server_guard_run <guard_mode> -- <call...>"
+  shift || true
+  [[ "$#" -gt 0 ]] || fatal "server_guard_run requires a command after --"
+  cmd=("$@")
+
+  if server_guard_check_mode "$mode"; then
+    "${cmd[@]}"
+    return $?
+  fi
+
+  for wait in "${SERVER_GUARD_BACKOFFS[@]}"; do
+    sleep "$wait"
+    if server_guard_check_mode "$mode"; then
+      "${cmd[@]}"
+      return $?
+    fi
+  done
+
+  reason="${SERVER_GUARD_LAST_REASON:-unknown}"
+  class="$(server_guard_classify_reason "$reason")"
+  rc="$(server_guard_rc_for_class "$class")"
+  warn "GUARD_BLOCK mode=$mode reason=$reason class=$class rc=$rc"
+  return "$rc"
+}
+
+server_guard_require() {
+  local mode rc
+  mode="${1-}"
+  server_guard_run "$@"
+  rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    fatal "GUARD_FAIL mode=${mode:-unknown} reason=${SERVER_GUARD_LAST_REASON:-unknown} rc=$rc"
+  fi
+  return 0
+}
+
+run_job_script() {
+  local script guard_mode
+  script="$1"
+  shift || true
+  guard_mode="core_ready"
+  if [[ "$script" == "updater" ]]; then
+    guard_mode="job_ready:updater"
+  fi
+  server_guard_run "$guard_mode" -- "${SCRIPT_DIR}/${script}" "$@"
+}
+
+run_job_or_supervisor_start() {
+  local script program guard_mode
+  script="$1"
+  program="$2"
+  shift 2
+  guard_mode="core_ready"
+  if [[ "$script" == "updater" || "$program" == "updater" ]]; then
+    guard_mode="job_ready:updater"
+  elif [[ "$script" == "restart" && "$program" == "restart" ]]; then
+    guard_mode="server_ready"
+  fi
+  if [[ "$#" -gt 0 ]]; then
+    server_guard_run "$guard_mode" -- "${SCRIPT_DIR}/${script}" "$@"
+  else
+    server_guard_run "$guard_mode" -- run_supervisorctl start "$program"
+  fi
+}
+
+require_no_args() {
+  local cmd_name
+  cmd_name="$1"
+  shift || true
+  if [[ "$#" -gt 0 ]]; then
+    echo "$cmd_name does not accept arguments" >&2
+    exit 1
+  fi
+}
+
+run_hook() {
+  local hook_name hook_cmd
+  hook_name="$1"
+  hook_cmd="$2"
+  if [[ -z "$hook_cmd" ]]; then
+    return 0
+  fi
+  echo "INFO - Running ${hook_name} hook: $hook_cmd"
+  eval "$hook_cmd"
+}
+
+run_hook_command() {
+  local hook_name hook_cmd
+  hook_name=""
+  hook_cmd=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)
+        hook_name="${2-}"
+        [[ -n "$hook_name" ]] || {
+          echo "Missing value for --name" >&2
+          exit 1
+        }
+        shift 2
+        ;;
+      --command)
+        hook_cmd="${2-}"
+        shift 2
+        ;;
+      *)
+        echo "Unknown argument for hook-run: $1" >&2
+        exit 1
+        ;;
+    esac
+  done
+  [[ -n "$hook_name" ]] || {
+    echo "Missing --name" >&2
+    exit 1
+  }
+  run_hook "$hook_name" "$hook_cmd"
+}
+
+load_server_command_hooks() {
+  SERVER_COMMAND_PRE_HOOK="$(resolve_from_env_or_manager "SERVER_COMMAND_PRE_HOOK" ".serverCommandPreHook" "")"
+  SERVER_COMMAND_POST_HOOK="$(resolve_from_env_or_manager "SERVER_COMMAND_POST_HOOK" ".serverCommandPostHook" "")"
+}
+
+run_server_command() {
+  local command_name
+  command_name="$1"
+  shift || true
+  case "$command_name" in
+    hook-run)
+      run_hook_command "$@"
+      ;;
+    guard-run)
+      server_guard_run "$@"
+      ;;
+    guard-require)
+      server_guard_require "$@"
+      ;;
+    status)
+      require_no_args "$command_name" "$@"
+      run_supervisorctl status
+      ;;
+    menu)
+      run_job_script "menu" "$@"
+      ;;
+    start)
+      require_no_args "$command_name" "$@"
+      server_guard_run "core_ready" -- run_supervisorctl start server
+      ;;
+    stop)
+      require_no_args "$command_name" "$@"
+      server_guard_run "core_ready" -- run_supervisorctl stop server
+      ;;
+    restart)
+      if [[ "$#" -gt 0 ]]; then
+        run_job_script "restart" "$@"
+      else
+        server_guard_run "server_ready" -- run_supervisorctl restart server
+      fi
+      ;;
+    update)
+      run_job_or_supervisor_start "updater" "updater" "$@"
+      ;;
+    scheduled-backup)
+      require_no_args "$command_name" "$@"
+      run_job_or_supervisor_start "backup" "backup"
+      ;;
+    backup)
+      if [[ "$#" -eq 0 ]]; then
+        echo "backup requires args (example: server backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false)" >&2
+        exit 1
+      fi
+      run_job_script "backup" "$@"
+      ;;
+    backup-config)
+      require_no_args "$command_name" "$@"
+      run_job_script "backup" --mode manual --savegame false --enshrouded-config true --manager-config true --cleanup false
+      ;;
+    restore-backup)
+      if [[ "$#" -eq 0 ]]; then
+        echo "restore-backup requires args (example: server restore-backup --zip <path> --restore all --safety-backup false)" >&2
+        exit 1
+      fi
+      run_job_script "restore-backup" "$@"
+      ;;
+    profile)
+      if [[ "$#" -eq 0 ]]; then
+        echo "profile requires args (example: server profile --target manager --action reset --create-backup true)" >&2
+        exit 1
+      fi
+      run_job_script "profile" "$@"
+      ;;
+    password-view)
+      run_job_script "profile" --password-view "$@"
+      ;;
+    env-validation)
+      run_job_or_supervisor_start "env-validation" "env-validation" "$@"
+      ;;
+    scheduled-restart)
+      run_job_or_supervisor_start "restart" "restart" "$@"
+      ;;
+    force-update)
+      run_job_script "updater" --force "$@"
+      ;;
+    bootstrap)
+      run_job_or_supervisor_start "bootstrap" "bootstrap" "$@"
+      ;;
+    cron)
+      run_job_script "cron" "$@"
+      ;;
+    help|--help|-h)
+      usage_commands
+      ;;
+    *)
+      echo "Unknown command: $command_name" >&2
+      usage_commands >&2
+      exit 1
+      ;;
+  esac
+}
+
+run_server_command_entry() {
+  local command_name command_rc post_rc
+  command_name="${1:-help}"
+  shift || true
+
+  if [[ "$command_name" == "help" || "$command_name" == "--help" || "$command_name" == "-h" || "$command_name" == "hook-run" || "$command_name" == "guard-run" || "$command_name" == "guard-require" ]]; then
+    run_server_command "$command_name" "$@"
+    return $?
+  fi
+
+  load_server_command_hooks
+  run_hook "server command pre" "${SERVER_COMMAND_PRE_HOOK:-}"
+  run_server_command "$command_name" "$@"
+  command_rc=$?
+  run_hook "server command post" "${SERVER_COMMAND_POST_HOOK:-}"
+  post_rc=$?
+  if [[ "$command_rc" -ne 0 ]]; then
+    return "$command_rc"
+  fi
+  return "$post_rc"
+}
+
+server_render_banner() {
+  printf "%s" "${C_MAGENTA}"
+  cat <<'EOF'
+>>=============================================================<<
+|| __  __    _    _   _    _    ____ _____ ____    _           ||
+|||  \/  |  / \  | \ | |  / \  / ___| ____|  _ \  | |__  _   _ ||
+||| |\/| | / _ \ |  \| | / _ \| |  _|  _| | |_) | | '_ \| | | |||
+||| |  | |/ ___ \| |\  |/ ___ \ |_| | |___|  _ <  | |_) | |_| |||
+|||_|  |_/_/   \_\_| \_/_/   \_\____|_____|_| \_\ |_.__/ \__, |||
+||| |__   ___  _ __  ___  __ _(_) |__   __ _ _   _  ___ _|___/ ||
+||| '_ \ / _ \| '_ \/ __|/ _` | | '_ \ / _` | | | |/ _ \ '__|  ||
+||| |_) | (_) | | | \__ \ (_| | | |_) | (_| | |_| |  __/ |     ||
+|||_.__/ \___/|_| |_|___/\__,_|_|_.__/ \__,_|\__,_|\___|_|     ||
+>>=============================================================<<
+EOF
+  printf "%s" "${C_RESET}"
+  printf "%s\n" "${C_GREEN}                 Server Manager${C_RESET}"
+  printf "%s\n" "${C_DIM}        Enshrouded Control Layer${C_RESET}"
+  printf "%s\n" "--------------------------------------------------------------------------------"
+}
+
+startup_ui_state() {
+  local program
+  program="$1"
+  run_supervisorctl status "$program" 2>/dev/null | awk 'NR==1{print $2}'
+}
+
+server_wait_for_supervisor_jobs() {
+  local deadline now state_crond state_rsyslogd state_bootstrap
+
+  if ! run_supervisorctl pid >/dev/null 2>&1; then
+    warn "Supervisor is not reachable - skipping startup wait"
+    return 0
+  fi
+
+  deadline=$(( $(date +%s) + STARTUP_UI_WAIT_TIMEOUT ))
+  while :; do
+    state_crond="$(startup_ui_state "crond")"
+    state_rsyslogd="$(startup_ui_state "rsyslogd")"
+    state_bootstrap="$(startup_ui_state "bootstrap")"
+
+    if [[ "$state_crond" == "RUNNING" ]] \
+      && [[ "$state_rsyslogd" == "RUNNING" ]] \
+      && [[ "$state_bootstrap" == "RUNNING" || "$state_bootstrap" == "EXITED" ]]; then
+      info "Supervisor startup jobs are ready (crond=${state_crond}, rsyslogd=${state_rsyslogd}, bootstrap=${state_bootstrap})"
+      return 0
+    fi
+
+    now="$(date +%s)"
+    if [[ "$now" -ge "$deadline" ]]; then
+      warn "Timeout while waiting for supervisor startup jobs (crond=${state_crond:-unknown}, rsyslogd=${state_rsyslogd:-unknown}, bootstrap=${state_bootstrap:-unknown})"
+      return 0
+    fi
+
+    sleep "$STARTUP_UI_WAIT_INTERVAL"
+  done
+}
+
+server_startup_ui() {
+  server_render_banner
+  info "Waiting for supervisor startup jobs..."
+  server_wait_for_supervisor_jobs
+}
+
+parse_server_args() {
   local parsed_bool
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,8 +575,16 @@ parse_args() {
         fi
         shift 2
         ;;
+      --render-banner)
+        SERVER_ACTION="render-banner"
+        shift
+        ;;
+      --startup-ui)
+        SERVER_ACTION="startup-ui"
+        shift
+        ;;
       --help|-h)
-        usage
+        usage_server
         exit 0
         ;;
       *)
@@ -74,7 +596,7 @@ parse_args() {
 
 wait_for_server_download() {
   while :; do
-    if [ -f "$enshrouded_server" ]; then
+    if [[ -f "$enshrouded_server" ]]; then
       break
     else
       debug "enshrouded Server is not yet downloaded - waiting"
@@ -87,7 +609,7 @@ run_server_process() {
   info "Running server"
   debug "Server config ServerName:${ENSHROUDED_NAME} - ServerQueryPort:${ENSHROUDED_QUERY_PORT}"
 
-  export WINEDEBUG=$WINEDEBUG
+  export WINEDEBUG="$WINEDEBUG"
   export STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/enshrouded/.steam/steam"
   export STEAM_COMPAT_DATA_PATH="$install_path/steamapps/compatdata/$steam_app_id"
   export WINEPREFIX="${STEAM_COMPAT_DATA_PATH}/pfx"
@@ -96,13 +618,13 @@ run_server_process() {
   chmod +x "$enshrouded_server"
   proton runinprefix "$enshrouded_server" &
   enshrouded_server_pid=$!
-  echo $enshrouded_server_pid >"$enshrouded_server_pidfile"
+  echo "$enshrouded_server_pid" >"$enshrouded_server_pidfile"
 
-  wait $enshrouded_server_pid
+  wait "$enshrouded_server_pid"
   debug "server with PID $enshrouded_server_pid stopped"
 
   cleanup_wine
-  "${SCRIPT_DIR}/cmd" hook-run --name "server post" --command "${SERVER_POST_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run --name "server post" --command "${SERVER_POST_HOOK:-}"
   info "Shutdown complete"
   exit 0
 }
@@ -114,26 +636,27 @@ cleanup_wine() {
 }
 
 shutdown() {
+  local shutdown_timeout
   debug "Received signal to shut down server"
-  if [ $enshrouded_server_pid -eq -1 ]; then
+  if [[ "$enshrouded_server_pid" -eq -1 ]]; then
     debug "enshrouded server is not running yet - aborting startup"
     exit
   fi
   info "Shutting down enshrouded server with PID $enshrouded_server_pid"
-  kill -$kill_signal $(ps axww | grep '\\[e]nshrouded_server' | awk '{print $1}')
-  shutdown_timeout=$(($(date +%s) + timeout))
-  while [ -d "/proc/$enshrouded_server_pid" ]; do
-    if [ "$(date +%s)" -gt $shutdown_timeout ]; then
-      shutdown_timeout=$(($(date +%s) + timeout))
+  kill -"$kill_signal" $(ps axww | grep '\[e]nshrouded_server' | awk '{print $1}')
+  shutdown_timeout=$(( $(date +%s) + timeout ))
+  while [[ -d "/proc/$enshrouded_server_pid" ]]; do
+    if [[ "$(date +%s)" -gt "$shutdown_timeout" ]]; then
+      shutdown_timeout=$(( $(date +%s) + timeout ))
       warn "Timeout while waiting for server to shut down - sending SIG$kill_signal to PID $enshrouded_server_pid"
-      kill -$kill_signal $enshrouded_server_pid
+      kill -"$kill_signal" "$enshrouded_server_pid"
       case "$kill_signal" in
-      INT)
-        kill_signal=TERM
-        ;;
-      *)
-        kill_signal=KILL
-        ;;
+        INT)
+          kill_signal=TERM
+          ;;
+        *)
+          kill_signal=KILL
+          ;;
       esac
     fi
     debug "Waiting for enshrouded Server with PID $enshrouded_server_pid to shut down"
@@ -148,7 +671,7 @@ server_stop_safe() {
   fi
 
   info "Stopping server"
-  supervisorctl stop server >/dev/null 2>&1 || true
+  server_guard_run "core_ready" -- run_supervisorctl stop server >/dev/null 2>&1 || true
 
   deadline=$(( $(date +%s) + timeout ))
   while is_supervisor_running "server"; do
@@ -181,13 +704,28 @@ except Exception:
 
   debug "[players-check] connected_players: $connected_players"
   if [[ -n "$connected_players" && "$connected_players" != "null" && "$connected_players" -gt 0 ]]; then
-    return 1
+    return 10
   fi
   return 0
 }
 
 main() {
-  parse_args "$@"
+  local command_name invoked_name
+
+  invoked_name="$(basename "$0")"
+  if [[ "$invoked_name" != "server" ]] && is_server_command "$invoked_name"; then
+    run_server_command_entry "$invoked_name" "$@"
+    return $?
+  fi
+
+  if [[ $# -gt 0 && "${1#-}" == "$1" ]] && is_server_command "$1"; then
+    command_name="$1"
+    shift || true
+    run_server_command_entry "$command_name" "$@"
+    return $?
+  fi
+
+  parse_server_args "$@"
 
   case "$SERVER_ACTION" in
     stop-safe)
@@ -198,12 +736,20 @@ main() {
       server_players_check
       return $?
       ;;
+    render-banner)
+      server_render_banner
+      return 0
+      ;;
+    startup-ui)
+      server_startup_ui
+      return 0
+      ;;
   esac
 
   init_runtime_env
   cd "$install_path" || fatal "Could not cd $install_path"
   enshrouded_server="$install_path/$enshrouded_binary_path"
-  "${SCRIPT_DIR}/cmd" hook-run --name "server pre" --command "${SERVER_PRE_HOOK:-}"
+  "${SCRIPT_DIR}/server" hook-run --name "server pre" --command "${SERVER_PRE_HOOK:-}"
   if [[ "$WAIT_FOR_DOWNLOAD" == "true" ]]; then
     wait_for_server_download
   elif [[ ! -f "$enshrouded_server" ]]; then
@@ -214,5 +760,3 @@ main() {
 
 trap shutdown SIGINT SIGTERM
 main "$@"
-
-

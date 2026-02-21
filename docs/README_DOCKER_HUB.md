@@ -18,8 +18,6 @@ docker run \
   -p 15637:15637/udp \
   -e PUID="$(id -u enshrouded)" \
   -e PGID="$(id -g enshrouded)" \
-  -e EN_PROFILE="default" \
-  -e MANAGER_PROFILE="default" \
   -v /home/enshrouded/server_1:/home/enshrouded/server \
   bonsaibauer/enshrouded_server_docker:latest
 ```
@@ -27,20 +25,20 @@ docker run \
 ## Commands
 
 ```bash
-docker exec enshroudedserver cmd status
-docker exec -it enshroudedserver cmd menu
-docker exec enshroudedserver cmd start
-docker exec enshroudedserver cmd stop
-docker exec enshroudedserver cmd restart
-docker exec enshroudedserver cmd update
-docker exec enshroudedserver cmd backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false
-docker exec enshroudedserver cmd restore-backup --zip /home/enshrouded/server/backups/manual/<file>.zip --restore all --safety-backup false
-docker exec enshroudedserver cmd profile --target enshrouded --action apply --profile default --create-backup true
-docker exec enshroudedserver cmd password-view
-docker exec enshroudedserver cmd env-validation verify
-docker exec enshroudedserver cmd scheduled-restart
-docker exec enshroudedserver cmd force-update
-docker exec enshroudedserver cmd bootstrap
-docker exec enshroudedserver cmd cron --sync
-docker exec enshroudedserver cmd cron --service restart
+docker exec enshroudedserver server status
+docker exec -it enshroudedserver server menu
+docker exec enshroudedserver server start
+docker exec enshroudedserver server stop
+docker exec enshroudedserver server restart
+docker exec enshroudedserver server update
+docker exec enshroudedserver server backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false
+docker exec enshroudedserver server restore-backup --zip /home/enshrouded/server/backups/manual/<file>.zip --restore all --safety-backup false
+docker exec enshroudedserver server profile --target enshrouded --action apply --profile default --create-backup true
+docker exec enshroudedserver server password-view
+docker exec enshroudedserver server env-validation verify
+docker exec enshroudedserver server scheduled-restart
+docker exec enshroudedserver server force-update
+docker exec enshroudedserver server bootstrap
+docker exec enshroudedserver server cron --sync
+docker exec enshroudedserver server cron --service restart
 ```

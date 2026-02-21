@@ -1,4 +1,4 @@
-section,id,parent,key,title,action,type,cmd,fn,requiresRunning,confirm,program,requestFile,timeoutSec,payloadJson,argsJson,env,group,field,jsonPath,order
+meta_section,meta_id,meta_parent,meta_key,meta_title,meta_action,meta_type,meta_command,meta_fn,meta_requires_running,meta_confirm,meta_program,meta_request_file,meta_timeout_sec,meta_payload_json,meta_args_json,env_name,meta_group,meta_field,meta_json_path,meta_order
 action,enshrouded_settings,null,null,null,null,internal,null,menu_load_screen,null,null,null,null,null,null,"[""enshroudedSettings"",""Enshrouded Server Settings""]",null,null,null,null,null
 action,manager_settings,null,null,null,null,internal,null,menu_load_screen,null,null,null,null,null,null,"[""managerSettings"",""Server Manager Settings""]",null,null,null,null,null
 action,backups_menu,null,null,null,null,internal,null,menu_load_screen,null,null,null,null,null,null,"[""backups"",""Backups""]",null,null,null,null,null
@@ -11,17 +11,17 @@ action,manager_apply,null,null,null,null,internal,null,menu_profile_flow,null,nu
 action,restore_backup,null,null,null,null,internal,null,menu_restore_backup,null,null,null,null,null,null,null,null,null,null,null,null
 action,create_full_backup,null,null,null,null,internal,null,menu_run_savegame_backup,null,null,null,null,null,null,null,null,null,null,null,null
 action,create_config_backup,null,null,null,null,internal,null,menu_run_config_backup_now,null,null,null,null,null,null,null,null,null,null,null,null
-action,start_server,null,null,null,null,cmd,start,null,null,null,null,null,null,null,null,null,null,null,null,null
-action,stop_server,null,null,null,null,cmd,stop,null,true,null,null,null,null,null,null,null,null,null,null,null
-action,restart_server,null,null,null,null,cmd,restart,null,true,null,null,null,null,null,null,null,null,null,null,null
-action,update_server,null,null,null,null,cmd,update,null,null,null,null,null,null,null,null,null,null,null,null,null
-action,force_update_server,null,null,null,null,cmd,force-update,null,null,true,null,null,null,null,null,null,null,null,null,null
-action,view_passwords,null,null,null,null,cmd,password-view,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,start_server,null,null,null,null,server,start,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,stop_server,null,null,null,null,server,stop,null,true,null,null,null,null,null,null,null,null,null,null,null
+action,restart_server,null,null,null,null,server,restart,null,true,null,null,null,null,null,null,null,null,null,null,null
+action,update_server,null,null,null,null,server,update,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,force_update_server,null,null,null,null,server,force-update,null,null,true,null,null,null,null,null,null,null,null,null,null
+action,view_passwords,null,null,null,null,server,password-view,null,null,null,null,null,null,null,null,null,null,null,null,null
 action,open_other_commands,null,null,null,null,internal,null,menu_load_screen,null,null,null,null,null,null,"[""otherCommands"",""Other Commands""]",null,null,null,null,null
-action,status,null,null,null,null,cmd,status,null,null,null,null,null,null,null,null,null,null,null,null,null
-action,scheduled_restart,null,null,null,null,cmd,scheduled-restart,null,null,null,null,null,null,null,null,null,null,null,null,null
-action,bootstrap,null,null,null,null,cmd,bootstrap,null,null,null,null,null,null,null,null,null,null,null,null,null
-action,cron,null,null,null,null,cmd,cron,null,null,null,null,null,null,"[""--sync""]",null,null,null,null,null,null
+action,status,null,null,null,null,server,status,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,scheduled_restart,null,null,null,null,server,scheduled-restart,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,bootstrap,null,null,null,null,server,bootstrap,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,cron,null,null,null,null,server,cron,null,null,null,null,null,null,"[""--sync""]",null,null,null,null,null,null
 screen,null,main,1,Enshrouded Server Settings,enshrouded_settings,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1
 screen,null,main,2,Server Manager Settings,manager_settings,null,null,null,null,null,null,null,null,null,null,null,null,null,null,2
 screen,null,main,3,Backup Menu,backups_menu,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3
@@ -78,8 +78,8 @@ editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,nul
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BOOTSTRAP_POST_HOOK,Hooks,null,.bootstrapPostHook,30
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,SERVER_PRE_HOOK,Hooks,null,.serverPreHook,31
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,SERVER_POST_HOOK,Hooks,null,.serverPostHook,32
-editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,CMD_PRE_HOOK,Hooks,null,.cmdPreHook,33
-editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,CMD_POST_HOOK,Hooks,null,.cmdPostHook,34
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,SERVER_COMMAND_PRE_HOOK,Hooks,null,.serverCommandPreHook,33
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,SERVER_COMMAND_POST_HOOK,Hooks,null,.serverCommandPostHook,34
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,MENU_PRE_HOOK,Hooks,null,.menuPreHook,35
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,MENU_POST_HOOK,Hooks,null,.menuPostHook,36
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,PASSWORD_VIEW_PRE_HOOK,Hooks,null,.passwordViewPreHook,37

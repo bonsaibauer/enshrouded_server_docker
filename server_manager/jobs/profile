@@ -13,7 +13,7 @@ EN_PROFILE_DIR="${EN_PROFILE_DIR:-${install_path}/profiles/enshrouded}"
 EN_PROFILE_DEFAULT="default"
 MANAGER_PROFILE_DEFAULT="default"
 PROFILE_SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-CMD_JOB_BIN="${CMD_JOB_BIN:-${PROFILE_SCRIPT_DIR}/cmd}"
+SERVER_JOB_BIN="${SERVER_JOB_BIN:-${PROFILE_SCRIPT_DIR}/server}"
 
 log_level="${LOG_LEVEL:-40}"
 
@@ -28,7 +28,8 @@ require_cmd() {
 is_supervisor_running() {
   local proc status
   proc="$1"
-  status="$(supervisorctl status "${proc}" 2>&1 || true)"
+  [[ -x "$SERVER_JOB_BIN" ]] || return 1
+  status="$("$SERVER_JOB_BIN" guard-run core_ready -- supervisorctl status "${proc}" 2>/dev/null || true)"
   [[ "$status" == *RUNNING* ]]
 }
 
@@ -467,6 +468,8 @@ target=""
 action=""
 profile_name=""
 create_backup="true"
+PROFILE_MODE="profile"
+password_view_format="text"
 
 parse_bool_arg() {
   case "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" in
@@ -479,6 +482,7 @@ usage() {
   cat <<'EOF'
 Usage:
   profile --target <manager|enshrouded> --action <apply|reset> [--profile <name>] [--create-backup true|false]
+  profile --password-view [--format text|json]
 EOF
 }
 
@@ -507,6 +511,15 @@ parse_args() {
         create_backup="$parsed_bool"
         shift 2
         ;;
+      --password-view)
+        PROFILE_MODE="password-view"
+        shift
+        ;;
+      --format)
+        password_view_format="${2-}"
+        [[ $# -ge 2 ]] || fatal "Missing value for --format"
+        shift 2
+        ;;
       --help|-h)
         usage
         exit 0
@@ -516,6 +529,16 @@ parse_args() {
         ;;
     esac
   done
+
+  if [[ "$PROFILE_MODE" == "password-view" ]]; then
+    case "$password_view_format" in
+      text|json) ;;
+      *)
+        fatal "Invalid --format value: $password_view_format (expected: text|json)"
+        ;;
+    esac
+    return 0
+  fi
 
   case "$target" in
     manager|enshrouded) ;;
@@ -533,7 +556,8 @@ parse_args() {
 }
 
 stop_server_now() {
-  "${PROFILE_SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 90
+  "$SERVER_JOB_BIN" guard-run core_ready -- "${PROFILE_SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 90 \
+    || fatal "Failed to stop server safely"
 }
 
 apply_manager_profile() {
@@ -633,17 +657,92 @@ apply_enshrouded_profile() {
   info "Enshrouded profile ${action} completed: $profile"
 }
 
+profile_password_view() {
+  local config_file
+  config_file="${install_path}/enshrouded_server.json"
+
+  if [[ ! -f "$config_file" ]]; then
+    fatal "Missing enshrouded_server.json at $config_file"
+  fi
+
+  if ! jq -e 'type == "object"' "$config_file" >/dev/null 2>&1; then
+    fatal "Invalid JSON: $config_file"
+  fi
+
+  "$SERVER_JOB_BIN" hook-run --name "password-view pre" --command "${PASSWORD_VIEW_PRE_HOOK:-}"
+
+  if [[ "$password_view_format" == "json" ]]; then
+    jq -c '
+      {
+        config: input_filename,
+        server: (.name // "<unknown>"),
+        userGroups: (
+          if (.userGroups // [] | type) != "array" then
+            []
+          else
+            (.userGroups | to_entries | map({
+              index: .key,
+              name: (.value.name // "<unnamed>"),
+              password: ((.value.password // "") | if . == "" then "<empty>" else . end),
+              reservedSlots: (.value.reservedSlots // 0),
+              canKickBan: (.value.canKickBan // false),
+              canAccessInventories: (.value.canAccessInventories // false),
+              canEditWorld: (.value.canEditWorld // false),
+              canEditBase: (.value.canEditBase // false),
+              canExtendBase: (.value.canExtendBase // false)
+            }))
+          end
+        )
+      }
+    ' "$config_file"
+  else
+    echo "Config: $config_file"
+    echo "Server: $(jq -r '.name // "<unknown>"' "$config_file")"
+    echo
+
+    jq -r '
+      def pw:
+        (.password // "" | if . == "" then "<empty>" else . end);
+
+      def b($v): if ($v == true) then "true" else "false" end;
+
+      if (.userGroups // [] | type) != "array" then
+        "userGroups: <missing or invalid>"
+      else
+        (.userGroups | to_entries[]? | . as $g
+        | "Group \($g.key): \($g.value.name // "<unnamed>")\n"
+          + "  password: \($g.value | pw)\n"
+          + "  reservedSlots: \($g.value.reservedSlots // 0)\n"
+          + "  canKickBan: \(b($g.value.canKickBan // false))\n"
+          + "  canAccessInventories: \(b($g.value.canAccessInventories // false))\n"
+          + "  canEditWorld: \(b($g.value.canEditWorld // false))\n"
+          + "  canEditBase: \(b($g.value.canEditBase // false))\n"
+          + "  canExtendBase: \(b($g.value.canExtendBase // false))\n"
+        )
+      end
+    ' "$config_file"
+  fi
+
+  "$SERVER_JOB_BIN" hook-run --name "password-view post" --command "${PASSWORD_VIEW_POST_HOOK:-}"
+}
+
 load_runtime_values() {
   require_cmd jq
-  require_cmd supervisorctl
 
   PROFILE_PRE_HOOK="${PROFILE_PRE_HOOK:-$(jq -r '.profilePreHook // empty' "$(manager_config_path)" 2>/dev/null || true)}"
   PROFILE_POST_HOOK="${PROFILE_POST_HOOK:-$(jq -r '.profilePostHook // empty' "$(manager_config_path)" 2>/dev/null || true)}"
+  PASSWORD_VIEW_PRE_HOOK="${PASSWORD_VIEW_PRE_HOOK:-$(jq -r '.passwordViewPreHook // empty' "$(manager_config_path)" 2>/dev/null || true)}"
+  PASSWORD_VIEW_POST_HOOK="${PASSWORD_VIEW_POST_HOOK:-$(jq -r '.passwordViewPostHook // empty' "$(manager_config_path)" 2>/dev/null || true)}"
 }
 
 main() {
   parse_args "$@"
   load_runtime_values
+
+  if [[ "$PROFILE_MODE" == "password-view" ]]; then
+    profile_password_view
+    return 0
+  fi
 
   if [[ -z "$profile_name" ]]; then
     if [[ "$target" == "manager" ]]; then
@@ -656,7 +755,7 @@ main() {
   export PROFILE_TARGET="$target"
   export PROFILE_ACTION="$action"
   export PROFILE_NAME="$profile_name"
-  "$CMD_JOB_BIN" hook-run --name "profile pre" --command "${PROFILE_PRE_HOOK:-}"
+  "$SERVER_JOB_BIN" hook-run --name "profile pre" --command "${PROFILE_PRE_HOOK:-}"
 
   stop_server_now
   if [[ "$target" == "manager" ]]; then
@@ -665,7 +764,7 @@ main() {
     apply_enshrouded_profile "$profile_name"
   fi
 
-  "$CMD_JOB_BIN" hook-run --name "profile post" --command "${PROFILE_POST_HOOK:-}"
+  "$SERVER_JOB_BIN" hook-run --name "profile post" --command "${PROFILE_POST_HOOK:-}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

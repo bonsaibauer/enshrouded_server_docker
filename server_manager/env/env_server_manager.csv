@@ -1,41 +1,41 @@
-name,type,required,allowEmpty,envMode,min,max,regex,enum,list,description,allowed
-BOOTSTRAP_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed during bootstrap.,Allowed: single-line string
-PROFILE_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after profile job.,Allowed: single-line string
-PROFILE_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before profile job.,Allowed: single-line string
-EN_PROFILE,string,false,true,hard,null,null,^[A-Za-z0-9._-]+$,null,null,Selects the Enshrouded profile template on first bootstrap (fresh volume).,A-Z a-z 0-9 . _ -
-LOG_COLOR,bool,false,true,null,null,null,null,null,null,Enable colored log levels (TTY only).,Allowed: true | false
-MANAGER_PROFILE,string,false,true,hard,null,null,^[A-Za-z0-9._-]+$,null,null,Selects the Server Manager profile template on first bootstrap (fresh volume).,A-Z a-z 0-9 . _ -
-PGID,int,false,true,null,1,null,null,null,null,GID for the enshrouded user.,Allowed: integer >= 1
-PUID,int,false,true,null,1,null,null,null,null,UID for the enshrouded user.,Allowed: integer >= 1
-SAVEFILE_NAME,string,false,true,null,null,null,^[A-Za-z0-9._-]+$,null,null,Base name for save/backup files.,A-Z a-z 0-9 . _ -
-BACKUP_CRON,string,false,true,null,null,null,^[^\r\n]*$,null,null,Cron schedule for scheduled backup job (writes to BACKUP_DIR/scheduled).,Allowed: single-line string
-BACKUP_DIR,string,false,true,null,null,null,^[^\r\n]*$,null,null,Base backup directory (scheduled/manual subfolders).,Allowed: single-line string
-BACKUP_MAX_COUNT,int,false,true,null,0,null,null,null,null,Number of savegame zip backups to keep (0 = unlimited).,Allowed: integer >= 0
-BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG,bool,false,true,null,null,null,null,null,null,Include enshrouded_server.json in scheduled backups.,Allowed: true | false
-BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG,bool,false,true,null,null,null,null,null,null,Include server_manager.json in scheduled backups.,Allowed: true | false
-BACKUP_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after backup job.,Allowed: single-line string
-BACKUP_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before backup job.,Allowed: single-line string
-RESTORE_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after backup restore.,Allowed: single-line string
-RESTORE_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before backup restore.,Allowed: single-line string
-GAME_BRANCH,string,false,true,null,null,null,^[^\r\n]*$,null,null,Steam branch name.,Allowed: single-line string
-RESTART_CHECK_PLAYERS,bool,false,true,null,null,null,null,null,null,Only restart when 0 players are connected.,Allowed: true | false
-RESTART_CRON,string,false,true,null,null,null,^[^\r\n]*$,null,null,Cron schedule for restart job (crond).,Allowed: single-line string
-RESTART_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after restart.,Allowed: single-line string
-RESTART_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before restart.,Allowed: single-line string
-STEAMCMD_ARGS,string,false,true,null,null,null,^[^\r\n]*$,null,null,Additional SteamCMD args.,Allowed: single-line string
-STEAM_APP_ID,int,false,true,null,1,null,null,null,null,Steam App ID.,Allowed: integer >= 1
-UPDATE_CHECK_PLAYERS,bool,false,true,null,null,null,null,null,null,Only update when 0 players are connected.,Allowed: true | false
-UPDATE_CRON,string,false,true,null,null,null,^[^\r\n]*$,null,null,Cron schedule for update job (crond).,Allowed: single-line string
-UPDATE_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after update.,Allowed: single-line string
-UPDATE_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before update.,Allowed: single-line string
-WINEDEBUG,string,false,true,null,null,null,^[^\r\n]*$,null,null,Wine debug level.,Allowed: single-line string
-BOOTSTRAP_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before bootstrap job.,Allowed: single-line string
-BOOTSTRAP_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after bootstrap job.,Allowed: single-line string
-SERVER_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before server start job.,Allowed: single-line string
-SERVER_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after server stop job.,Allowed: single-line string
-CMD_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before cmd command dispatch.,Allowed: single-line string
-CMD_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after cmd command dispatch.,Allowed: single-line string
-MENU_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before interactive menu job.,Allowed: single-line string
-MENU_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after interactive menu job.,Allowed: single-line string
-PASSWORD_VIEW_PRE_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed before password-view job.,Allowed: single-line string
-PASSWORD_VIEW_POST_HOOK,string,false,true,null,null,null,^[^\r\n]*$,null,null,Hook executed after password-view job.,Allowed: single-line string
+"env_name","env_mode","val_type","val_min","val_max","val_regex","val_enum","val_list","meta_description","meta_allowed"
+"BOOTSTRAP_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed during bootstrap.","Allowed: single-line string"
+"PROFILE_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after profile job.","Allowed: single-line string"
+"PROFILE_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before profile job.","Allowed: single-line string"
+"EN_PROFILE","soft","string","null","null","^[A-Za-z0-9._-]+$","null","null","Selects the Enshrouded profile template on first bootstrap (fresh volume).","A-Z a-z 0-9 . _ -"
+"LOG_COLOR","soft","bool","null","null","null","null","null","Enable colored log levels (TTY only).","Allowed: true | false"
+"MANAGER_PROFILE","soft","string","null","null","^[A-Za-z0-9._-]+$","null","null","Selects the Server Manager profile template on first bootstrap (fresh volume).","A-Z a-z 0-9 . _ -"
+"PGID","hard","int","1","null","null","null","null","GID for the enshrouded user.","Allowed: integer >= 1"
+"PUID","hard","int","1","null","null","null","null","UID for the enshrouded user.","Allowed: integer >= 1"
+"SAVEFILE_NAME","soft","string","null","null","^[A-Za-z0-9._-]+$","null","null","Base name for save/backup files.","A-Z a-z 0-9 . _ -"
+"BACKUP_CRON","soft","string","null","null","^[^\r\n]*$","null","null","Cron schedule for scheduled backup job (writes to BACKUP_DIR/scheduled).","Allowed: single-line string"
+"BACKUP_DIR","soft","string","null","null","^[^\r\n]*$","null","null","Base backup directory (scheduled/manual subfolders).","Allowed: single-line string"
+"BACKUP_MAX_COUNT","soft","int","0","null","null","null","null","Number of savegame zip backups to keep (0 = unlimited).","Allowed: integer >= 0"
+"BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG","soft","bool","null","null","null","null","null","Include enshrouded_server.json in scheduled backups.","Allowed: true | false"
+"BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG","soft","bool","null","null","null","null","null","Include server_manager.json in scheduled backups.","Allowed: true | false"
+"BACKUP_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after backup job.","Allowed: single-line string"
+"BACKUP_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before backup job.","Allowed: single-line string"
+"RESTORE_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after backup restore.","Allowed: single-line string"
+"RESTORE_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before backup restore.","Allowed: single-line string"
+"GAME_BRANCH","soft","string","null","null","^[^\r\n]*$","null","null","Steam branch name.","Allowed: single-line string"
+"RESTART_CHECK_PLAYERS","soft","bool","null","null","null","null","null","Only restart when 0 players are connected.","Allowed: true | false"
+"RESTART_CRON","soft","string","null","null","^[^\r\n]*$","null","null","Cron schedule for restart job (crond).","Allowed: single-line string"
+"RESTART_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after restart.","Allowed: single-line string"
+"RESTART_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before restart.","Allowed: single-line string"
+"STEAMCMD_ARGS","soft","string","null","null","^[^\r\n]*$","null","null","Additional SteamCMD args.","Allowed: single-line string"
+"STEAM_APP_ID","soft","int","1","null","null","null","null","Steam App ID.","Allowed: integer >= 1"
+"UPDATE_CHECK_PLAYERS","soft","bool","null","null","null","null","null","Only update when 0 players are connected.","Allowed: true | false"
+"UPDATE_CRON","soft","string","null","null","^[^\r\n]*$","null","null","Cron schedule for update job (crond).","Allowed: single-line string"
+"UPDATE_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after update.","Allowed: single-line string"
+"UPDATE_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before update.","Allowed: single-line string"
+"WINEDEBUG","soft","string","null","null","^[^\r\n]*$","null","null","Wine debug level.","Allowed: single-line string"
+"BOOTSTRAP_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before bootstrap job.","Allowed: single-line string"
+"BOOTSTRAP_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after bootstrap job.","Allowed: single-line string"
+"SERVER_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before server start job.","Allowed: single-line string"
+"SERVER_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after server stop job.","Allowed: single-line string"
+"SERVER_COMMAND_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before server command dispatch.","Allowed: single-line string"
+"SERVER_COMMAND_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after server command dispatch.","Allowed: single-line string"
+"MENU_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before interactive menu job.","Allowed: single-line string"
+"MENU_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after interactive menu job.","Allowed: single-line string"
+"PASSWORD_VIEW_PRE_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed before password-view job.","Allowed: single-line string"
+"PASSWORD_VIEW_POST_HOOK","soft","string","null","null","^[^\r\n]*$","null","null","Hook executed after password-view job.","Allowed: single-line string"
