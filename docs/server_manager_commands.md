@@ -12,20 +12,14 @@ Most commands can run without extra arguments and then use defaults from `server
 - `docker exec enshroudedserver start`: Starts the server job.
 - `docker exec enshroudedserver stop`: Stops the server job.
 - `docker exec enshroudedserver restart`: Direct restart of the server job (no explicit player-check mode set).
-- `docker exec enshroudedserver restart [force|player-check|no-player-check]`: Restart with explicit restart behavior.
 - `docker exec enshroudedserver update`: Runs normal updater flow (install if needed, then start server).
 - `docker exec enshroudedserver update force`: Forces full update path.
-- `docker exec enshroudedserver update check`: Check-only mode (no install/start).
-- `docker exec enshroudedserver update [player-check|no-player-check]`: Overrides player-check behavior for this update run.
-- `docker exec enshroudedserver scheduled-restart [force|player-check|no-player-check]`: Runs scheduled restart flow manually.
-- `docker exec enshroudedserver scheduled-backup`: Runs scheduled backup flow manually.
 - `docker exec enshroudedserver backup`: Creates a manual backup with default includes (savegame + both config files).
-- `docker exec enshroudedserver backup [manual|scheduled]`: Creates backup in selected mode.
 - `docker exec enshroudedserver backup list`: Lists available backup ZIP files (manual + scheduled).
 - `docker exec enshroudedserver backup inspect <backup.zip>`: Shows which components are in a backup ZIP.
 - `docker exec enshroudedserver backup restore <backup.zip> [savegame|enshrouded|manager|all]`: Restores selected parts (default target is `all`).
 - `docker exec enshroudedserver profile <manager|enshrouded> <apply|reset> [profile]`: Applies/resets profile (with config backup).
-- `docker exec enshroudedserver password-view`:ows user group rights/passwords (`text` default).
+- `docker exec enshroudedserver password-view`: Shows user group rights/passwords.
 - `docker exec enshroudedserver cron sync`: Rewrites cron table from current `server_manager.json`.
 - `docker exec enshroudedserver cron [start|stop|restart|status]`: Controls `crond` service.
 
