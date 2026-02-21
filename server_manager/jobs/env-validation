@@ -222,7 +222,18 @@ validation__build_rule_json() {
 validation__rule_from_env_row() {
   local row env_name env_mode val_type val_min val_max val_regex val_enum_spec val_list_spec meta_description meta_allowed
   row="$1"
-  IFS=$'\t' read -r env_name env_mode val_type val_min val_max val_regex val_enum_spec val_list_spec meta_description meta_allowed <<<"$row"
+  local -a cols
+  mapfile -t cols < <(printf '%s\n' "$row" | awk -F'\t' '{ for (i = 1; i <= 10; i++) print $i }')
+  env_name="${cols[0]-}"
+  env_mode="${cols[1]-}"
+  val_type="${cols[2]-}"
+  val_min="${cols[3]-}"
+  val_max="${cols[4]-}"
+  val_regex="${cols[5]-}"
+  val_enum_spec="${cols[6]-}"
+  val_list_spec="${cols[7]-}"
+  meta_description="${cols[8]-}"
+  meta_allowed="${cols[9]-}"
   validation__build_rule_json \
     "$env_mode" "$val_type" "$val_min" "$val_max" "$val_regex" \
     "$val_enum_spec" "$val_list_spec" "$meta_description" "$meta_allowed"

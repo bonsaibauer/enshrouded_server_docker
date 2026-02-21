@@ -177,14 +177,38 @@ PY
 
 menu_spec_build_json_from_csv() {
   local csv_file out_file
-  local section id parent key title action type command_name fn requires_running confirm _program _request_file _timeout_sec _payload_json args_json env_name group field json_path order
+  local row section id parent key title action type command_name fn requires_running confirm _program _request_file _timeout_sec _payload_json args_json env_name group field json_path order
+  local -a cols
 
   csv_file="$1"
   out_file="$2"
 
   jq -n '{actions: {}, screens: {}, editors: {templates: {}}}' >"$out_file" || return 1
 
-  while IFS=$'\t' read -r section id parent key title action type command_name fn requires_running confirm _program _request_file _timeout_sec _payload_json args_json env_name group field json_path order; do
+  while IFS= read -r row; do
+    mapfile -t cols < <(printf '%s\n' "$row" | awk -F'\t' '{ for (i = 1; i <= 21; i++) print $i }')
+    section="${cols[0]-}"
+    id="${cols[1]-}"
+    parent="${cols[2]-}"
+    key="${cols[3]-}"
+    title="${cols[4]-}"
+    action="${cols[5]-}"
+    type="${cols[6]-}"
+    command_name="${cols[7]-}"
+    fn="${cols[8]-}"
+    requires_running="${cols[9]-}"
+    confirm="${cols[10]-}"
+    _program="${cols[11]-}"
+    _request_file="${cols[12]-}"
+    _timeout_sec="${cols[13]-}"
+    _payload_json="${cols[14]-}"
+    args_json="${cols[15]-}"
+    env_name="${cols[16]-}"
+    group="${cols[17]-}"
+    field="${cols[18]-}"
+    json_path="${cols[19]-}"
+    order="${cols[20]-}"
+
     [[ -z "$section" ]] && continue
     case "$section" in
       action)
