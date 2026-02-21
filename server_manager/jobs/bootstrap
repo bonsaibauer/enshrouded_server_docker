@@ -133,7 +133,7 @@ update_or_create_enshrouded_server_config() {
 
 create_folders() {
   info "Creating server folders (save, logs, backup)"
-  mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_ROOT"
+  mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_DIR" "$EN_PROFILE_DIR"
 
   if [[ -n "$ENSHROUDED_SAVE_DIR" ]]; then
     if [[ "$ENSHROUDED_SAVE_DIR" == /* ]]; then
@@ -166,7 +166,8 @@ apply_permissions() {
 
   chown -R enshrouded:enshrouded /home/enshrouded /var/run/enshrouded
   [[ -n "${MANAGER_DATA_DIR:-}" && "$MANAGER_DATA_DIR" == /* ]] && chown -R enshrouded:enshrouded "$MANAGER_DATA_DIR"
-  [[ -n "${MANAGER_PROFILE_ROOT:-}" && "$MANAGER_PROFILE_ROOT" == /* ]] && chown -R enshrouded:enshrouded "$MANAGER_PROFILE_ROOT"
+  [[ -n "${MANAGER_PROFILE_DIR:-}" && "$MANAGER_PROFILE_DIR" == /* ]] && chown -R enshrouded:enshrouded "$MANAGER_PROFILE_DIR"
+  [[ -n "${EN_PROFILE_DIR:-}" && "$EN_PROFILE_DIR" == /* ]] && chown -R enshrouded:enshrouded "$EN_PROFILE_DIR"
   [[ "$ENSHROUDED_SAVE_DIR" == /* ]] && chown -R enshrouded:enshrouded "$ENSHROUDED_SAVE_DIR"
   [[ "$ENSHROUDED_LOG_DIR" == /* ]] && chown -R enshrouded:enshrouded "$ENSHROUDED_LOG_DIR"
   [[ "$BACKUP_DIR" == /* ]] && chown -R enshrouded:enshrouded "$BACKUP_DIR"

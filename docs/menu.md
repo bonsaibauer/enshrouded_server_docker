@@ -92,11 +92,9 @@ When switching Enshrouded profiles the menu uses the existing Supervisor program
    - The menu will confirm and stop `server` (if running) before replacing `/home/enshrouded/server/server_manager/server_manager.json`
 
 3. `Select and apply profile`
-     - Lists profile templates from `MANAGER_PROFILE_TEMPLATE_DIR` (default: `/home/enshrouded/server/profiles/manager/`, seeded from `/usr/local/etc/enshrouded/profiles/manager/`)
+     - Lists profiles from `MANAGER_PROFILE_DIR` (default: `/home/enshrouded/server/profiles/manager/`, seeded from `/usr/local/etc/enshrouded/profiles/manager/`)
      - If an active config exists, the menu will confirm and then replace it when applying the selected profile
-     - Copies the selected template into:
-       - the profile store: `/home/enshrouded/server/profile/<name>/<name>_server_manager.json`
-       - the active config: `/home/enshrouded/server/server_manager/server_manager.json`
+     - Applies `/home/enshrouded/server/profiles/manager/<name>_server_manager.json` to `/home/enshrouded/server/server_manager/server_manager.json`
    - Afterwards you can:
       - restart the server, or
       - run bootstrap (recommended)
@@ -105,7 +103,7 @@ When switching Enshrouded profiles the menu uses the existing Supervisor program
 
 When switching Server Manager profiles the menu reuses existing profile/init helpers and Supervisor programs:
 
-- `ensure_manager_profile_file` (copies template into the volume profile store)
+- `ensure_manager_profile_file` (ensures profile exists in `/home/enshrouded/server/profiles/manager/`, seeded from shipped templates if missing)
 - `supervisorctl stop server` (before replacing the active config)
 - `supervisorctl start|restart server` (after editing/applying, to activate changes)
 - `supervisorctl start bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)

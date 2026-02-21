@@ -982,7 +982,7 @@ profiles_list_enshrouded() {
 profiles_list_manager() {
   local f name
   shopt -s nullglob
-  for f in "$MANAGER_PROFILE_TEMPLATE_DIR"/*_server_manager.json; do
+  for f in "$MANAGER_PROFILE_DIR"/*_server_manager.json; do
     name="$(basename "$f")"
     name="${name%_server_manager.json}"
     echo "$name"
@@ -1020,10 +1020,10 @@ enshrouded_profile_resolve_from_value() {
 }
 
 ensure_manager_profile_catalog() {
-  # Seed MANAGER_PROFILE_TEMPLATE_DIR with shipped templates (copy only missing files).
+  # Seed MANAGER_PROFILE_DIR with shipped templates (copy only missing files).
   local src_dir dest_dir f dest
   src_dir="${MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR:-}"
-  dest_dir="${MANAGER_PROFILE_TEMPLATE_DIR:-}"
+  dest_dir="${MANAGER_PROFILE_DIR:-}"
 
   if [[ -z "$src_dir" || -z "$dest_dir" ]]; then
     return 0
@@ -1048,7 +1048,7 @@ ensure_manager_profile_catalog() {
       chmod 600 "$dest" 2>/dev/null || true
       chown enshrouded:enshrouded "$dest" 2>/dev/null || true
     else
-      warn "Failed to seed Server Manager profile template: $dest"
+      warn "Failed to seed Server Manager profile: $dest"
     fi
   done
   shopt -u nullglob
@@ -1257,7 +1257,7 @@ update_or_create_manager_config() {
     if [[ -z "$value" && "$env_mode" == "soft" ]]; then
       value="$(manager_json_get "$config_file" "$var")"
       if [[ -n "$value" ]] && ! manager_value_is_valid "$var" "$value"; then
-        warn "Invalid server_manager.json value for $var (actual: $value) - resetting to profile/default (${VALIDATION_LAST_ERROR:-validation failed})"
+        warn "Invalid server_manager.json value for $var (actual: $value) - resetting to selected profile/default (${VALIDATION_LAST_ERROR:-validation failed})"
         value=""
       fi
       if [[ -z "$value" ]]; then
@@ -1337,7 +1337,7 @@ load_enshrouded_env_from_profile() {
 }
 
 init_runtime_env() {
-  # Ensure MANAGER_PROFILE_TEMPLATE_DIR contains a persistent copy of shipped Server Manager templates.
+  # Ensure MANAGER_PROFILE_DIR contains a persistent copy of shipped Server Manager templates.
   ensure_manager_profile_catalog || true
 
   if ! update_or_create_manager_config; then

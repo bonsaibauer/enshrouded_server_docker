@@ -1815,7 +1815,7 @@ menu_profile_flow() {
       label="Server Manager"
       config_file="$(manager_config_path)"
       if [[ "$mode" == "apply" ]]; then
-        profiles_dir="$MANAGER_PROFILE_TEMPLATE_DIR"
+        profiles_dir="$MANAGER_PROFILE_DIR"
         mapfile -t profiles < <(profiles_list_manager | sort)
       else
         profile="$(manager_profile_resolve)"

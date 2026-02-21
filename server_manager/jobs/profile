@@ -3,10 +3,8 @@
 install_path="${INSTALL_PATH:-/home/enshrouded/server}"
 MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-${install_path}/server_manager}"
 MANAGER_ROOT="${MANAGER_ROOT:-/usr/local/etc/enshrouded}"
-MANAGER_PROFILE_ROOT="${MANAGER_PROFILE_ROOT:-${install_path}/profile}"
-MANAGER_PROFILE_DIR="${MANAGER_PROFILE_DIR:-${MANAGER_PROFILE_ROOT}}"
+MANAGER_PROFILE_DIR="${MANAGER_PROFILE_DIR:-${install_path}/profiles/manager}"
 MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR="${MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR:-${MANAGER_ROOT}/profiles/manager}"
-MANAGER_PROFILE_TEMPLATE_DIR="${MANAGER_PROFILE_TEMPLATE_DIR:-${install_path}/profiles/manager}"
 EN_PROFILE_TEMPLATE_DIR="${EN_PROFILE_TEMPLATE_DIR:-${MANAGER_ROOT}/profiles/enshrouded}"
 EN_PROFILE_DIR="${EN_PROFILE_DIR:-${install_path}/profiles/enshrouded}"
 
@@ -194,13 +192,7 @@ is_valid_profile_name() {
 manager_profile_path() {
   local name
   name="${1:-$MANAGER_PROFILE_DEFAULT}"
-  printf "%s/%s/%s_server_manager.json" "$MANAGER_PROFILE_DIR" "$name" "$name"
-}
-
-manager_profile_template_path() {
-  local name
-  name="${1:-$MANAGER_PROFILE_DEFAULT}"
-  printf "%s/%s_server_manager.json" "$MANAGER_PROFILE_TEMPLATE_DIR" "$name"
+  printf "%s/%s_server_manager.json" "$MANAGER_PROFILE_DIR" "$name"
 }
 
 manager_profile_template_shipped_path() {
@@ -236,7 +228,7 @@ manager_profile_resolve() {
     return 0
   }
 
-  if [[ -f "$(manager_profile_path "$name")" || -f "$(manager_profile_template_path "$name")" || -f "$(manager_profile_template_shipped_path "$name")" ]]; then
+  if [[ -f "$(manager_profile_path "$name")" || -f "$(manager_profile_template_shipped_path "$name")" ]]; then
     echo "$name"
   else
     warn "Manager profile not found: $name (fallback: $MANAGER_PROFILE_DEFAULT)"
@@ -268,40 +260,30 @@ enshrouded_profile_resolve() {
 }
 
 ensure_manager_paths() {
-  mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_ROOT" "$MANAGER_PROFILE_TEMPLATE_DIR" "$EN_PROFILE_DIR"
+  mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_DIR" "$EN_PROFILE_DIR"
 }
 
 ensure_manager_profile_file() {
-  local profile profile_file template_file shipped
+  local profile profile_file shipped
   profile="$1"
   profile_file="$(manager_profile_path "$profile")"
-  template_file="$(manager_profile_template_path "$profile")"
 
   if [[ -f "$profile_file" ]]; then
     return 0
   fi
 
-  if [[ ! -f "$template_file" ]]; then
-    shipped="$(manager_profile_template_shipped_path "$profile")"
-    if [[ -f "$shipped" ]]; then
-      mkdir -p "$(dirname "$template_file")" 2>/dev/null || true
-      cp "$shipped" "$template_file" 2>/dev/null || true
-      chmod 600 "$template_file" 2>/dev/null || true
-      chown enshrouded:enshrouded "$template_file" 2>/dev/null || true
-    fi
-  fi
-
-  if [[ ! -f "$template_file" ]]; then
-    warn "Server Manager profile template not found: $template_file"
+  shipped="$(manager_profile_template_shipped_path "$profile")"
+  if [[ ! -f "$shipped" ]]; then
+    warn "Server Manager profile template not found: $shipped"
     return 1
   fi
-  if ! jq -e 'type == "object"' "$template_file" >/dev/null 2>&1; then
-    warn "Invalid JSON in server manager profile template: $template_file"
+  if ! jq -e 'type == "object"' "$shipped" >/dev/null 2>&1; then
+    warn "Invalid JSON in server manager profile template: $shipped"
     return 1
   fi
 
   mkdir -p "$(dirname "$profile_file")" 2>/dev/null || true
-  cp "$template_file" "$profile_file"
+  cp "$shipped" "$profile_file"
   chmod 600 "$profile_file" 2>/dev/null || true
   chown enshrouded:enshrouded "$profile_file" 2>/dev/null || true
   info "Server Manager profile created: $profile_file"

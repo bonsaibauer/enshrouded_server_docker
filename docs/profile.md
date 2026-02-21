@@ -13,11 +13,10 @@ In the container:
 
 Runtime copies:
 - Manager config: `/home/enshrouded/server/server_manager/server_manager.json`
-- Manager-Profile-Store: `/home/enshrouded/server/profile/<name>/<name>_server_manager.json`
 - Enshrouded config: `/home/enshrouded/server/enshrouded_server.json`
 
 Persistent profile catalogs (volume):
-- Manager-Profile-Catalog (default `MANAGER_PROFILE_TEMPLATE_DIR`): `/home/enshrouded/server/profiles/manager/`
+- Manager-Profile-Catalog (default `MANAGER_PROFILE_DIR`): `/home/enshrouded/server/profiles/manager/`
   - Seeded from the shipped templates on container start (copy only missing files)
 - Enshrouded-Profile-Catalog (default `EN_PROFILE_DIR`): `/home/enshrouded/server/profiles/enshrouded/`
   - Seeded from the shipped templates on container start (copy only missing files)
@@ -52,9 +51,9 @@ Naming rules:
 3. Put the file into the volume catalog: `/home/enshrouded/server/profiles/manager/` (or rebuild the image to ship it)
 4. Select it with `MANAGER_PROFILE=<name>` or via `server menu`
 
-When selected, the Server Manager template is copied into the persistent profile store at:
+When selected, the Server Manager profile is read from:
 
-- `/home/enshrouded/server/profile/<name>/<name>_server_manager.json`
+- `/home/enshrouded/server/profiles/manager/<name>_server_manager.json`
 
 ## Selection
 
