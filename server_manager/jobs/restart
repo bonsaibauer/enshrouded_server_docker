@@ -99,9 +99,9 @@ main() {
   if [[ -n "$RESTART_CHECK_PLAYERS_OVERRIDE" ]]; then
     RESTART_CHECK_PLAYERS="$RESTART_CHECK_PLAYERS_OVERRIDE"
   fi
-  info "Running restart"
+  info "Running restart job (force=${RESTART_FORCE}, check_players=${RESTART_CHECK_PLAYERS}, query_port=${ENSHROUDED_QUERY_PORT})"
   run_restart
-  info "restart complete"
+  info "Restart job complete"
 }
 
 main "$@"

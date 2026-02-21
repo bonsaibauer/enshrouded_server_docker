@@ -735,9 +735,11 @@ load_runtime_values() {
 main() {
   parse_args "$@"
   load_runtime_values
+  info "Running profile job (mode=${PROFILE_MODE}, target=${target:-<none>}, action=${action:-<none>})"
 
   if [[ "$PROFILE_MODE" == "password-view" ]]; then
     profile_password_view
+    info "Profile job complete (mode=password-view)"
     return 0
   fi
 
@@ -762,6 +764,7 @@ main() {
   fi
 
   "$SERVER_JOB_BIN" hook-run --name "profile post" --command "${PROFILE_POST_HOOK:-}"
+  info "Profile job complete (target=${target}, action=${action}, profile=${profile_name})"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

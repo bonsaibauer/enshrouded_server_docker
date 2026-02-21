@@ -8,6 +8,12 @@ _validation_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 savefile_name=""
 steam_app_id=""
+version_file_path="${VERSION_FILE_PATH:-/home/enshrouded/current_version}"
+enshrouded_binary_path="${ENSHROUDED_BINARY_PATH:-enshrouded_server.exe}"
+steamapp_path="${STEAMAPP_PATH:-steamapps}"
+enshrouded_server_pidfile="${ENSHROUDED_SERVER_PIDFILE:-/var/run/enshrouded/server.pid}"
+enshrouded_updater_pidfile="${ENSHROUDED_UPDATER_PIDFILE:-/var/run/enshrouded/updater.pid}"
+enshrouded_backup_pidfile="${ENSHROUDED_BACKUP_PIDFILE:-/var/run/enshrouded/backup.pid}"
 
 LOG_LEVEL_INFO=40
 LOG_LEVEL_WARN=30
@@ -1507,6 +1513,7 @@ main() {
   local command var_name var_value
   command="${1:-verify}"
   shift || true
+  info "Running env-validation command: ${command}"
 
   case "$command" in
     --help|-h|help)

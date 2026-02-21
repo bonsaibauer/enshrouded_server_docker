@@ -376,6 +376,7 @@ restore_manager_config_from_zip() {
 main() {
   parse_args "$@"
   load_runtime_values
+  info "Running restore-backup job (operation=${operation}, zip=${zip_path:-<none>})"
 
   case "$operation" in
     list)

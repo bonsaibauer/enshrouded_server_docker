@@ -11,6 +11,32 @@ NO_PLAYER_CHECK="false"
 
 debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && echo "DEBUG - $*" || true; }
 
+is_unknown_version() {
+  local value
+  value="$1"
+  [[ -z "$value" || "$value" == "null" || "$value" == "-1" ]]
+}
+
+resolve_latest_version() {
+  curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" \
+    | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid"
+}
+
+remove_steamapps_tree() {
+  local target
+  case "${steamapp_path:-}" in
+    ""|"/"|"."|"./")
+      fatal "Invalid steamapp_path: ${steamapp_path:-<empty>}"
+      ;;
+  esac
+  target="$install_path/$steamapp_path"
+  if [[ "$target" == "$install_path" ]]; then
+    fatal "Refusing to remove install_path directly: $target"
+  fi
+  debug "Removing $target"
+  rm -rf "$target"
+}
+
 checkRunning() {
   is_supervisor_running "$1"
 }
@@ -115,8 +141,7 @@ run_update_flow() {
   verify_cpu_mhz
   if ! download_enshrouded; then
     warn "Download of Enshrouded server failed - retry"
-    debug "Removing $install_path/$steamapp_path"
-    rm -rf "$install_path/$steamapp_path"
+    remove_steamapps_tree
 
     if ! download_enshrouded; then
       warn "Download of Enshrouded server failed - aborting update"
@@ -147,7 +172,7 @@ verify_cpu_mhz() {
 }
 
 set_current_version() {
-  if [[ "$latest_version" == "null" || "$latest_version" == "-1" ]]; then
+  if is_unknown_version "$latest_version"; then
     warn "Unable to set current version - latest version is unknown"
     warn "Next update check will restart the server until version can be determined"
     return 1
@@ -178,9 +203,8 @@ check_for_updates() {
   if [[ "$FORCE_UPDATE" == "true" ]]; then
     info "Force update requested"
     rm -f "$version_file_path"
-    debug "Removing $install_path/$steamapp_path"
-    rm -rf "$install_path/$steamapp_path"
-    latest_version="$(curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid")"
+    remove_steamapps_tree
+    latest_version="$(resolve_latest_version)"
     return 0
   fi
 
@@ -194,8 +218,8 @@ check_for_updates() {
     current_version="0"
   fi
 
-  latest_version="$(curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid")"
-  if [[ "$latest_version" == "null" || "$latest_version" == "-1" ]]; then
+  latest_version="$(resolve_latest_version)"
+  if is_unknown_version "$latest_version"; then
     if [[ "$current_version" == "0" ]]; then
       warn "Unable to determine latest version of enshrouded server! No version currently installed, update server anyways"
       return 0
@@ -215,7 +239,7 @@ check_for_updates() {
 
 check_proton_files_available() {
   if [[ ! -d "$install_path/steamapps/compatdata/$steam_app_id" ]]; then
-    warn "Proton files are not available! Performing Enshrouded update to generate proton files"
+    info "Proton files are not available. Performing Enshrouded update to generate proton files"
     return 0
   fi
   return 1
@@ -230,17 +254,19 @@ main() {
   fi
 
   if [[ "$CHECK_ONLY" == "true" ]]; then
+    info "Running updater in check-only mode (force=${FORCE_UPDATE}, check_players=${UPDATE_CHECK_PLAYERS:-true})"
     if check_for_updates; then
       info "Update check: update available"
     else
       info "Update check: no update required"
     fi
+    info "Updater check-only mode complete"
     return 0
   fi
 
-  info "Running updater"
+  info "Running updater (force=${FORCE_UPDATE}, check_players=${UPDATE_CHECK_PLAYERS:-true})"
   update
-  info "updater complete"
+  info "Updater complete"
 }
 
 main "$@"

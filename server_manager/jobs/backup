@@ -314,8 +314,9 @@ cleanup_old_scheduled_backups() {
 main() {
   parse_args "$@"
   load_runtime_values
-  acquire_lock
   resolve_mode_defaults
+  info "Running backup job (mode=${mode}, savegame=${include_savegame}, enshrouded_config=${include_enshrouded_config}, manager_config=${include_manager_config}, cleanup=${run_cleanup})"
+  acquire_lock
 
   export BACKUP_MODE="$mode"
   "${SCRIPT_DIR}/server" hook-run --name "backup pre" --command "${BACKUP_PRE_HOOK:-}"
