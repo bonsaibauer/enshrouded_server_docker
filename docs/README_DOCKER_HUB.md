@@ -32,7 +32,7 @@ docker exec enshroudedserver server stop
 docker exec enshroudedserver server restart
 docker exec enshroudedserver server update
 docker exec enshroudedserver server backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false
-docker exec enshroudedserver server restore-backup --zip /home/enshrouded/server/backups/manual/<file>.zip --restore all --safety-backup false
+docker exec enshroudedserver server backup --mode restore --zip /home/enshrouded/server/backups/manual/<file>.zip --restore all --safety-backup false
 docker exec enshroudedserver server profile --target enshrouded --action apply --profile default --create-backup true
 docker exec enshroudedserver server password-view
 docker exec enshroudedserver server env-validation verify

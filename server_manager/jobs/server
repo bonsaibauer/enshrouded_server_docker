@@ -51,7 +51,6 @@ Commands:
   scheduled-backup
                  Trigger backup job via supervisor
   backup         Trigger backup job (requires args, e.g. --mode manual --savegame true ...)
-  restore-backup Trigger restore-backup job (requires args, e.g. --zip ... --restore ...)
   profile        Trigger profile job (requires args, e.g. --target ... --action ...)
   password-view  Show user group rights and passwords from enshrouded_server.json
   env-validation Run ENV validation job
@@ -66,7 +65,7 @@ EOF
 
 is_server_command() {
   case "$1" in
-    hook-run|guard-run|guard-require|status|menu|start|stop|restart|update|scheduled-backup|backup|backup-config|restore-backup|profile|password-view|env-validation|scheduled-restart|force-update|bootstrap|cron|help|--help|-h)
+    hook-run|guard-run|guard-require|status|menu|start|stop|restart|update|scheduled-backup|backup|backup-config|profile|password-view|env-validation|scheduled-restart|force-update|bootstrap|cron|help|--help|-h)
       return 0
       ;;
     *)
@@ -398,7 +397,7 @@ run_server_command() {
       ;;
     backup)
       if [[ "$#" -eq 0 ]]; then
-        echo "backup requires args (example: server backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false)" >&2
+        echo "backup requires args (examples: server backup --mode manual --savegame true --enshrouded-config true --manager-config true --cleanup false | server backup --mode list | server backup --mode inspect --zip <path> | server backup --mode restore --zip <path> --restore all --safety-backup false)" >&2
         exit 1
       fi
       run_job_script "backup" "$@"
@@ -406,13 +405,6 @@ run_server_command() {
     backup-config)
       require_no_args "$command_name" "$@"
       run_job_script "backup" --mode manual --savegame false --enshrouded-config true --manager-config true --cleanup false
-      ;;
-    restore-backup)
-      if [[ "$#" -eq 0 ]]; then
-        echo "restore-backup requires args (example: server restore-backup --zip <path> --restore all --safety-backup false)" >&2
-        exit 1
-      fi
-      run_job_script "restore-backup" "$@"
       ;;
     profile)
       if [[ "$#" -eq 0 ]]; then
