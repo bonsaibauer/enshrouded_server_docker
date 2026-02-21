@@ -3,7 +3,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null
 # shellcheck source=server_manager/jobs/env-validation
 . "${SCRIPT_DIR}/env-validation"
 
-MENU_SPEC_TSV_FILE="${MENU_SPEC_TSV_FILE:-${SCRIPT_DIR}/../env/menu.tsv}"
+MENU_SPEC_CSV_FILE="${MENU_SPEC_CSV_FILE:-${SCRIPT_DIR}/../env/menu.csv}"
 MENU_SPEC_FILE="${MENU_SPEC_FILE:-}"
 MENU_SPEC_TMP_FILE=""
 MENU_START_SCREEN="main"
@@ -150,11 +150,11 @@ menu_spec__append_editor_template_row() {
   ' "$json_file" >"${json_file}.tmp" && mv "${json_file}.tmp" "$json_file"
 }
 
-menu_spec_build_json_from_tsv() {
-  local tsv_file out_file
+menu_spec_build_json_from_csv() {
+  local csv_file out_file
   local section id parent key title action type cmd fn requires_running confirm _program _request_file _timeout_sec _payload_json args_json env_name group field json_path order
 
-  tsv_file="$1"
+  csv_file="$1"
   out_file="$2"
 
   jq -n '{actions: {}, screens: {}, editors: {templates: {}}}' >"$out_file" || return 1
@@ -179,14 +179,14 @@ menu_spec_build_json_from_tsv() {
         menu_spec__append_editor_template_row "$out_file" "$parent" "$field" "$group" "$order"
         ;;
     esac
-  done <"$tsv_file"
+  done < <(jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | join("\t")' "$csv_file")
 }
 
 menu_spec_init() {
   if [[ -n "${MENU_SPEC_FILE:-}" && -f "$MENU_SPEC_FILE" ]]; then
     return 0
   fi
-  if [[ ! -f "$MENU_SPEC_TSV_FILE" ]]; then
+  if [[ ! -f "$MENU_SPEC_CSV_FILE" ]]; then
     return 1
   fi
   if ! command -v jq >/dev/null 2>&1; then
@@ -194,7 +194,7 @@ menu_spec_init() {
   fi
 
   MENU_SPEC_TMP_FILE="$(mktemp)"
-  if ! menu_spec_build_json_from_tsv "$MENU_SPEC_TSV_FILE" "$MENU_SPEC_TMP_FILE"; then
+  if ! menu_spec_build_json_from_csv "$MENU_SPEC_CSV_FILE" "$MENU_SPEC_TMP_FILE"; then
     rm -f "$MENU_SPEC_TMP_FILE" 2>/dev/null || true
     MENU_SPEC_TMP_FILE=""
     return 1
@@ -1029,9 +1029,9 @@ menu_editor_template_group_for_field() {
 
 # --- inlined menu module: editor_spec_json ---
 # Generic, spec-driven JSON editor helpers for the interactive menu.
-# Validation/type hints come from `server_manager/env/env_server_manager.tsv`
-# and `server_manager/env/env_enshrouded_server.tsv`.
-# Menu actions/order/grouping/path mappings come from `server_manager/env/menu.tsv`.
+# Validation/type hints come from `server_manager/env/env_server_manager.csv`
+# and `server_manager/env/env_enshrouded_server.csv`.
+# Menu actions/order/grouping/path mappings come from `server_manager/env/menu.csv`.
 
 menu_spec_editor__json_get_scalar() {
   # Prints the scalar as a string, but keeps `false` and `0` visible.
@@ -2221,7 +2221,7 @@ main() {
   init_runtime_env
 
   if ! menu_spec_init; then
-    ui_error "Menu specification unavailable: ${MENU_SPEC_TSV_FILE}"
+    ui_error "Menu specification unavailable: ${MENU_SPEC_CSV_FILE}"
     exit 1
   fi
 

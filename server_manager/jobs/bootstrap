@@ -175,8 +175,14 @@ apply_permissions() {
 }
 
 setup_syslog() {
+  local rsyslog_conf_path supervisor_syslog_conf_path
+  rsyslog_conf_path="${rsyslog_conf:-/etc/rsyslog.d/stdout.conf}"
+  supervisor_syslog_conf_path="${supervisor_syslog_conf:-/usr/local/etc/supervisor/conf.d/syslog.conf}"
+
+  mkdir -p "$(dirname "$rsyslog_conf_path")" "$(dirname "$supervisor_syslog_conf_path")"
+
   info "Setting up syslogd - logging to stdout"
-  cat >"$rsyslog_conf" <<EOF
+  cat >"$rsyslog_conf_path" <<EOF
 \$FileOwner root
 \$FileGroup root
 \$PrivDropToUser root
@@ -189,7 +195,7 @@ setup_syslog() {
 *.*;cron,auth,authpriv.none /proc/self/fd/1
 EOF
 
-  cat >"$supervisor_syslog_conf" <<EOF
+  cat >"$supervisor_syslog_conf_path" <<EOF
 [program:rsyslogd]
 user=root
 environment=HOME="/root",USER="root",LANG="en_US.UTF-8",PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

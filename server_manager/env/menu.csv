@@ -1,0 +1,152 @@
+section,id,parent,key,title,action,type,cmd,fn,requiresRunning,confirm,program,requestFile,timeoutSec,payloadJson,argsJson,env,group,field,jsonPath,order
+action,enshrouded_settings,null,null,null,null,internal,null,menu_load_screen,null,null,null,null,null,null,"[""enshroudedSettings"",""Enshrouded Server Settings""]",null,null,null,null,null
+action,manager_settings,null,null,null,null,internal,null,menu_load_screen,null,null,null,null,null,null,"[""managerSettings"",""Server Manager Settings""]",null,null,null,null,null
+action,backups_menu,null,null,null,null,internal,null,menu_load_screen,null,null,null,null,null,null,"[""backups"",""Backups""]",null,null,null,null,null
+action,enshrouded_edit,null,null,null,null,internal,null,editor_enshrouded_json,null,null,null,null,null,null,null,null,null,null,null,null
+action,enshrouded_reset,null,null,null,null,internal,null,menu_profile_flow,null,null,null,null,null,null,"[""enshrouded"",""reset""]",null,null,null,null,null
+action,enshrouded_apply,null,null,null,null,internal,null,menu_profile_flow,null,null,null,null,null,null,"[""enshrouded"",""apply""]",null,null,null,null,null
+action,manager_edit,null,null,null,null,internal,null,editor_manager_json,null,null,null,null,null,null,null,null,null,null,null,null
+action,manager_reset,null,null,null,null,internal,null,menu_profile_flow,null,null,null,null,null,null,"[""manager"",""reset""]",null,null,null,null,null
+action,manager_apply,null,null,null,null,internal,null,menu_profile_flow,null,null,null,null,null,null,"[""manager"",""apply""]",null,null,null,null,null
+action,restore_backup,null,null,null,null,internal,null,menu_restore_backup,null,null,null,null,null,null,null,null,null,null,null,null
+action,create_full_backup,null,null,null,null,internal,null,menu_run_savegame_backup,null,null,null,null,null,null,null,null,null,null,null,null
+action,create_config_backup,null,null,null,null,internal,null,menu_run_config_backup_now,null,null,null,null,null,null,null,null,null,null,null,null
+action,start_server,null,null,null,null,cmd,start,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,stop_server,null,null,null,null,cmd,stop,null,true,null,null,null,null,null,null,null,null,null,null,null
+action,restart_server,null,null,null,null,cmd,restart,null,true,null,null,null,null,null,null,null,null,null,null,null
+action,update_server,null,null,null,null,cmd,update,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,force_update_server,null,null,null,null,cmd,force-update,null,null,true,null,null,null,null,null,null,null,null,null,null
+action,view_passwords,null,null,null,null,cmd,password-view,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,open_other_commands,null,null,null,null,internal,null,menu_load_screen,null,null,null,null,null,null,"[""otherCommands"",""Other Commands""]",null,null,null,null,null
+action,status,null,null,null,null,cmd,status,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,scheduled_restart,null,null,null,null,cmd,scheduled-restart,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,bootstrap,null,null,null,null,cmd,bootstrap,null,null,null,null,null,null,null,null,null,null,null,null,null
+action,cron,null,null,null,null,cmd,cron,null,null,null,null,null,null,"[""--sync""]",null,null,null,null,null,null
+screen,null,main,1,Enshrouded Server Settings,enshrouded_settings,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1
+screen,null,main,2,Server Manager Settings,manager_settings,null,null,null,null,null,null,null,null,null,null,null,null,null,null,2
+screen,null,main,3,Backup Menu,backups_menu,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3
+screen,null,main,4,Start Server,start_server,null,null,null,null,null,null,null,null,null,null,null,null,null,null,4
+screen,null,main,5,Stop Server,stop_server,null,null,null,null,null,null,null,null,null,null,null,null,null,null,5
+screen,null,main,6,Restart Server,restart_server,null,null,null,null,null,null,null,null,null,null,null,null,null,null,6
+screen,null,main,7,Update Server,update_server,null,null,null,null,null,null,null,null,null,null,null,null,null,null,7
+screen,null,main,8,Force Update Server,force_update_server,null,null,null,null,null,null,null,null,null,null,null,null,null,null,8
+screen,null,main,9,View Passwords,view_passwords,null,null,null,null,null,null,null,null,null,null,null,null,null,null,9
+screen,null,main,10,Create Manual Backup (.zip),create_full_backup,null,null,null,null,null,null,null,null,null,null,null,null,null,null,10
+screen,null,main,11,Other Commands,open_other_commands,null,null,null,null,null,null,null,null,null,null,null,null,null,null,11
+screen,null,enshroudedSettings,1,Edit current settings,enshrouded_edit,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1
+screen,null,enshroudedSettings,2,Reset current profile,enshrouded_reset,null,null,null,null,null,null,null,null,null,null,null,null,null,null,2
+screen,null,enshroudedSettings,3,Select and apply profile,enshrouded_apply,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3
+screen,null,managerSettings,1,Edit current settings,manager_edit,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1
+screen,null,managerSettings,2,Reset current profile,manager_reset,null,null,null,null,null,null,null,null,null,null,null,null,null,null,2
+screen,null,managerSettings,3,Select and apply profile,manager_apply,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3
+screen,null,backups,1,Restore from backup ZIP,restore_backup,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1
+screen,null,backups,2,Create manual full backup now,create_full_backup,null,null,null,null,null,null,null,null,null,null,null,null,null,null,2
+screen,null,backups,3,Create config backup now,create_config_backup,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3
+screen,null,otherCommands,1,Status,status,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1
+screen,null,otherCommands,2,Scheduled Restart,scheduled_restart,null,null,null,null,null,null,null,null,null,null,null,null,null,null,2
+screen,null,otherCommands,3,Bootstrap,bootstrap,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3
+screen,null,otherCommands,4,Cron Sync,cron,null,null,null,null,null,null,null,null,null,null,null,null,null,null,4
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,PUID,Core,null,.puid,1
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,PGID,Core,null,.pgid,2
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,LOG_COLOR,Core,null,.logColor,3
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,SAVEFILE_NAME,Core,null,.savefileName,4
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,STEAM_APP_ID,Steam,null,.steamAppId,5
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,GAME_BRANCH,Steam,null,.gameBranch,6
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,STEAMCMD_ARGS,Steam,null,.steamcmdArgs,7
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,WINEDEBUG,Steam,null,.winedebug,8
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,UPDATE_CHECK_PLAYERS,Update,null,.updateCheckPlayers,9
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,UPDATE_CRON,Update,null,.updateCron,10
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,UPDATE_PRE_HOOK,Update,null,.updatePreHook,11
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,UPDATE_POST_HOOK,Update,null,.updatePostHook,12
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTART_CHECK_PLAYERS,Restart,null,.restartCheckPlayers,13
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTART_CRON,Restart,null,.restartCron,14
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTART_PRE_HOOK,Restart,null,.restartPreHook,15
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTART_POST_HOOK,Restart,null,.restartPostHook,16
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BACKUP_DIR,Backup,null,.backupDir,17
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BACKUP_MAX_COUNT,Backup,null,.backupMaxCount,18
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BACKUP_CRON,Backup,null,.backupCron,19
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BACKUP_PRE_HOOK,Backup,null,.backupPreHook,20
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BACKUP_POST_HOOK,Backup,null,.backupPostHook,21
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG,Backup,null,.backupScheduledIncludeEnshroudedConfig,22
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG,Backup,null,.backupScheduledIncludeServerManagerConfig,23
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BOOTSTRAP_HOOK,Hooks,null,.bootstrapHook,24
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTORE_PRE_HOOK,Hooks,null,.restorePreHook,25
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTORE_POST_HOOK,Hooks,null,.restorePostHook,26
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,PROFILE_PRE_HOOK,Hooks,null,.profilePreHook,27
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,PROFILE_POST_HOOK,Hooks,null,.profilePostHook,28
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BOOTSTRAP_PRE_HOOK,Hooks,null,.bootstrapPreHook,29
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,BOOTSTRAP_POST_HOOK,Hooks,null,.bootstrapPostHook,30
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,SERVER_PRE_HOOK,Hooks,null,.serverPreHook,31
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,SERVER_POST_HOOK,Hooks,null,.serverPostHook,32
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,CMD_PRE_HOOK,Hooks,null,.cmdPreHook,33
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,CMD_POST_HOOK,Hooks,null,.cmdPostHook,34
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,MENU_PRE_HOOK,Hooks,null,.menuPreHook,35
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,MENU_POST_HOOK,Hooks,null,.menuPostHook,36
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,PASSWORD_VIEW_PRE_HOOK,Hooks,null,.passwordViewPreHook,37
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,PASSWORD_VIEW_POST_HOOK,Hooks,null,.passwordViewPostHook,38
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_NAME,Server,null,.name,1
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_IP,Server,null,.ip,2
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_QUERY_PORT,Server,null,.queryPort,3
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_SLOT_COUNT,Server,null,.slotCount,4
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_SAVE_DIR,Server,null,.saveDirectory,5
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_LOG_DIR,Server,null,.logDirectory,6
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_TAGS,Server,null,.tags,7
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_VOICE_CHAT_MODE,Voice / Text,null,.voiceChatMode,8
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_ENABLE_VOICE_CHAT,Voice / Text,null,.enableVoiceChat,9
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_ENABLE_TEXT_CHAT,Voice / Text,null,.enableTextChat,10
+editor_env,null,enshroudedMenuJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PRESET,Game,null,.gameSettingsPreset,11
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PLAYER_HEALTH_FACTOR,Player,null,.gameSettings.playerHealthFactor,1
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_NAME,Server,null,.name,2
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PLAYER_MANA_FACTOR,Player,null,.gameSettings.playerManaFactor,3
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_IP,Server,null,.ip,4
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PLAYER_STAMINA_FACTOR,Player,null,.gameSettings.playerStaminaFactor,5
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_QUERY_PORT,Server,null,.queryPort,6
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PLAYER_BODY_HEAT_FACTOR,Player,null,.gameSettings.playerBodyHeatFactor,7
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_SLOT_COUNT,Server,null,.slotCount,8
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PLAYER_DIVING_TIME_FACTOR,Player,null,.gameSettings.playerDivingTimeFactor,9
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_SAVE_DIR,Server,null,.saveDirectory,10
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_ENABLE_DURABILITY,Survival / World,null,.gameSettings.enableDurability,11
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_LOG_DIR,Server,null,.logDirectory,12
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_ENABLE_STARVING_DEBUFF,Survival / World,null,.gameSettings.enableStarvingDebuff,13
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_FOOD_BUFF_DURATION_FACTOR,Survival / World,null,.gameSettings.foodBuffDurationFactor,14
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_VOICE_CHAT_MODE,Voice / Text,null,.voiceChatMode,15
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_ENABLE_VOICE_CHAT,Voice / Text,null,.enableVoiceChat,16
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_FROM_HUNGER_TO_STARVING,Survival / World,null,.gameSettings.fromHungerToStarving,17
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_ENABLE_TEXT_CHAT,Voice / Text,null,.enableTextChat,18
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_SHROUD_TIME_FACTOR,Survival / World,null,.gameSettings.shroudTimeFactor,19
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PRESET,Game,null,.gameSettingsPreset,20
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_TOMBSTONE_MODE,Survival / World,null,.gameSettings.tombstoneMode,21
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_ENABLE_GLIDER_TURBULENCES,Survival / World,null,.gameSettings.enableGliderTurbulences,22
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_WEATHER_FREQUENCY,Survival / World,null,.gameSettings.weatherFrequency,23
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_FISHING_DIFFICULTY,Survival / World,null,.gameSettings.fishingDifficulty,24
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_MINING_DAMAGE_FACTOR,Economy / Progress,null,.gameSettings.miningDamageFactor,25
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PLANT_GROWTH_SPEED_FACTOR,Economy / Progress,null,.gameSettings.plantGrowthSpeedFactor,26
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_RESOURCE_DROP_STACK_AMOUNT_FACTOR,Economy / Progress,null,.gameSettings.resourceDropStackAmountFactor,27
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_FACTORY_PRODUCTION_SPEED_FACTOR,Economy / Progress,null,.gameSettings.factoryProductionSpeedFactor,28
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PERK_UPGRADE_RECYCLING_FACTOR,Economy / Progress,null,.gameSettings.perkUpgradeRecyclingFactor,29
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PERK_COST_FACTOR,Economy / Progress,null,.gameSettings.perkCostFactor,30
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_EXPERIENCE_COMBAT_FACTOR,Economy / Progress,null,.gameSettings.experienceCombatFactor,31
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_EXPERIENCE_MINING_FACTOR,Economy / Progress,null,.gameSettings.experienceMiningFactor,32
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR,Economy / Progress,null,.gameSettings.experienceExplorationQuestsFactor,33
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_RANDOM_SPAWNER_AMOUNT,Enemies,null,.gameSettings.randomSpawnerAmount,34
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_AGGRO_POOL_AMOUNT,Enemies,null,.gameSettings.aggroPoolAmount,35
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_ENEMY_DAMAGE_FACTOR,Enemies,null,.gameSettings.enemyDamageFactor,36
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_ENEMY_HEALTH_FACTOR,Enemies,null,.gameSettings.enemyHealthFactor,37
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_ENEMY_STAMINA_FACTOR,Enemies,null,.gameSettings.enemyStaminaFactor,38
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_ENEMY_PERCEPTION_RANGE_FACTOR,Enemies,null,.gameSettings.enemyPerceptionRangeFactor,39
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_BOSS_DAMAGE_FACTOR,Enemies,null,.gameSettings.bossDamageFactor,40
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_BOSS_HEALTH_FACTOR,Enemies,null,.gameSettings.bossHealthFactor,41
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_THREAT_BONUS,Enemies,null,.gameSettings.threatBonus,42
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_PACIFY_ALL_ENEMIES,Enemies,null,.gameSettings.pacifyAllEnemies,43
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_TAMING_STARTLE_REPERCUSSION,Enemies,null,.gameSettings.tamingStartleRepercussion,44
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_DAY_TIME_DURATION,Time,null,.gameSettings.dayTimeDuration,45
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_NIGHT_TIME_DURATION,Time,null,.gameSettings.nightTimeDuration,46
+editor_env,null,enshroudedJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,ENSHROUDED_GS_CURSE_MODIFIER,Advanced,null,.gameSettings.curseModifier,47
+editor_template,null,ENSHROUDED_ROLE,null,null,null,null,null,null,null,null,null,null,null,null,null,null,Basics,NAME,null,1
+editor_template,null,ENSHROUDED_ROLE,null,null,null,null,null,null,null,null,null,null,null,null,null,null,Basics,PASSWORD,null,2
+editor_template,null,ENSHROUDED_ROLE,null,null,null,null,null,null,null,null,null,null,null,null,null,null,Basics,RESERVED_SLOTS,null,3
+editor_template,null,ENSHROUDED_ROLE,null,null,null,null,null,null,null,null,null,null,null,null,null,null,Permissions,CAN_KICK_BAN,null,4
+editor_template,null,ENSHROUDED_ROLE,null,null,null,null,null,null,null,null,null,null,null,null,null,null,Permissions,CAN_ACCESS_INVENTORIES,null,5
+editor_template,null,ENSHROUDED_ROLE,null,null,null,null,null,null,null,null,null,null,null,null,null,null,Permissions,CAN_EDIT_WORLD,null,6
+editor_template,null,ENSHROUDED_ROLE,null,null,null,null,null,null,null,null,null,null,null,null,null,null,Permissions,CAN_EDIT_BASE,null,7
+editor_template,null,ENSHROUDED_ROLE,null,null,null,null,null,null,null,null,null,null,null,null,null,null,Permissions,CAN_EXTEND_BASE,null,8

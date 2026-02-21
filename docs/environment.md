@@ -13,20 +13,20 @@ Profile selection is special:
 
 ## Validation Rules
 
-ENV input validation is driven by TSV rule files:
+ENV input validation is driven by CSV rule files:
 
-- `server_manager/env/env_server_manager.tsv`
-- `server_manager/env/env_enshrouded_server.tsv`
+- `server_manager/env/env_server_manager.csv`
+- `server_manager/env/env_enshrouded_server.csv`
 
 Template field rules (e.g. `ENSHROUDED_ROLE_<index>_*`) are included in
-`env_enshrouded_server.tsv` as internal rows (`ENSHROUDED_ROLE__<FIELD>`).
+`env_enshrouded_server.csv` as internal rows (`ENSHROUDED_ROLE__<FIELD>`).
 
 Menu structure, editor grouping, JSON path mapping and order are defined in:
 
-- `server_manager/env/menu.tsv`
+- `server_manager/env/menu.csv`
 
-If you want to adjust allowed values, ranges or regex, edit the validation TSVs.
-If you want to adjust menu flow/grouping/path-ordering, edit `menu.tsv`.
+If you want to adjust allowed values, ranges or regex, edit the validation CSVs.
+If you want to adjust menu flow/grouping/path-ordering, edit `menu.csv`.
 
 The rules support:
 
@@ -44,11 +44,11 @@ The spec is split by domain under `server_manager/env/`:
 
 ## Environment Reference
 
-The source of truth is the TSV spec:
+The source of truth is the CSV spec:
 
-- `server_manager/env/env_server_manager.tsv`
-- `server_manager/env/env_enshrouded_server.tsv`
-- `server_manager/env/menu.tsv`
+- `server_manager/env/env_server_manager.csv`
+- `server_manager/env/env_enshrouded_server.csv`
+- `server_manager/env/menu.csv`
 
 ## Backup Layout
 

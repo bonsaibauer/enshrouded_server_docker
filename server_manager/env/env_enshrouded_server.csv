@@ -1,0 +1,57 @@
+name,type,required,allowEmpty,envMode,min,max,regex,enum,list,description,allowed
+ENSHROUDED_ENABLE_TEXT_CHAT,bool,false,true,hard,null,null,null,null,null,Enable in-game text chat.,Allowed: true | false
+ENSHROUDED_ENABLE_VOICE_CHAT,bool,false,true,hard,null,null,null,null,null,Enable in-game voice chat.,Allowed: true | false
+ENSHROUDED_IP,string,false,true,hard,null,null,"^([0-9]{1,3}\.){3}[0-9]{1,3}$",null,null,Server bind IP (IPv4).,"IPv4 address, e.g. 0.0.0.0"
+ENSHROUDED_LOG_DIR,string,false,true,null,null,null,^[^\r\n]*$,null,null,Log directory (relative to /home/enshrouded/server or absolute path).,Allowed: single-line string
+ENSHROUDED_NAME,string,false,true,null,null,null,^[^\r\n]*$,null,null,Server name shown in the server browser.,Allowed: single-line string
+ENSHROUDED_QUERY_PORT,int,false,true,hard,1,65535,null,null,null,A2S query port.,Allowed: integer 1..65535
+ENSHROUDED_SAVE_DIR,string,false,true,null,null,null,^[^\r\n]*$,null,null,Savegame directory (relative to /home/enshrouded/server or absolute path).,Allowed: single-line string
+ENSHROUDED_SLOT_COUNT,int,false,true,hard,1,16,null,null,null,Max player slots.,Allowed: integer 1..16
+ENSHROUDED_TAGS,string,false,true,null,null,null,null,null,"separator=,;trim=true;itemNoEmpty=true;itemRegex=^[A-Za-z0-9._-]+$",Comma-separated server tags written to enshrouded_server.json .tags array.,Comma-separated; each tag: A-Z a-z 0-9 . _ - (empty clears all tags)
+ENSHROUDED_VOICE_CHAT_MODE,string,false,true,hard,null,null,null,Proximity|Global,null,Voice chat mode.,Allowed: Proximity | Global
+ENSHROUDED_GS_AGGRO_POOL_AMOUNT,string,false,true,null,null,null,null,Few|Normal|Many|Extreme,null,Game setting override (Custom): AGGRO_POOL_AMOUNT.,Allowed: Few | Normal | Many | Extreme
+ENSHROUDED_GS_BOSS_DAMAGE_FACTOR,number,false,true,null,0.2,5,null,null,null,Game setting override (Custom): BOSS_DAMAGE_FACTOR.,Allowed: number 0.2..5
+ENSHROUDED_GS_BOSS_HEALTH_FACTOR,number,false,true,null,0.2,5,null,null,null,Game setting override (Custom): BOSS_HEALTH_FACTOR.,Allowed: number 0.2..5
+ENSHROUDED_GS_CURSE_MODIFIER,string,false,true,null,null,null,null,Easy|Normal|Hard,null,Game setting override (Custom): CURSE_MODIFIER.,Allowed: Easy | Normal | Hard
+ENSHROUDED_GS_DAY_TIME_DURATION,number,false,true,null,120000000000,3600000000000,null,null,null,Game setting override (Custom): DAY_TIME_DURATION.,Allowed: number 120000000000..3600000000000
+ENSHROUDED_GS_ENABLE_DURABILITY,bool,false,true,null,null,null,null,null,null,Game setting override (Custom): ENABLE_DURABILITY.,Allowed: true | false
+ENSHROUDED_GS_ENABLE_GLIDER_TURBULENCES,bool,false,true,null,null,null,null,null,null,Game setting override (Custom): ENABLE_GLIDER_TURBULENCES.,Allowed: true | false
+ENSHROUDED_GS_ENABLE_STARVING_DEBUFF,bool,false,true,null,null,null,null,null,null,Game setting override (Custom): ENABLE_STARVING_DEBUFF.,Allowed: true | false
+ENSHROUDED_GS_ENEMY_DAMAGE_FACTOR,number,false,true,null,0.25,5,null,null,null,Game setting override (Custom): ENEMY_DAMAGE_FACTOR.,Allowed: number 0.25..5
+ENSHROUDED_GS_ENEMY_HEALTH_FACTOR,number,false,true,null,0.25,4,null,null,null,Game setting override (Custom): ENEMY_HEALTH_FACTOR.,Allowed: number 0.25..4
+ENSHROUDED_GS_ENEMY_PERCEPTION_RANGE_FACTOR,number,false,true,null,0.5,2,null,null,null,Game setting override (Custom): ENEMY_PERCEPTION_RANGE_FACTOR.,Allowed: number 0.5..2
+ENSHROUDED_GS_ENEMY_STAMINA_FACTOR,number,false,true,null,0.5,2,null,null,null,Game setting override (Custom): ENEMY_STAMINA_FACTOR.,Allowed: number 0.5..2
+ENSHROUDED_GS_EXPERIENCE_COMBAT_FACTOR,number,false,true,null,0.25,2,null,null,null,Game setting override (Custom): EXPERIENCE_COMBAT_FACTOR.,Allowed: number 0.25..2
+ENSHROUDED_GS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR,number,false,true,null,0.25,2,null,null,null,Game setting override (Custom): EXPERIENCE_EXPLORATION_QUESTS_FACTOR.,Allowed: number 0.25..2
+ENSHROUDED_GS_EXPERIENCE_MINING_FACTOR,number,false,true,null,0,2,null,null,null,Game setting override (Custom): EXPERIENCE_MINING_FACTOR.,Allowed: number 0..2
+ENSHROUDED_GS_FACTORY_PRODUCTION_SPEED_FACTOR,number,false,true,null,0.25,2,null,null,null,Game setting override (Custom): FACTORY_PRODUCTION_SPEED_FACTOR.,Allowed: number 0.25..2
+ENSHROUDED_GS_FISHING_DIFFICULTY,string,false,true,null,null,null,null,VeryEasy|Easy|Normal|Hard|VeryHard,null,Game setting override (Custom): FISHING_DIFFICULTY.,Allowed: VeryEasy | Easy | Normal | Hard | VeryHard
+ENSHROUDED_GS_FOOD_BUFF_DURATION_FACTOR,number,false,true,null,0.5,2,null,null,null,Game setting override (Custom): FOOD_BUFF_DURATION_FACTOR.,Allowed: number 0.5..2
+ENSHROUDED_GS_FROM_HUNGER_TO_STARVING,number,false,true,null,300000000000,1200000000000,null,null,null,Game setting override (Custom): FROM_HUNGER_TO_STARVING.,Allowed: number 300000000000..1200000000000
+ENSHROUDED_GS_MINING_DAMAGE_FACTOR,number,false,true,null,0.5,2,null,null,null,Game setting override (Custom): MINING_DAMAGE_FACTOR.,Allowed: number 0.5..2
+ENSHROUDED_GS_NIGHT_TIME_DURATION,number,false,true,null,120000000000,3600000000000,null,null,null,Game setting override (Custom): NIGHT_TIME_DURATION.,Allowed: number 120000000000..3600000000000
+ENSHROUDED_GS_PACIFY_ALL_ENEMIES,bool,false,true,null,null,null,null,null,null,Game setting override (Custom): PACIFY_ALL_ENEMIES.,Allowed: true | false
+ENSHROUDED_GS_PERK_COST_FACTOR,number,false,true,null,0.25,2,null,null,null,Game setting override (Custom): PERK_COST_FACTOR.,Allowed: number 0.25..2
+ENSHROUDED_GS_PERK_UPGRADE_RECYCLING_FACTOR,number,false,true,null,0,1,null,null,null,Game setting override (Custom): PERK_UPGRADE_RECYCLING_FACTOR.,Allowed: number 0..1
+ENSHROUDED_GS_PLANT_GROWTH_SPEED_FACTOR,number,false,true,null,0.25,2,null,null,null,Game setting override (Custom): PLANT_GROWTH_SPEED_FACTOR.,Allowed: number 0.25..2
+ENSHROUDED_GS_PLAYER_BODY_HEAT_FACTOR,number,false,true,null,null,null,null,0.5|1|1.5|2,null,Game setting override (Custom): PLAYER_BODY_HEAT_FACTOR.,Allowed: 0.5 | 1 | 1.5 | 2
+ENSHROUDED_GS_PLAYER_DIVING_TIME_FACTOR,number,false,true,null,0.5,2,null,null,null,Game setting override (Custom): PLAYER_DIVING_TIME_FACTOR.,Allowed: number 0.5..2
+ENSHROUDED_GS_PLAYER_HEALTH_FACTOR,number,false,true,null,0.25,4,null,null,null,Game setting override (Custom): PLAYER_HEALTH_FACTOR.,Allowed: number 0.25..4
+ENSHROUDED_GS_PLAYER_MANA_FACTOR,number,false,true,null,0.25,4,null,null,null,Game setting override (Custom): PLAYER_MANA_FACTOR.,Allowed: number 0.25..4
+ENSHROUDED_GS_PLAYER_STAMINA_FACTOR,number,false,true,null,0.25,4,null,null,null,Game setting override (Custom): PLAYER_STAMINA_FACTOR.,Allowed: number 0.25..4
+ENSHROUDED_GS_PRESET,string,false,true,null,null,null,null,Default|Relaxed|Hard|Survival|Custom,null,Game settings preset.,Allowed: Default | Relaxed | Hard | Survival | Custom
+ENSHROUDED_GS_RANDOM_SPAWNER_AMOUNT,string,false,true,null,null,null,null,Few|Normal|Many|Extreme,null,Game setting override (Custom): RANDOM_SPAWNER_AMOUNT.,Allowed: Few | Normal | Many | Extreme
+ENSHROUDED_GS_RESOURCE_DROP_STACK_AMOUNT_FACTOR,number,false,true,null,0.25,2,null,null,null,Game setting override (Custom): RESOURCE_DROP_STACK_AMOUNT_FACTOR.,Allowed: number 0.25..2
+ENSHROUDED_GS_SHROUD_TIME_FACTOR,number,false,true,null,0.5,2,null,null,null,Game setting override (Custom): SHROUD_TIME_FACTOR.,Allowed: number 0.5..2
+ENSHROUDED_GS_TAMING_STARTLE_REPERCUSSION,string,false,true,null,null,null,null,KeepProgress|LoseSomeProgress|LoseAllProgress,null,Game setting override (Custom): TAMING_STARTLE_REPERCUSSION.,Allowed: KeepProgress | LoseSomeProgress | LoseAllProgress
+ENSHROUDED_GS_THREAT_BONUS,number,false,true,null,0.25,4,null,null,null,Game setting override (Custom): THREAT_BONUS.,Allowed: number 0.25..4
+ENSHROUDED_GS_TOMBSTONE_MODE,string,false,true,null,null,null,null,AddBackpackMaterials|Everything|NoTombstone,null,Game setting override (Custom): TOMBSTONE_MODE.,Allowed: AddBackpackMaterials | Everything | NoTombstone
+ENSHROUDED_GS_WEATHER_FREQUENCY,string,false,true,null,null,null,null,Disabled|Rare|Normal|Often,null,Game setting override (Custom): WEATHER_FREQUENCY.,Allowed: Disabled | Rare | Normal | Often
+ENSHROUDED_ROLE__CAN_ACCESS_INVENTORIES,bool,false,true,hard,null,null,null,null,null,Allow access to other players' inventories.,Allowed: true | false
+ENSHROUDED_ROLE__CAN_EDIT_BASE,bool,false,true,hard,null,null,null,null,null,Allow editing bases.,Allowed: true | false
+ENSHROUDED_ROLE__CAN_EDIT_WORLD,bool,false,true,hard,null,null,null,null,null,Allow editing the world.,Allowed: true | false
+ENSHROUDED_ROLE__CAN_EXTEND_BASE,bool,false,true,hard,null,null,null,null,null,Allow extending bases.,Allowed: true | false
+ENSHROUDED_ROLE__CAN_KICK_BAN,bool,false,true,hard,null,null,null,null,null,Allow kicking/banning players.,Allowed: true | false
+ENSHROUDED_ROLE__NAME,string,false,true,hard,null,null,^[^\r\n]*$,null,null,User group name.,Allowed: single-line string
+ENSHROUDED_ROLE__PASSWORD,string,false,true,hard,null,null,^[^\r\n]*$,null,null,User group password (empty = auto-generated if missing in config).,Allowed: single-line string
+ENSHROUDED_ROLE__RESERVED_SLOTS,int,false,false,hard,0,null,null,null,null,Reserved slots for this user group.,Allowed: integer >= 0

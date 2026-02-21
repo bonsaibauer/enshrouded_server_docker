@@ -46,18 +46,18 @@ fatal() { echo "FATAL - $*" >&2; exit 1; }
 
 # --- inlined standalone support: validation engine ---
 # Validation engine driven by:
-# - server_manager/env/env_server_manager.tsv
-# - server_manager/env/env_enshrouded_server.tsv
-# - server_manager/env/menu.tsv (path/order mappings)
+# - server_manager/env/env_server_manager.csv
+# - server_manager/env/env_enshrouded_server.csv
+# - server_manager/env/menu.csv (path/order mappings)
 # Usage:
 #   validation_check <VAR_NAME> <VALUE>
 #   if validation_check ...; then ... else echo "$VALIDATION_LAST_ERROR"; fi
 
 VALIDATION_LAST_ERROR=""
 ENV_SPEC_DIR="${ENV_SPEC_DIR:-${_validation_dir}/../env}"
-VALIDATION_SERVER_MANAGER_SPEC_FILE="${VALIDATION_SERVER_MANAGER_SPEC_FILE:-${ENV_SPEC_DIR}/env_server_manager.tsv}"
-VALIDATION_ENSHROUDED_SPEC_FILE="${VALIDATION_ENSHROUDED_SPEC_FILE:-${ENV_SPEC_DIR}/env_enshrouded_server.tsv}"
-VALIDATION_MENU_SPEC_FILE="${VALIDATION_MENU_SPEC_FILE:-${ENV_SPEC_DIR}/menu.tsv}"
+VALIDATION_SERVER_MANAGER_SPEC_FILE="${VALIDATION_SERVER_MANAGER_SPEC_FILE:-${ENV_SPEC_DIR}/env_server_manager.csv}"
+VALIDATION_ENSHROUDED_SPEC_FILE="${VALIDATION_ENSHROUDED_SPEC_FILE:-${ENV_SPEC_DIR}/env_enshrouded_server.csv}"
+VALIDATION_MENU_SPEC_FILE="${VALIDATION_MENU_SPEC_FILE:-${ENV_SPEC_DIR}/menu.csv}"
 
 validation__set_error() {
   VALIDATION_LAST_ERROR="$1"
@@ -218,8 +218,9 @@ validation__rule_for_var_from_specs() {
     file="$VALIDATION_SERVER_MANAGER_SPEC_FILE"
   fi
 
+  validation__has_jq || return 1
   [[ -f "$file" ]] || return 1
-  row="$(awk -F'\t' -v var="$var" 'NR > 1 && $1 == var { print; exit }' "$file")"
+  row="$(jq -Rr --arg var "$var" 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == $var) | join("\t")' "$file" | head -n 1)"
   if [[ -n "$row" ]]; then
     validation__rule_from_env_row "$row"
     return 0
@@ -233,8 +234,9 @@ validation__template_field_rule_from_specs() {
   template="$1"
   field="$2"
 
+  validation__has_jq || return 1
   [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 1
-  row="$(awk -F'\t' -v key="${template}__${field}" 'NR > 1 && $1 == key { print; exit }' "$VALIDATION_ENSHROUDED_SPEC_FILE")"
+  row="$(jq -Rr --arg key "${template}__${field}" 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == $key) | join("\t")' "$VALIDATION_ENSHROUDED_SPEC_FILE" | head -n 1)"
   if [[ -n "$row" ]]; then
     validation__rule_from_env_row "$row"
     return 0
@@ -285,34 +287,37 @@ validation_rule_json() {
 }
 
 validation_list_envs() {
-  # Prints all known environment names from TSV env specs.
+  # Prints all known environment names from CSV env specs.
+  validation__has_jq || return 0
   {
-    [[ -f "$VALIDATION_SERVER_MANAGER_SPEC_FILE" ]] && awk -F'\t' 'NR > 1 { print $1 }' "$VALIDATION_SERVER_MANAGER_SPEC_FILE"
-    [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] && awk -F'\t' 'NR > 1 && $1 !~ /__/ { print $1 }' "$VALIDATION_ENSHROUDED_SPEC_FILE"
+    [[ -f "$VALIDATION_SERVER_MANAGER_SPEC_FILE" ]] && jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") != "") | .[0]' "$VALIDATION_SERVER_MANAGER_SPEC_FILE"
+    [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] && jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") != "" and (((.[0] // "") | contains("__")) | not)) | .[0]' "$VALIDATION_ENSHROUDED_SPEC_FILE"
   } | awk 'NF > 0' | sort -u || true
 }
 
 validation_list_templates() {
   # Prints all known template names.
+  validation__has_jq || return 0
   if [[ -f "$VALIDATION_MENU_SPEC_FILE" ]]; then
-    awk -F'\t' 'NR > 1 && $1 == "editor_template" && $3 != "" { print $3 }' "$VALIDATION_MENU_SPEC_FILE" | awk 'NF > 0' | sort -u || true
+    jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == "editor_template" and (.[2] // "") != "") | .[2]' "$VALIDATION_MENU_SPEC_FILE" | awk 'NF > 0' | sort -u || true
     return 0
   fi
   [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 0
-  awk -F'\t' 'NR > 1 && $1 ~ /__/ { split($1, a, "__"); if (a[1] != "") print a[1] }' "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk 'NF > 0' | sort -u || true
+  jq -Rr 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (((.[0] // "") | contains("__")))) | (.[0] | split("__") | .[0])' "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk 'NF > 0' | sort -u || true
 }
 
 validation_list_envs_by_meta_field() {
-  # Prints variable names based on menu editor mapping (menu.tsv).
+  # Prints variable names based on menu editor mapping (menu.csv).
   local field
   field="$1"
+  validation__has_jq || return 0
   [[ -f "$VALIDATION_MENU_SPEC_FILE" ]] || return 0
 
-  awk -F'\t' -v mf="$field" '
-    NR > 1 && $1 == "editor_env" && $3 == mf && $20 != "" {
-      order = ($21 == "" ? 999999999 : $21)
-      print order "\t" $17
-    }
+  jq -Rr --arg mf "$field" '
+    fromcsv? | map(if . == "null" then "" else . end)
+    | select(input_line_number > 1 and (.[0] // "") == "editor_env" and (.[2] // "") == $mf and (.[19] // "") != "")
+    | [((.[20] // "") | if . == "" then "999999999" else . end), (.[16] // "")]
+    | join("\t")
   ' "$VALIDATION_MENU_SPEC_FILE" \
     | sort -n -k1,1 -k2,2 \
     | cut -f2 \
@@ -321,24 +326,21 @@ validation_list_envs_by_meta_field() {
 
 validation_env_meta_field() {
   # Usage: validation_env_meta_field <VAR_NAME> <field>
-  # Fields are resolved from menu.tsv editor rows.
+  # Fields are resolved from menu.csv editor rows.
   local var field value
   var="$1"
   field="$2"
+  validation__has_jq || return 0
   [[ -f "$VALIDATION_MENU_SPEC_FILE" ]] || return 0
 
   case "$field" in
     managerJsonPath|enshroudedJsonPath|enshroudedMenuJsonPath)
-      value="$(awk -F'\t' -v mf="$field" -v env="$var" '
-        NR > 1 && $1 == "editor_env" && $3 == mf && $17 == env { print $20; exit }
-      ' "$VALIDATION_MENU_SPEC_FILE")"
+      value="$(jq -Rr --arg mf "$field" --arg env "$var" 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == "editor_env" and (.[2] // "") == $mf and (.[16] // "") == $env) | (.[19] // "")' "$VALIDATION_MENU_SPEC_FILE" | head -n 1)"
       printf "%s" "$value"
       return 0
       ;;
     menuOrder)
-      value="$(awk -F'\t' -v env="$var" '
-        NR > 1 && $1 == "editor_env" && $17 == env && $21 != "" { print $21; exit }
-      ' "$VALIDATION_MENU_SPEC_FILE")"
+      value="$(jq -Rr --arg env "$var" 'fromcsv? | map(if . == "null" then "" else . end) | select(input_line_number > 1 and (.[0] // "") == "editor_env" and (.[16] // "") == $env and (.[20] // "") != "") | (.[20] // "")' "$VALIDATION_MENU_SPEC_FILE" | head -n 1)"
       printf "%s" "$value"
       return 0
       ;;
@@ -354,12 +356,13 @@ validation_list_template_fields() {
   local template
   template="$1"
 
+  validation__has_jq || return 0
   if [[ -f "$VALIDATION_MENU_SPEC_FILE" ]]; then
-    awk -F'\t' -v t="$template" '
-      NR > 1 && $1 == "editor_template" && $3 == t && $19 != "" {
-        order = ($21 == "" ? 999999999 : $21)
-        print order "\t" $19
-      }
+    jq -Rr --arg t "$template" '
+      fromcsv? | map(if . == "null" then "" else . end)
+      | select(input_line_number > 1 and (.[0] // "") == "editor_template" and (.[2] // "") == $t and (.[18] // "") != "")
+      | [((.[20] // "") | if . == "" then "999999999" else . end), (.[18] // "")]
+      | join("\t")
     ' "$VALIDATION_MENU_SPEC_FILE" \
       | sort -n -k1,1 -k2,2 \
       | cut -f2 \
@@ -368,11 +371,12 @@ validation_list_template_fields() {
   fi
 
   [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 0
-  awk -F'\t' -v t="$template" '
-    NR > 1 && $1 ~ /__/ {
-      split($1, a, "__")
-      if (a[1] == t && a[2] != "") print a[2]
-    }
+  jq -Rr --arg t "$template" '
+    fromcsv? | map(if . == "null" then "" else . end)
+    | select(input_line_number > 1 and (((.[0] // "") | contains("__"))))
+    | (.[0] | split("__"))
+    | select((.[0] // "") == $t and (.[1] // "") != "")
+    | .[1]
   ' "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk 'NF > 0 && !seen[$0]++' || true
 }
 
@@ -587,10 +591,10 @@ validation_check() {
 
 
 #
-# Spec-driven helpers powered by server_manager/env/*.tsv.
+# Spec-driven helpers powered by server_manager/env/*.csv.
 #
-# Validation comes from env_server_manager.tsv / env_enshrouded_server.tsv.
-# JSON path mappings and ordering come from menu.tsv editor rows.
+# Validation comes from env_server_manager.csv / env_enshrouded_server.csv.
+# JSON path mappings and ordering come from menu.csv editor rows.
 
 spec_apply__jq_set() {
   # Apply a jq transform to $file atomically (tmp+mv).
