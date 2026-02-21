@@ -53,6 +53,7 @@ editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,nul
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,STEAM_APP_ID,Steam,null,.steamAppId,5
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,GAME_BRANCH,Steam,null,.gameBranch,6
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,STEAMCMD_ARGS,Steam,null,.steamcmdArgs,7
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,STEAMCMD_PATH,Steam,null,.steamcmdPath,7.5
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,WINEDEBUG,Steam,null,.winedebug,8
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,UPDATE_CHECK_PLAYERS,Update,null,.updateCheckPlayers,9
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,UPDATE_CRON,Update,null,.updateCron,10

@@ -1362,6 +1362,7 @@ init_runtime_env() {
   if ! update_or_create_manager_config; then
     fatal "Failed to initialize server_manager.json from profile"
   fi
+  refresh_steamcmd_path
 
   # Ensure EN_PROFILE_DIR contains a persistent copy of shipped Enshrouded templates.
   ensure_enshrouded_profile_catalog || true

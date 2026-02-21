@@ -12,6 +12,7 @@ EN_PROFILE_DEFAULT="default"
 MANAGER_PROFILE_DEFAULT="default"
 PROFILE_SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
 SERVER_JOB_BIN="${SERVER_JOB_BIN:-${PROFILE_SCRIPT_DIR}/server}"
+steamcmd_path=""
 
 log_level="${LOG_LEVEL:-40}"
 
@@ -67,6 +68,20 @@ resolve_from_env_or_manager() {
 
   printf "%s" "$default_value"
 }
+
+refresh_steamcmd_path() {
+  local shipped_default_profile
+  steamcmd_path="$(resolve_from_env_or_manager "STEAMCMD_PATH" ".steamcmdPath" "")"
+  if [[ -z "$steamcmd_path" ]]; then
+    shipped_default_profile="${MANAGER_PROFILE_TEMPLATE_SHIPPED_DIR}/${MANAGER_PROFILE_DEFAULT}_server_manager.json"
+    steamcmd_path="$(manager_get_text ".steamcmdPath" "$shipped_default_profile")"
+  fi
+  if [[ -n "$steamcmd_path" ]]; then
+    export STEAMCMD_PATH="$steamcmd_path"
+  fi
+}
+
+refresh_steamcmd_path
 
 backup_dir_resolve() {
   local dir
