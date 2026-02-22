@@ -302,7 +302,7 @@ run_job_mode() {
   if [[ "$skip_update" == "true" ]]; then
     info "Skipping updater start (--no-update)"
   else
-    server_run update
+    UPDATER_BOOTSTRAP_MODE=true server_run update
   fi
   server_run hook-run "bootstrap post" "${BOOTSTRAP_POST_HOOK:-}"
   info "Bootstrap job mode complete"

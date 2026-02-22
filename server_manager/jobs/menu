@@ -1332,7 +1332,7 @@ menu_spec_editor__description_for_var() {
 
 menu_spec_editor__prompt_value_from_options() {
   # Prompt as numeric choice over a fixed set of values.
-  local prompt choice selected_idx
+  local prompt choice selected_idx i
   prompt="${1:-New value}"
   shift || true
   local -a options
@@ -1344,6 +1344,9 @@ menu_spec_editor__prompt_value_from_options() {
   fi
 
   while :; do
+    for i in "${!options[@]}"; do
+      ui_opt "$((i + 1))" "${options[$i]}"
+    done
     choice="$(ui_prompt_choice "$prompt")"
     if [[ -z "$choice" ]]; then
       printf ""
@@ -1404,10 +1407,8 @@ menu_spec_editor__prompt_value() {
   fi
   echo
 
-  local value i v
+  local value v
   if [[ "$type" == "bool" ]]; then
-    ui_opt 1 "true"
-    ui_opt 2 "false"
     value="$(menu_spec_editor__prompt_value_from_options "New value (1-2)" "true" "false")"
   elif [[ "$enum_count" -gt 0 ]]; then
     local -a enum_values
@@ -1416,9 +1417,6 @@ menu_spec_editor__prompt_value() {
       enum_values+=("$v")
     done < <(jq -r '.val_enum[] | tostring' <<<"$rule" 2>/dev/null || true)
 
-    for i in "${!enum_values[@]}"; do
-      ui_opt "$((i + 1))" "${enum_values[$i]}"
-    done
     value="$(menu_spec_editor__prompt_value_from_options "New value (1-${#enum_values[@]})" "${enum_values[@]}")"
   else
     value="$(ui_read "New value: ")"

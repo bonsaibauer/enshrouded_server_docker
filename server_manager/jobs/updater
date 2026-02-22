@@ -205,8 +205,13 @@ verify_cpu_mhz() {
 
 set_current_version() {
   if is_unknown_version "$latest_version"; then
-    warn "Unable to set current version - latest version is unknown"
-    warn "Next update check will restart the server until version can be determined"
+    if [[ "${UPDATER_BOOTSTRAP_MODE:-false}" == "true" ]]; then
+      info "Unable to set current version during bootstrap - latest version is unknown"
+      info "Next update check will restart the server until version can be determined"
+    else
+      warn "Unable to set current version - latest version is unknown"
+      warn "Next update check will restart the server until version can be determined"
+    fi
     return 1
   fi
   debug "[set_current_version]: $latest_version"
@@ -254,7 +259,11 @@ check_for_updates() {
   latest_version="$(resolve_latest_version)"
   if is_unknown_version "$latest_version"; then
     if [[ "$current_version" == "0" ]]; then
-      warn "Unable to determine latest version of enshrouded server! No version currently installed, update server anyways"
+      if [[ "${UPDATER_BOOTSTRAP_MODE:-false}" == "true" ]]; then
+        info "Unable to determine latest version of enshrouded server! No version currently installed, update server anyways"
+      else
+        warn "Unable to determine latest version of enshrouded server! No version currently installed, update server anyways"
+      fi
       return 0
     fi
     warn "Unable to determine latest version of enshrouded server! No update will be performed"
