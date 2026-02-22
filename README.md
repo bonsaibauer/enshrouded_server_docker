@@ -18,7 +18,7 @@
 > Start fast, stay stable, and spend your time playing instead of fixing server drama.
 > 
 > 🧠 **Supervisor Foundation Credit**  
-> The Supervisor-based core approach in this project is based on ideas from [`mornedhels/enshrouded-server`](https://github.com/mornedhels/enshrouded-server). Big respect for the groundwork.
+> The Supervisor-based core approach in this project is based on ideas from [`mornedhels/enshrouded-server`](https://github.com/mornedhels/enshrouded-server). Special thanks for laying the groundwork.
 
 ![Enshrouded Server Docker Banner](images/banner.png)
 
@@ -177,6 +177,7 @@ sudo chown -R enshrouded:enshrouded /home/enshrouded/server_1
 sudo chmod -R u+rwX,g+rwX /home/enshrouded/server_1
 ```
 > `chown -R enshrouded:enshrouded /home/enshrouded/server_1`: assigns ownership to the enshrouded user (recursive so existing files are fixed too).
+> 
 > `chmod -R u+rwX,g+rwX /home/enshrouded/server_1`: ensures logs/saves are writable by the mapped user and group.
 
 Add the current login user to the enshrouded group (same access as enshrouded):
