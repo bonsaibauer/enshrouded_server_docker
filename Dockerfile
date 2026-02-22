@@ -1,6 +1,6 @@
 FROM steamcmd/steamcmd:ubuntu-24@sha256:87c49169a229ec426fa35e3fcae7e8ff274b67e56d950a15e289820f3a114ea3 AS builder
 
-ARG GE_PROTON_VERSION="10-28"
+ARG GE_PROTON_VERSION="10-30"
 
 # Install prerequisites
 RUN dpkg --add-architecture i386 \

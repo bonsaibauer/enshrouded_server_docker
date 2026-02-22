@@ -1,21 +1,22 @@
 [![Made With Love](https://img.shields.io/badge/Made%20with%20%E2%9D%A4%EF%B8%8F-by%20bonsaibauer-green)](https://github.com/bonsaibauer)
 [![Repository](https://img.shields.io/badge/Repository-enshrouded__server__docker-blue?style=flat&logo=github)](https://github.com/bonsaibauer/enshrouded_server_docker)
 ![License](https://img.shields.io/badge/License-MIT-blue)
-
 [![Docker Pulls](https://img.shields.io/docker/pulls/bonsaibauer/enshrouded_server_docker.svg?cacheSeconds=60)](https://hub.docker.com/r/bonsaibauer/enshrouded_server_docker)
 [![Docker Stars](https://img.shields.io/docker/stars/bonsaibauer/enshrouded_server_docker.svg?cacheSeconds=60)](https://hub.docker.com/r/bonsaibauer/enshrouded_server_docker)
+
 [![Docker Image Size (tag)](https://img.shields.io/docker/image-size/bonsaibauer/enshrouded_server_docker/latest)](https://hub.docker.com/r/bonsaibauer/enshrouded_server_docker)
 ![Visitors](https://visitor-badge.laobi.icu/badge?page_id=bonsaibauer.enshrouded_server_docker)
+[![Report Problem](https://img.shields.io/badge/Report-new_Problem_or_Issue-critical?style=flat&logo=github)](https://github.com/bonsaibauer/enshrouded_server_docker/issues/new)
+
 ![GitHub Stars](https://img.shields.io/github/stars/bonsaibauer/enshrouded_server_docker?style=social)
 ![GitHub Forks](https://img.shields.io/github/forks/bonsaibauer/enshrouded_server_docker?style=social)
-
-[![Report Problem](https://img.shields.io/badge/Report-new_Problem_or_Issue-critical?style=flat&logo=github)](https://github.com/bonsaibauer/enshrouded_server_docker/issues/new)
 
 # Enshrouded Dedicated Server Docker
 
 > [!NOTE]
 > 🔥 **HELLO FLAMEBORN** 🔥  
 > Start fast, stay stable, and spend your time playing instead of fixing server drama.
+> 
 > 🧠 **Supervisor Foundation Credit**  
 > The Supervisor-based core approach in this project is based on ideas from [`mornedhels/enshrouded-server`](https://github.com/mornedhels/enshrouded-server). Big respect for the groundwork.
 
@@ -30,8 +31,6 @@ You get one clean workflow instead of scattered scripts and manual fixes. This s
 - **Enshrouded Server settings**: gameplay/world settings like slots, ports, rules, tags, and user groups (`enshrouded_server.json`).
 - **Server Manager settings**: automation/operations like backup behavior, restart schedules, update checks, cron sync, hooks, and runtime handling (`server_manager.json`).
 
-Profiles and backup/restore are built on top of these two layers, so you can switch setups and recover fast without manual file surgery.
-
 > [!TIP]
 > 🎛️ Open the control center with: `docker exec -it enshroudedserver server menu`
 
@@ -40,7 +39,7 @@ Profiles and backup/restore are built on top of these two layers, so you can swi
 - **Menu (`server menu`)**: Your all-in-one control center for start, stop, restart, update, profile apply/reset, backup, and restore, plus editing both Enshrouded gameplay settings and Server Manager automation settings.
 - **Supervisor**: Orchestrates jobs like `server`, `updater`, `backup`, `restart`, `bootstrap`, and `cron` for predictable behavior, better uptime, and cleaner recovery.
 - **Backup + Restore**: Manual and scheduled backups, backup listing/inspection, component-level restore (savegame only, Enshrouded config only, Manager config only), or full recovery with optional safety backup before restore.
-- **GE-Proton Runtime**: Uses current **GE-Proton** (default: **GE-Proton 10-28**) for strong compatibility and stable long-running performance, combined with controlled restart/update flows, player-aware checks, and safe stop grace.
+- **GE-Proton Runtime**: Uses current **GE-Proton** (default: **GE-Proton 10-30**) for strong compatibility and stable long-running performance, combined with controlled restart/update flows, player-aware checks, and safe stop grace.
 
 ## Command + Feature Roadmap
 
@@ -369,5 +368,4 @@ docker logs -f enshroudedserver
 If this project has helped you in any way, do buy me a coffee so I can continue to build more of such projects in the future and share them with the community!
 
 <a href="https://buymeacoffee.com/bonsaibauer" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 
