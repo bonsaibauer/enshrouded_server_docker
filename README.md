@@ -348,23 +348,23 @@ docker exec enshroudedserver profile passwords
 What you get in the selection menu:
 
 1. `Enshrouded Server Settings`
-- `Edit current settings`: edits `enshrouded_server.json` directly (including `gameSettings` and `userGroups`).
-- `Reset current profile`: resets the active config to the currently selected profile.
-- `Select and apply profile`: selects a profile and applies it to the active config.
-- `Manage Banned Accounts`: shows merged banned entries (`bannedAccounts` + legacy `bans`) and supports `deban`/unban (removes from both arrays).
+>  - `Edit current settings`: edits `enshrouded_server.json` directly (including `gameSettings` and `userGroups`).
+> - `Reset current profile`: resets the active config to the currently selected profile.
+> - `Select and apply profile`: selects a profile and applies it to the active config.
+> - `Manage Banned Accounts`: shows merged banned entries (`bannedAccounts` + legacy `bans`) and supports `deban`/unban (removes from both arrays).
 
 2. `Server Manager Settings`
-- `Edit current settings`: edits `server_manager/server_manager.json` directly.
-- `Reset current profile` and `Select and apply profile`: same flow as above, but for manager config.
+> - `Edit current settings`: edits `server_manager/server_manager.json` directly.
+> - `Reset current profile` and `Select and apply profile`: same flow as above, but for manager config.
 
 3. `Backup Menu`
-- Restore from ZIP, manual full backup, config backup.
+> - Restore from ZIP, manual full backup, config backup.
 
 4. `Start/Stop/Restart/Update/update_force/View Passwords/Create Manual Backup`
-- Direct quick actions without changing menus.
+> - Direct quick actions without changing menus.
 
 5. `Other Commands`
-- `status`, `scheduled-restart`, `bootstrap`, `cron sync`.
+> - `status`, `scheduled-restart`, `bootstrap`, `cron sync`.
 
 Navigation and behavior:
 - Enter by number, `b` (back), `m` (main menu), `x` (exit).
