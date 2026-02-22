@@ -189,6 +189,7 @@ newgrp docker
 ```
 > `usermod -aG enshrouded "${SUDO_USER:-$USER}"`: grants the current login user the same access as enshrouded.
 > `usermod -aG docker enshrouded`: lets enshrouded run docker without sudo.
+> 
 > `newgrp enshrouded` / `newgrp docker`: applies group changes in the current session (each opens a new shell; run the one you need, or open a new terminal for the other).
 > 
 > 🛡️ This ensures that the container can write to `/home/enshrouded/server_1` and all server data stays in one clean location.
