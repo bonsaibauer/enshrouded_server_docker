@@ -580,7 +580,7 @@ ui_header() {
 
   if ui_has_tty; then
     ui_note "Navigation: enter a number or b/m/x and press Enter."
-    ui_note "Exit behavior: if the server is STOPPED, you will be asked if it should be started."
+    ui_note "Exit behavior: if the server is STOPPED, you will be asked to run bootstrap + start before exit."
   else
     ui_warn_line "Hint: no TTY detected. Start with: docker exec -it CONTAINER_NAME server menu"
   fi
@@ -1944,8 +1944,7 @@ menu_profile_actions_after_change() {
   local action_choice
   echo
   ui_note "Apply changes:"
-  ui_opt 1 "Start/restart Enshrouded server"
-  ui_opt 2 "Run bootstrap"
+  ui_opt 1 "Bootstrap + start Enshrouded server"
   echo
   ui_actions_bar "b Back" "m Main" "x Exit"
   echo
@@ -1957,21 +1956,7 @@ menu_profile_actions_after_change() {
 
   case "$action_choice" in
     1)
-      server_run restart || true
-      ui_success "Restart requested."
-      ui_pause
-      ;;
-    2)
-      server_run bootstrap || true
-      ui_success "Bootstrap started."
-      if menu_wait_for_program_exit "bootstrap" 600; then
-        echo
-        if ! is_supervisor_running "server"; then
-          menu_prompt_start_server "Start server now?"
-        fi
-      else
-        ui_note "Start the server later once bootstrap has finished."
-      fi
+      menu_start_server_via_bootstrap || true
       ui_pause
       ;;
     b) ;;
@@ -1980,14 +1965,27 @@ menu_profile_actions_after_change() {
 }
 
 menu_run_profile_job() {
-  local target action profile
+  local target action profile output
   local -a cmd_args
   target="$1"
   action="$2"
   profile="$3"
+  MENU_LAST_JOB_ERROR=""
   cmd_args=(profile "$target" "$action")
   [[ -n "$profile" ]] && cmd_args+=("$profile")
-  server_run "${cmd_args[@]}" >/dev/null 2>&1
+  if output="$(server_run "${cmd_args[@]}" 2>&1)"; then
+    return 0
+  fi
+  MENU_LAST_JOB_ERROR="$output"
+  return 1
+}
+
+menu_show_last_job_error() {
+  local line
+  [[ -n "${MENU_LAST_JOB_ERROR:-}" ]] || return 0
+  line="$(printf "%s\n" "$MENU_LAST_JOB_ERROR" | awk 'NF{last=$0} END{print last}')"
+  [[ -n "$line" ]] || line="$MENU_LAST_JOB_ERROR"
+  [[ -n "$line" ]] && ui_warn_line "$line"
 }
 
 menu_profile_selector_env_name() {
@@ -2109,7 +2107,7 @@ menu_profile_flow() {
           ui_warn_line "All players will be disconnected."
           echo
           ui_kv "Selected Profile" "$profile"
-          ui_kv "Target File" "$config_file"
+          ui_kv "Target File" "$(menu_display_path "$config_file")"
           echo
           if ! ui_confirm_yes_no "Stop server (if running) and apply this profile now?"; then
             ui_note "Cancelled."
@@ -2120,6 +2118,7 @@ menu_profile_flow() {
 
         if ! menu_run_profile_job "$target" "apply" "$profile"; then
           ui_warn_line "Failed to apply profile."
+          menu_show_last_job_error
           ui_note "Check: server status"
           ui_pause
           continue
@@ -2137,7 +2136,7 @@ menu_profile_flow() {
       ui_warn_line "All players will be disconnected."
       echo
       ui_kv "Profile" "$profile"
-      ui_kv "Target File" "$config_file"
+      ui_kv "Target File" "$(menu_display_path "$config_file")"
       echo
 
       if ! ui_confirm_yes_no "Stop server (if running) and reset now?"; then
@@ -2148,6 +2147,7 @@ menu_profile_flow() {
 
       if ! menu_run_profile_job "$target" "reset" "$profile"; then
         ui_warn_line "Failed to reset profile."
+        menu_show_last_job_error
         ui_note "Check: server status"
         ui_pause
         return 1
@@ -2278,13 +2278,33 @@ menu_execute_action_by_type() {
 
       mapfile -t command_args < <(jq -r 'if (.args | type) == "array" then .args[] | tostring else empty end' <<<"$action_json" 2>/dev/null || true)
       ui_hr
-      if [[ "${#command_args[@]}" -gt 0 ]]; then
-        ui_note "Running: server $command_name ${command_args[*]}"
-      else
-        ui_note "Running: server $command_name"
-      fi
-      echo
-      server_run "$command_name" "${command_args[@]}" || true
+      case "$command_name" in
+        start)
+          ui_note "Running: bootstrap + start"
+          echo
+          menu_start_server_via_bootstrap || true
+          ;;
+        restart)
+          if is_supervisor_running "server"; then
+            ui_note "Running: server restart"
+            echo
+            server_run restart "${command_args[@]}" || true
+          else
+            ui_note "Server is STOPPED. Running: bootstrap + start"
+            echo
+            menu_start_server_via_bootstrap || true
+          fi
+          ;;
+        *)
+          if [[ "${#command_args[@]}" -gt 0 ]]; then
+            ui_note "Running: server $command_name ${command_args[*]}"
+          else
+            ui_note "Running: server $command_name"
+          fi
+          echo
+          server_run "$command_name" "${command_args[@]}" || true
+          ;;
+      esac
       echo
       ui_pause
       ;;

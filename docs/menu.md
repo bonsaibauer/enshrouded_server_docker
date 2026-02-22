@@ -25,7 +25,7 @@ docker exec -it enshroudedserver server menu
 Exit behavior:
 
 - If `server` is `STOPPED` when you exit, the menu asks whether it should be started before closing.
-- If confirmed, the menu uses the bootstrap start flow.
+- If confirmed, the menu always uses the unified `bootstrap + start` flow.
 
 ## Main Menu
 
@@ -68,8 +68,7 @@ Notes:
      - If an active config exists, the menu will confirm and then replace it when applying the selected profile
      - Applies the selected template to `/home/enshrouded/server/enshrouded_server.json`
      - Ensures `.bans` exists and generates missing `userGroups[].password` values
-     - Afterwards you should start/restart the server to apply changes.
-     - Bootstrap is available as a convenience. The bootstrap job itself does not start the server; the menu can prompt for start afterwards.
+     - Afterwards the menu offers a unified `bootstrap + start` action.
 
 ### What Existing Commands Are Used?
 
@@ -96,9 +95,7 @@ When switching Enshrouded profiles the menu uses the existing Supervisor program
      - Lists profiles from `MANAGER_PROFILE_DIR` (default: `/home/enshrouded/server/profiles/manager/`, seeded from `/usr/local/etc/enshrouded/profiles/manager/`)
      - If an active config exists, the menu will confirm and then replace it when applying the selected profile
      - Applies `/home/enshrouded/server/profiles/manager/<name>_server_manager.json` to `/home/enshrouded/server/server_manager/server_manager.json`
-   - Afterwards you can:
-      - restart the server, or
-      - run bootstrap (recommended)
+   - Afterwards the menu offers a unified `bootstrap + start` action.
 
 ### What Existing Commands Are Used?
 

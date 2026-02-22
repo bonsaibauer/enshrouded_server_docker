@@ -428,14 +428,29 @@ run_as_enshrouded_if_root() {
   fi
 
   if command -v runuser >/dev/null 2>&1; then
-    runuser -u enshrouded -- "$@"
+    # Preserve container/runtime env (e.g. INSTALL_PATH, profile dirs, hooks),
+    # but force identity-related vars for the target user.
+    if runuser --help 2>&1 | grep -q -- '--preserve-environment'; then
+      runuser -u enshrouded --preserve-environment -- env \
+        HOME="/home/enshrouded" \
+        USER="enshrouded" \
+        LOGNAME="enshrouded" \
+        "$@"
+    else
+      runuser -u enshrouded -- env \
+        HOME="/home/enshrouded" \
+        USER="enshrouded" \
+        LOGNAME="enshrouded" \
+        "$@"
+    fi
     return $?
   fi
 
   if command -v su >/dev/null 2>&1; then
     local cmd_quoted
     printf -v cmd_quoted '%q ' "$@"
-    su -s /bin/bash enshrouded -c "$cmd_quoted"
+    # -m keeps environment similar to runuser --preserve-environment.
+    su -m -s /bin/bash enshrouded -c "$cmd_quoted"
     return $?
   fi
 
