@@ -219,6 +219,11 @@ docker run \
   bonsaibauer/enshrouded_server_docker:dev_latest
 ```
 
+> [!TIP]
+> Need to look up and set more ENV-Values?
+> - Server Manager settings documentation: [`docs/server_manager.md`](docs/server_manager.md)
+> - Enshrouded Server settings documentation: [`docs/enshrouded_server.md`](docs/enshrouded_server.md)
+
 <details>
 <summary><strong>Visual guide (changeable parts marked with &lt;&gt;):</strong></summary>
 
@@ -253,6 +258,7 @@ Common adjustments:
 | `-e ENSHROUDED_NAME` | `-e ENSHROUDED_NAME="My Enshrouded Server"` (server name shown in the in-game server browser). |
 | `-v <host_path>:/home/enshrouded/server` | `-v /home/enshrouded/server_1:/home/enshrouded/server` |
 | `bonsaibauer/enshrouded_server_docker:<tag>` | `bonsaibauer/enshrouded_server_docker:dev_latest` (or `latest`; see [Docker Hub tags](https://hub.docker.com/r/bonsaibauer/enshrouded_server_docker/tags)). |
+
 </details>
 
 <details>
@@ -319,11 +325,18 @@ To exit the log view safely and keep the server running, press:
 Ctrl + C
 ```
 
+> [!TIP]
+> If you want to get started quickly, you can view the generated in-game server passwords with:
+
+```bash
+docker exec enshroudedserver profile passwords
+```
+
 ---
 
 # 3. Edit server configuration
 
-## Option 1: Use the built-in control center (recommended)
+## Option 3.1: Use the built-in control center (recommended)
 
 > [!TIP]
 > 🎛️ Open the control center with: `docker exec -it enshroudedserver menu`
@@ -358,7 +371,7 @@ Navigation and behavior:
 - `[ENV]` marks fields controlled by container environment variables, which may be locked in the editor.
 - If the server is stopped when you exit, the menu offers the combined `bootstrap + start` flow.
 
-## Option 2: Edit config files directly in the shell terminal
+## Option 3.2: Edit config files directly in the shell terminal
 
 Stop the server before editing config files:
 
@@ -429,3 +442,40 @@ Apply changes (`bootstrap + start` via `docker exec`):
 docker exec enshroudedserver bootstrap
 docker exec enshroudedserver start
 ```
+
+# 4. Simple Docker Commands
+
+- `docker logs -f enshroudedserver`: Follows recent container logs live.
+- `docker start enshroudedserver`: Starts the existing container.
+- `docker stop enshroudedserver`: Stops the container with a safe 90s grace period.
+- `docker restart enshroudedserver`: Restarts the container with graceful shutdown behavior.
+- `docker rm enshroudedserver`: Removes the stopped container.
+
+
+# 5. Simple Server Manager Commands (Quick Readme)
+
+> [!TIP]
+> 🎛️ Open the control center with: `docker exec -it enshroudedserver menu`
+
+- `docker exec enshroudedserver help`: Shows built-in command overview from the server dispatcher.
+- `docker exec enshroudedserver status`: Shows supervisor status for all jobs (`server`, `updater`, `crond`, ...).
+- `docker exec -it enshroudedserver menu`: Opens the interactive management menu.
+- `docker exec enshroudedserver start`: Starts the server job.
+- `docker exec enshroudedserver stop`: Stops the server job.
+- `docker exec enshroudedserver restart`: Runs the restart job with defaults from `server_manager.json`.
+- `docker exec enshroudedserver update`: Runs normal updater flow (install if needed, then start server).
+- `docker exec enshroudedserver update force`: Forces full update path.
+- `docker exec enshroudedserver backup`: Creates a manual backup with default includes (savegame + both config files).
+- `docker exec enshroudedserver backup list`: Lists available backup ZIP files (manual + scheduled).
+- `docker exec enshroudedserver backup inspect <backup.zip>`: Shows which components are in a backup ZIP.
+- `docker exec enshroudedserver backup restore <backup.zip> [savegame|enshrouded|manager|all]`: Restores selected parts (default target is `all`).
+- `docker exec enshroudedserver profile <manager|enshrouded> <apply|reset> [profile]`: Applies/resets profile (with config backup).
+- `docker exec enshroudedserver profile passwords [text|json]`: Alias for `password-view` with the same output formats.
+- `docker exec enshroudedserver password-view`: Shows user group rights/passwords.
+- `docker exec enshroudedserver cron sync`: Rewrites cron table from current `server_manager.json`.
+- `docker exec enshroudedserver cron [start|stop|restart|status]`: Controls `crond` service.
+
+## Buy Me A Coffee
+If this project has helped you in any way, do buy me a coffee so I can continue to build more of such projects in the future and share them with the community!
+
+<a href="https://buymeacoffee.com/bonsaibauer" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
