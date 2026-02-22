@@ -1,94 +1,64 @@
 # Profiles
 
-This file describes both profile types in the current layout.
+This file compares profile templates by **core features only** so new profiles can be added side by side.
 
-## File Structure
+---
 
-- Manager-Profile: `server_manager/profiles/manager/<name>_server_manager.json`
-- Enshrouded-Profile: `server_manager/profiles/enshrouded/<name>_enshrouded_server.json`
+## Profiles for `enshrouded_server.json`
 
-In the container:
-- Manager-Templates (shipped): `/usr/local/etc/enshrouded/profiles/manager/`
-- Enshrouded-Templates (shipped): `/usr/local/etc/enshrouded/profiles/enshrouded/`
+### Core comparison table
 
-Runtime copies:
-- Manager config: `/home/enshrouded/server/server_manager/server_manager.json`
-- Enshrouded config: `/home/enshrouded/server/enshrouded_server.json`
+| Status | Profile name | `slotCount` | Voice chat | Text chat | `gameSettingsPreset` | Detailed `gameSettings.*` active? | Detailed settings source | User-group model | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `[x]` | `default` | `16` | ❌ | ❌ | `"Default"` | ❌ (only active when preset is `"Custom"`) | [`default_enshrouded_server.json`](../server_manager/profiles/enshrouded/default_enshrouded_server.json) | 4 groups: Admin/Friend/Guest/Visitor | Currently shipped and active in quickstart examples |
+| `[ ]` | `<new_profile>` | `<set>` | ✅/❌ | ✅/❌ | `<set>` | ✅ when preset is `"Custom"`, otherwise ❌ | `server_manager/profiles/enshrouded/<new_profile>_enshrouded_server.json` | same schema (4 groups) | Add future profiles here for side-by-side comparison |
 
-Persistent profile catalogs (volume):
-- Manager-Profile-Catalog (default `MANAGER_PROFILE_DIR`): `/home/enshrouded/server/profiles/manager/`
-  - Seeded from the shipped templates on container start (copy only missing files)
-- Enshrouded-Profile-Catalog (default `EN_PROFILE_DIR`): `/home/enshrouded/server/profiles/enshrouded/`
-  - Seeded from the shipped templates on container start (copy only missing files)
+> [!NOTE]
+> Individual `gameSettings.*` values only take effect when `gameSettingsPreset` is set to `"Custom"`.
+> For `Custom`, detailed values are not expanded here. Check the respective profile JSON file directly.
 
-## Creating New Profiles
+### User-group schema (stable across profiles)
 
-Profiles are template JSON files. Shipped templates live inside the image and are (by default) copied into the persistent volume catalog on container start.
+Every profile uses the same role schema with four groups:
 
-To add your own profiles without rebuilding the image, drop new `*_enshrouded_server.json` template files into:
+| Group Name | Can Kick/Ban | Access Inventories | Can Edit World | Edit Base | Extend Base | Reserved Slots |
+|------------|--------------|--------------------|----------------|-----------|-------------|----------------|
+| **Admin**  | ✅          | ✅                 | ✅             | ✅        | ✅        | 0              |
+| **Friend** | ❌          | ✅                 | ✅             | ✅        | ❌        | 0              |
+| **Guest**  | ❌          | ❌                 | ✅             | ❌        | ❌        | 0              |
+| **Visitor**| ❌          | ❌                 | ❌             | ❌        | ❌        | 0              |
 
-- `/home/enshrouded/server/profiles/enshrouded/`
+---
 
-Naming rules:
+## Profiles for `server_manager.json`
 
-- `<name>` must match `^[A-Za-z0-9._-]+$`
-- `<name>` must match the profile selector regex (default: `^[A-Za-z0-9._-]+$`, configurable via `server_manager/env/env_server_manager.csv`)
-- File names must follow the exact suffix pattern:
-  - `*_enshrouded_server.json`
-  - `*_server_manager.json`
+### Feature schema (stable across profiles)
 
-### Enshrouded Profile
+The same core feature categories are compared for every Server Manager profile:
 
-1. Copy `server_manager/profiles/enshrouded/default_enshrouded_server.json` to `server_manager/profiles/enshrouded/<name>_enshrouded_server.json`
-2. Edit the JSON (must stay valid JSON)
-3. Put the file into the volume catalog: `/home/enshrouded/server/profiles/enshrouded/` (or rebuild the image to ship it)
-4. Select it with `EN_PROFILE=<name>` or via `server menu`
+| Category | Purpose | Key set |
+| --- | --- | --- |
+| Player checks | Control whether update/restart waits for zero players | `updateCheckPlayers`, `restartCheckPlayers`, `restartDowntimeSeconds` |
+| Backups | Control backup behavior and retention | `backupMaxCount`, `backupScheduledIncludeEnshroudedConfig`, `backupScheduledIncludeServerManagerConfig` |
+| Scheduled cron | Control scheduled update/backup/restart jobs | `updateCron`, `backupCron`, `restartCron` |
 
-### Server Manager Profile
+### Core comparison table
 
-1. Copy `server_manager/profiles/manager/default_server_manager.json` to `server_manager/profiles/manager/<name>_server_manager.json`
-2. Edit the JSON (see `docs/environment.md` for variable meanings)
-3. Put the file into the volume catalog: `/home/enshrouded/server/profiles/manager/` (or rebuild the image to ship it)
-4. Select it with `MANAGER_PROFILE=<name>` or via `server menu`
+| Status | Profile name | Update check players | Restart check players | Manual backup | Scheduled backup | `backupMaxCount` | `backupCron` | `updateCron` | `restartCron` | Source | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `[x]` | `default` | ❌ (`updateCheckPlayers=false`) | ❌ (`restartCheckPlayers=false`, downtime=`5s`) | ✅ | ❌ | `0` | ❌ | ❌ | ❌ | [`default_server_manager.json`](../server_manager/profiles/manager/default_server_manager.json) | Currently shipped and active in quickstart examples |
+| `[ ]` | `<new_profile>` | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | `<number>` | ❌ / ✅ (`0 4 * * *` = 04:00 AM) | ❌ / ✅ (`0 5 * * *` = 05:00 AM) | ❌ / ✅ (`10 5 * * *` = 05:10 AM) | `server_manager/profiles/manager/<new_profile>_server_manager.json` | Add future profiles here for side-by-side comparison |
 
-When selected, the Server Manager profile is read from:
+> [!NOTE]
+> If cron is not set, no automatic backup/update/restart is executed.
+> Manual backups are still available (for example via `docker exec <container> backup` or the menu).
+> `backupMaxCount` is mainly relevant for automatic/scheduled backup cleanup when `backupCron` is configured.
 
-- `/home/enshrouded/server/profiles/manager/<name>_server_manager.json`
+---
 
 ## Selection
 
-- `MANAGER_PROFILE=<name>`
 - `EN_PROFILE=<name>`
+- `MANAGER_PROFILE=<name>`
 
-If a profile name is missing/invalid, it falls back to `default`.
-
-### Persisted Selection (via `server menu`)
-
-Profile selection is stored directly in the Server Manager config file:
-
-- `/home/enshrouded/server/server_manager/server_manager.json`
-
-Keys:
-- `actualProfilManager`: profile name for `server_manager.json`
-- `actualProfilEnshrouded`: profile name for `enshrouded_server.json`
-
-The initial ENV selectors are captured once for transparency:
-- `MANAGER_PROFILE`
-- `EN_PROFILE`
-
-## Profile Reset/Apply
-
-Profile reset/apply is handled by the unified `profile` job (simple CLI mode):
-
-- Interactive way (recommended): use `server menu` and choose profile reset/apply flows.
-- CLI way: run `server profile` directly, for example:
-  - `server profile enshrouded apply default`
-  - `server profile manager reset`
-  - Optional advanced flags are still supported (`--target`, `--action`, `--profile`, `--create-backup`).
-  - If `EN_PROFILE`/`MANAGER_PROFILE` is set via container ENV, the matching CLI profile apply/reset action is blocked.
-
-The job will:
-
-- stop `server` if needed
-- create config backups in `BACKUP_DIR/profiles`
-- apply/reset either `server_manager.json` or `enshrouded_server.json` based on the selected mode
+If a selected profile is missing or invalid, fallback is `default`.

@@ -21,6 +21,7 @@ Most commands can run without extra arguments and then use defaults from `server
 - `docker exec enshroudedserver backup inspect <backup.zip>`: Shows which components are in a backup ZIP.
 - `docker exec enshroudedserver backup restore <backup.zip> [savegame|enshrouded|manager|all]`: Restores selected parts (default target is `all`).
 - `docker exec enshroudedserver profile <manager|enshrouded> <apply|reset> [profile]`: Applies/resets profile (with config backup).
+- `docker exec enshroudedserver profile passwords [text|json]`: Alias for `password-view` with the same output formats.
 - `docker exec enshroudedserver password-view`: Shows user group rights/passwords.
 - `docker exec enshroudedserver cron sync`: Rewrites cron table from current `server_manager.json`.
 - `docker exec enshroudedserver cron [start|stop|restart|status]`: Controls `crond` service.
@@ -231,6 +232,17 @@ docker exec enshroudedserver password-view [text|json]
 - Args:
 - `text|json`: Output format (`text` by default).
 - Advanced also supported: `--format text|json`.
+
+### 3.3 `profile passwords` (alias)
+
+```bash
+docker exec enshroudedserver profile passwords [text|json]
+```
+
+- What this command does: Alias for `password-view` via the `profile` command.
+- `docker exec enshroudedserver profile passwords json`: Same output as `password-view json`.
+- Args:
+- `text|json`: Output format (`text` by default).
 
 ## Chapter 4 - Validation, Bootstrap, Cron
 

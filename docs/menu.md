@@ -1,6 +1,6 @@
-# Interactive Shell Menu (`server menu`)
+# Interactive Shell Menu (`menu`)
 
-The Server Manager includes an interactive shell menu to manage profiles and edit the persistent JSON configs inside the container volume.
+The interactive menu is the recommended control center for daily operations, profile handling, and editing both runtime JSON configs.
 
 ## Run
 
@@ -9,23 +9,46 @@ The menu requires a TTY. Always use `-it`.
 Replace `enshroudedserver` with your container name (see `docker ps`).
 
 ```bash
+docker exec -it enshroudedserver menu
+```
+
+Optional arguments (from the menu CLI):
+
+- `--screen <id>` starts directly on a specific screen.
+- `--once` runs one menu cycle and exits.
+- `--no-clear` keeps terminal output without screen clearing.
+
+Compatibility alias (same menu):
+
+```bash
 docker exec -it enshroudedserver server menu
 ```
 
+## Selection Menu Preview
+
+![Server Menu Selection Menu](../images/menu.png)
+
+Top-level selections:
+
+1. `Enshrouded Server Settings`
+2. `Server Manager Settings`
+3. `Backup Menu`
+4. `Start/Stop/Restart/Update/update_force/View Passwords/Create Manual Backup`
+5. `Other Commands` (`status`, `scheduled-restart`, `bootstrap`, `cron sync`)
+
 ## Navigation
 
-- Enter a number (or `b`/`m`/`x`) and press Enter
-- `b` = Back in submenus (`b` in main menu exits)
-- `m` = Main Menu
-- `x` = Exit menu
-- Prompts use `yes/no` (also accepts `y/n`)
-- `[ENV]` marks settings controlled by container environment variables (locked in the editors)
-- Some actions (apply/restore) run as Supervisor jobs; their output is visible in `docker logs`.
+- Enter a number (or `b`/`m`/`x`) and press Enter.
+- `b` = Back in submenus (`b` in main menu exits).
+- `m` = Main Menu.
+- `x` = Exit menu.
+- Prompts use `yes/no` (also accepts `y/n`).
+- `[ENV]` marks settings controlled by container environment variables (locked in the editors).
 
 Exit behavior:
 
 - If `server` is `STOPPED` when you exit, the menu asks whether it should be started before closing.
-- If confirmed, the menu always uses the unified `bootstrap + start` flow.
+- If confirmed, the menu runs the unified `bootstrap + start` flow.
 
 ## Main Menu
 
@@ -44,168 +67,161 @@ Exit behavior:
 Notes:
 
 - `Create Manual Backup (.zip)` is a shortcut for `Backup Menu -> Create manual full backup now`.
-- The items `start/stop/restart/update/password-view` are the same actions as `server <command>` and are shown in the main menu for convenience.
-- `update_force` in the menu maps to `update force`.
+- `Start Server` runs `bootstrap + start`.
+- `Stop Server` and `Restart Server` require a currently running server.
+- `update_force` maps to `docker exec enshroudedserver update force`.
+- `update_force` asks for an extra confirmation in the menu.
+- The quick actions are the same command family as:
+  - `docker exec enshroudedserver start`
+  - `docker exec enshroudedserver stop`
+  - `docker exec enshroudedserver restart`
+  - `docker exec enshroudedserver update`
+  - `docker exec enshroudedserver password-view`
+
+## Current Change Workflow
+
+Use this order for config changes in menu:
+
+1. Open menu: `docker exec -it enshroudedserver menu`
+2. Edit or apply/reset profile in the matching submenu.
+3. After profile apply/reset, the menu offers `Bootstrap + start Enshrouded server` directly.
+4. For edit-only flows, let menu run `bootstrap + start` on exit (if stopped), or run manually:
+   - `docker exec enshroudedserver bootstrap`
+   - `docker exec enshroudedserver start`
 
 ## Enshrouded Server Settings
 
 1. `Edit current settings`
-   - Edits `/home/enshrouded/server/enshrouded_server.json` (persistent volume file)
-   - When entering the editor, the menu will ask to stop `server` first if it is running (required)
-   - Changes are written immediately to the real file (no explicit Save step)
-   - Includes submenus for:
-      - `gameSettings`
-      - `userGroups`
-   - Validates inputs (ports, slots, booleans, tags, game setting ranges/enums)
-   - After editing, use the main menu (`start/restart`) to apply changes, or exit the menu (`x`) and confirm the start prompt.
+   - Edits `/home/enshrouded/server/enshrouded_server.json` (persistent volume file).
+   - If server is running, menu asks to stop `server` before editing.
+   - Changes are written immediately (no explicit save step).
+   - Includes dedicated editing for:
+     - `gameSettings`
+     - `userGroups`
+   - Validates ports, slot count, booleans, tags, ranges, and enums.
 
 2. `Reset current profile`
-   - Guided flow to replace the active config with a selected profile
-   - The menu will confirm and stop `server` (if running) before replacing `/home/enshrouded/server/enshrouded_server.json`
+   - Replaces active config with currently selected profile.
+   - Menu confirms and stops `server` first (if running).
+   - Disabled in menu if `EN_PROFILE` is set via container ENV.
 
 3. `Select and apply profile`
-     - Lists profile templates from `EN_PROFILE_DIR` (default: `/home/enshrouded/server/profiles/enshrouded/`, seeded from `/usr/local/etc/enshrouded/profiles/enshrouded/`)
-     - If an active config exists, the menu will confirm and then replace it when applying the selected profile
-     - Applies the selected template to `/home/enshrouded/server/enshrouded_server.json`
-     - Ensures `.bans`/`.bannedAccounts` exist and generates missing `userGroups[].password` values
-     - Preserves existing ban lists (`.bannedAccounts` and legacy `.bans`) across apply/reset operations.
-     - Afterwards the menu offers a unified `bootstrap + start` action.
+   - Lists profile templates from `EN_PROFILE_DIR` (default: `/home/enshrouded/server/profiles/enshrouded/`).
+   - Applies selected template to `/home/enshrouded/server/enshrouded_server.json`.
+   - Preserves existing ban lists (`.bannedAccounts` and legacy `.bans`) during apply/reset.
+   - Disabled in menu if `EN_PROFILE` is set via container ENV.
 
 4. `Manage Banned Accounts`
-   - Lists current banned accounts from `.bannedAccounts` and legacy `.bans`.
-   - Lets you select an entry and remove it (unban).
-   - Changes are written to both ban arrays for compatibility.
-
-### What Existing Commands Are Used?
-
-When switching Enshrouded profiles the menu uses the existing Supervisor programs via `supervisorctl`:
-
-- `supervisorctl stop server` (before editing or deleting/replacing the active config)
-- `supervisorctl start|restart server` (after editing/applying, to activate changes)
-- `supervisorctl start bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)
+   - Lists merged entries from `.bannedAccounts` and legacy `.bans`.
+   - Supports `deban`/unban by selection.
+   - Removes the selected account from both ban arrays for compatibility.
+   - This menu flow does not create new bans; it is an unban/remove-ban workflow.
 
 ## Server Manager Settings
 
 1. `Edit current settings`
-   - Edits `/home/enshrouded/server/server_manager/server_manager.json`
-   - Validates inputs using the embedded runtime validation logic in `server_manager/jobs/menu`
-   - When entering the editor, the menu will ask to stop `server` first if it is running (required)
-   - Changes are written immediately to the real file (no explicit Save step)
-   - After editing, use the main menu (`start/restart`) to apply changes, or exit the menu (`x`) and confirm the start prompt.
+   - Edits `/home/enshrouded/server/server_manager/server_manager.json`.
+   - If server is running, menu asks to stop `server` before editing.
+   - Changes are written immediately (no explicit save step).
 
 2. `Reset current profile`
-   - Guided flow to replace the active config with a selected profile
-   - The menu will confirm and stop `server` (if running) before replacing `/home/enshrouded/server/server_manager/server_manager.json`
+   - Replaces active config with currently selected manager profile.
+   - Menu confirms and stops `server` first (if running).
+   - Disabled in menu if `MANAGER_PROFILE` is set via container ENV.
 
 3. `Select and apply profile`
-     - Lists profiles from `MANAGER_PROFILE_DIR` (default: `/home/enshrouded/server/profiles/manager/`, seeded from `/usr/local/etc/enshrouded/profiles/manager/`)
-     - If an active config exists, the menu will confirm and then replace it when applying the selected profile
-     - Applies `/home/enshrouded/server/profiles/manager/<name>_server_manager.json` to `/home/enshrouded/server/server_manager/server_manager.json`
-   - Afterwards the menu offers a unified `bootstrap + start` action.
-
-### What Existing Commands Are Used?
-
-When switching Server Manager profiles the menu reuses existing profile/init helpers and Supervisor programs:
-
-- `ensure_manager_profile_file` (ensures profile exists in `/home/enshrouded/server/profiles/manager/`, seeded from shipped templates if missing)
-- `supervisorctl stop server` (before replacing the active config)
-- `supervisorctl start|restart server` (after editing/applying, to activate changes)
-- `supervisorctl start bootstrap` (optional; refreshes cron schedules / runs bootstrap hooks, but does not start the server)
+   - Lists templates from `MANAGER_PROFILE_DIR` (default: `/home/enshrouded/server/profiles/manager/`).
+   - Applies selected template to `/home/enshrouded/server/server_manager/server_manager.json`.
+   - Disabled in menu if `MANAGER_PROFILE` is set via container ENV.
 
 ## Backups
 
-This submenu provides backup and restore operations via the unified backup job.
+The Backup submenu uses one unified backup engine for manual, scheduled, and restore safety backups.
 
 Menu options:
 
 1. `Restore from backup ZIP`
-   - Lists available ZIP files (manual + scheduled).
-   - Detects included components (`savegame`, `enshrouded_server.json`, `server_manager.json`).
-   - Lets you select which components to restore.
-   - Can optionally create a safety backup before restore.
+   - Lists ZIP files (manual + scheduled).
+   - Detects included parts (`savegame`, `enshrouded_server.json`, `server_manager.json`).
+   - Lets you restore selected parts only.
+   - Can create a safety backup before restore.
+   - If no ZIP exists, menu can create a manual backup first.
 2. `Create manual full backup now`
-   - Runs a manual full backup (savegame + config includes according to backup job defaults).
+   - Runs a manual full backup.
 3. `Create config backup now`
-   - Offers:
-     - Enshrouded config only
-     - Server Manager config only
-     - Both config files
+   - Enshrouded config only, manager config only, or both.
 
 Notes:
 
-- ZIP backups are always created by the same backup job (`backup`), no matter if triggered manually, via cron, or as safety backup before restore.
-- `BACKUP_MAX_COUNT` keeps the newest N zip backups and deletes older ones (nothing is overwritten). Manual/safety backups count toward the same limit.
-- Config JSON backups under `BACKUP_DIR/profiles` are not affected by `BACKUP_MAX_COUNT`.
-
-Example:
-
-If `BACKUP_MAX_COUNT=7` and cron creates one backup per day, you will keep the newest 7 zip files. Creating extra manual/safety backups will still keep only 7 total zip files and may prune older daily backups sooner.
+- Manual backups (including config-only menu backups) are written to `BACKUP_DIR/manual`.
+- Scheduled backups are written to `BACKUP_DIR/scheduled`.
+- `BACKUP_MAX_COUNT` cleanup applies to scheduled backups only.
+- Manual backups are not pruned by `backupMaxCount`.
 
 ## Other Commands
 
-This submenu is a convenience wrapper around existing `server` commands:
+This submenu is a shortcut for:
 
 - `status`
 - `scheduled-restart`
 - `bootstrap`
 - `cron sync`
 
-Note: explicit reset commands are intentionally not listed here, because profile reset/apply is handled through the unified `profile` job and menu flows.
-
 ## Profile Selection Persistence
 
-The menu stores the selected profiles in the Server Manager config file:
+Selected profiles are persisted in:
 
 - `/home/enshrouded/server/server_manager/server_manager.json`
 
-Keys (single source of truth):
+Keys:
 
 - `actualProfilManager`
 - `actualProfilEnshrouded`
 
-The initial ENV selectors are captured once for transparency:
+Initial selectors are captured from ENV:
 
 - `MANAGER_PROFILE`
 - `EN_PROFILE`
 
-`EN_PROFILE` / `MANAGER_PROFILE` are only used when no persisted selectors exist yet (fresh volume / deleted config).
+`EN_PROFILE` / `MANAGER_PROFILE` are used directly only when no persisted selectors exist yet (fresh volume or missing config).
 
 ## Config Backups (Automatic)
 
-Whenever the menu writes or replaces config files, it creates a timestamped backup under:
+Whenever menu writes or replaces config files, it creates timestamped backup ZIP files in:
 
-- `BACKUP_DIR/profiles`
+- `BACKUP_DIR/manual`
 
-By default (`backupDir = "backups"`), this is:
+Default path (`backupDir = "backups"`):
 
-- `/home/enshrouded/server/backups/profiles`
+- `/home/enshrouded/server/backups/manual`
 
-Backups are created when you:
+Created when:
 
-- change a value in the JSON editors (exactly one backup per edit session, created on the first write)
-- apply a profile template (`Select and apply profile`)
-- run profile reset/apply via menu flows (internally runs `server profile <target> <apply|reset> [profile]`)
+- changing values in JSON editors (one backup on first write in an edit session)
+- applying a profile template
+- running reset/apply menu flows
 
 Retention:
 
-- Config backups are not automatically pruned. If you want retention, delete old files manually in `BACKUP_DIR/profiles`.
+- Backups in `BACKUP_DIR/manual` are not auto-pruned by `backupMaxCount`.
 
-## Settings Precedence (Important)
+## Settings Precedence
 
-Some settings can be provided via container environment variables (see `docs/environment.md`). If a value is set via env var, it is treated as the source of truth and may overwrite manual JSON edits when bootstrap runs.
+If a setting is provided via container ENV (see `docs/environment.md`), ENV is treated as source of truth and can overwrite manual JSON edits during bootstrap.
 
 Practical rule:
 
-- If you want the menu-edited JSON to stay in control, avoid setting the same option via container environment values.
+- If you want JSON-edited values to stay active, do not set the same keys via container ENV.
 
-Behavior in the menu:
+Menu behavior:
 
-- The JSON editors show `[ENV]` next to locked fields and will block editing them.
-- Before selecting a profile template, the menu shows a warning listing active env overrides and asks for confirmation.
+- Editors show `[ENV]` on locked fields and block edits there.
+- Profile apply flow warns when active ENV overrides exist.
+- Profile apply/reset is disabled when selector ENV is set (`EN_PROFILE` or `MANAGER_PROFILE`).
 
 ## Troubleshooting
 
-- If the menu looks broken or does not accept input:
-  - Use `docker exec -it ...`
-- If you change settings but they do not take effect:
-  - Restart the server (`server restart`) or run bootstrap (`server bootstrap`)
+- Menu input not working:
+  - Use `docker exec -it enshroudedserver menu`.
+- Settings changed but effect missing:
+  - Run `docker exec enshroudedserver bootstrap` then `docker exec enshroudedserver start`.
