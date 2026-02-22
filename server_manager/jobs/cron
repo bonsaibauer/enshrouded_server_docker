@@ -92,7 +92,60 @@ run_crond_service_action() {
   local action
   action="$1"
   [[ -x "$SERVER_JOB_BIN" ]] || fatal "Server job is not executable: $SERVER_JOB_BIN"
-  "$SERVER_JOB_BIN" guard-run core_ready -- supervisorctl "$action" crond
+  case "$action" in
+    restart)
+      run_crond_supervisor_action stop || return $?
+      run_crond_supervisor_action start
+      ;;
+    start|stop|status)
+      run_crond_supervisor_action "$action"
+      ;;
+    *)
+      fatal "Invalid service action: $action"
+      ;;
+  esac
+}
+
+is_crond_idempotent_notice() {
+  local action output
+  action="$1"
+  output="$2"
+  case "$action" in
+    start)
+      [[ "$output" == *"ERROR (already started)"* ]]
+      ;;
+    stop)
+      [[ "$output" == *"ERROR (not running)"* ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+run_crond_supervisor_action() {
+  local action output rc
+  action="$1"
+  output="$("$SERVER_JOB_BIN" guard-run core_ready -- supervisorctl "$action" crond 2>&1)"
+  rc=$?
+
+  if is_crond_idempotent_notice "$action" "$output"; then
+    case "$action" in
+      start) info "crond: already running" ;;
+      stop) info "crond: already stopped" ;;
+    esac
+    return 0
+  fi
+
+  if [[ -n "$output" ]]; then
+    if [[ "$rc" -eq 0 ]]; then
+      printf "%s\n" "$output"
+    else
+      printf "%s\n" "$output" >&2
+    fi
+  fi
+
+  return "$rc"
 }
 
 main() {

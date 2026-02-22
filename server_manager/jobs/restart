@@ -8,6 +8,7 @@ enshrouded_config_file="${install_path}/enshrouded_server.json"
 
 RESTART_FORCE="false"
 RESTART_CHECK_PLAYERS_OVERRIDE=""
+RESTART_DOWNTIME_SECONDS=""
 
 debug() { [[ "$log_level" -ge 50 ]] && echo "DEBUG - $*" || true; }
 
@@ -26,6 +27,12 @@ load_runtime_values() {
 
   RESTART_CHECK_PLAYERS="${RESTART_CHECK_PLAYERS:-$(manager_get_text ".restartCheckPlayers")}"
   [[ -n "$RESTART_CHECK_PLAYERS" ]] || RESTART_CHECK_PLAYERS="true"
+
+  RESTART_DOWNTIME_SECONDS="${RESTART_DOWNTIME_SECONDS:-$(manager_get_text ".restartDowntimeSeconds")}"
+  [[ -n "$RESTART_DOWNTIME_SECONDS" ]] || RESTART_DOWNTIME_SECONDS="3"
+  if [[ ! "$RESTART_DOWNTIME_SECONDS" =~ ^[0-9]+$ ]]; then
+    fatal "Invalid RESTART_DOWNTIME_SECONDS: ${RESTART_DOWNTIME_SECONDS} (expected integer >= 0)"
+  fi
 
   RESTART_PRE_HOOK="${RESTART_PRE_HOOK:-$(manager_get_text ".restartPreHook")}"
   RESTART_POST_HOOK="${RESTART_POST_HOOK:-$(manager_get_text ".restartPostHook")}"
@@ -58,9 +65,20 @@ run_restart() {
     esac
   fi
 
-  info "Restarting Enshrouded server"
-  if ! "${SCRIPT_DIR}/server" guard-run server_ready -- supervisorctl restart server >/dev/null 2>&1; then
-    fatal "Failed to restart Enshrouded server via supervisor"
+  info "Restarting Enshrouded server (downtime=${RESTART_DOWNTIME_SECONDS}s)"
+  info "Stopping Enshrouded server"
+  if ! "${SCRIPT_DIR}/server" guard-run server_ready -- supervisorctl stop server >/dev/null 2>&1; then
+    fatal "Failed to stop Enshrouded server via supervisor"
+  fi
+
+  if [[ "$RESTART_DOWNTIME_SECONDS" -gt 0 ]]; then
+    info "Waiting ${RESTART_DOWNTIME_SECONDS}s before starting Enshrouded server"
+    sleep "$RESTART_DOWNTIME_SECONDS"
+  fi
+
+  info "Starting Enshrouded server"
+  if ! "${SCRIPT_DIR}/server" guard-run core_ready -- supervisorctl start server >/dev/null 2>&1; then
+    fatal "Failed to start Enshrouded server via supervisor"
   fi
 
   "${SCRIPT_DIR}/server" hook-run "restart post" "${RESTART_POST_HOOK:-}"
@@ -122,7 +140,7 @@ main() {
   if [[ -n "$RESTART_CHECK_PLAYERS_OVERRIDE" ]]; then
     RESTART_CHECK_PLAYERS="$RESTART_CHECK_PLAYERS_OVERRIDE"
   fi
-  info "Running restart job (force=${RESTART_FORCE}, check_players=${RESTART_CHECK_PLAYERS}, query_port=${ENSHROUDED_QUERY_PORT})"
+  info "Running restart job (force=${RESTART_FORCE}, check_players=${RESTART_CHECK_PLAYERS}, query_port=${ENSHROUDED_QUERY_PORT}, downtime_seconds=${RESTART_DOWNTIME_SECONDS})"
   run_restart
   info "Restart job complete"
 }

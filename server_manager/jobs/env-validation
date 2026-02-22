@@ -46,9 +46,23 @@ init_colors() {
 
 init_colors
 
-info() { [[ "$log_level" -ge "$LOG_LEVEL_INFO" ]] && echo "INFO - $*" || true; }
-warn() { [[ "$log_level" -ge "$LOG_LEVEL_WARN" ]] && echo "WARN - $*" || true; }
-fatal() { echo "FATAL - $*" >&2; exit 1; }
+log_line() {
+  local stream color level message
+  stream="$1"
+  color="$2"
+  level="$3"
+  shift 3
+  message="$*"
+  if [[ "$stream" == "stderr" ]]; then
+    printf "%s%s%s - %s\n" "$color" "$level" "$C_RESET" "$message" >&2
+  else
+    printf "%s%s%s - %s\n" "$color" "$level" "$C_RESET" "$message"
+  fi
+}
+
+info() { [[ "$log_level" -ge "$LOG_LEVEL_INFO" ]] && log_line stdout "$C_GREEN" INFO "$*" || true; }
+warn() { [[ "$log_level" -ge "$LOG_LEVEL_WARN" ]] && log_line stdout "$C_YELLOW" WARN "$*" || true; }
+fatal() { log_line stderr "$C_RED" FATAL "$*"; exit 1; }
 
 # --- inlined standalone support: validation engine ---
 # Validation engine driven by:

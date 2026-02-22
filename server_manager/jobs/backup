@@ -10,6 +10,7 @@ enshrouded_backup_pidfile="${ENSHROUDED_BACKUP_PIDFILE:-/var/run/enshrouded/back
 pidfile="$enshrouded_backup_pidfile"
 
 mode="scheduled"
+inspect_format="human"
 include_savegame=""
 include_enshrouded_config=""
 include_manager_config=""
@@ -225,6 +226,14 @@ parse_args() {
 
   mode_lc="$(echo "$mode" | tr '[:upper:]' '[:lower:]' | xargs)"
   mode="$mode_lc"
+  inspect_format="$(echo "${BACKUP_INSPECT_FORMAT:-human}" | tr '[:upper:]' '[:lower:]' | xargs)"
+  case "$inspect_format" in
+    human|raw|json)
+      ;;
+    *)
+      inspect_format="human"
+      ;;
+  esac
 
   case "$mode_lc" in
     scheduled|manual)
@@ -563,7 +572,7 @@ list_backup_zip_paths() {
   } | sort -rn | cut -f2-
 }
 
-inspect_backup_components() {
+inspect_backup_components_raw() {
   local inspect_zip
   inspect_zip="$1"
   python3 - "$inspect_zip" <<'PY'
@@ -594,6 +603,42 @@ print(
     "true" if has_manager else "false",
 )
 PY
+}
+
+inspect_backup_components() {
+  local inspect_zip raw has_savegame has_enshrouded has_manager
+  inspect_zip="$1"
+  raw="$(inspect_backup_components_raw "$inspect_zip")"
+  read -r has_savegame has_enshrouded has_manager <<<"$raw"
+  [[ "$has_savegame" == "true" || "$has_savegame" == "false" ]] || has_savegame="false"
+  [[ "$has_enshrouded" == "true" || "$has_enshrouded" == "false" ]] || has_enshrouded="false"
+  [[ "$has_manager" == "true" || "$has_manager" == "false" ]] || has_manager="false"
+
+  case "$inspect_format" in
+    raw)
+      printf "%s %s %s\n" "$has_savegame" "$has_enshrouded" "$has_manager"
+      ;;
+    json)
+      jq -cn \
+        --arg zip "$inspect_zip" \
+        --arg has_savegame "$has_savegame" \
+        --arg has_enshrouded "$has_enshrouded" \
+        --arg has_manager "$has_manager" \
+        '{
+          zip: $zip,
+          savegame: ($has_savegame == "true"),
+          enshrouded_config: ($has_enshrouded == "true"),
+          manager_config: ($has_manager == "true")
+        }'
+      ;;
+    *)
+      printf "Backup inspect result:\n"
+      printf "ZIP: %s\n" "$inspect_zip"
+      printf "Savegame files: %s\n" "$( [[ "$has_savegame" == "true" ]] && echo "yes" || echo "no" )"
+      printf "Enshrouded config (enshrouded_server.json): %s\n" "$( [[ "$has_enshrouded" == "true" ]] && echo "yes" || echo "no" )"
+      printf "Manager config (server_manager.json): %s\n" "$( [[ "$has_manager" == "true" ]] && echo "yes" || echo "no" )"
+      ;;
+  esac
 }
 
 stop_server_now() {

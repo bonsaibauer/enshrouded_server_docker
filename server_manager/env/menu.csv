@@ -60,6 +60,7 @@ editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,nul
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,UPDATE_PRE_HOOK,Update,null,.updatePreHook,11
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,UPDATE_POST_HOOK,Update,null,.updatePostHook,12
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTART_CHECK_PLAYERS,Restart,null,.restartCheckPlayers,13
+editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTART_DOWNTIME_SECONDS,Restart,null,.restartDowntimeSeconds,13.5
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTART_CRON,Restart,null,.restartCron,14
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTART_PRE_HOOK,Restart,null,.restartPreHook,15
 editor_env,null,managerJsonPath,null,null,null,null,null,null,null,null,null,null,null,null,null,RESTART_POST_HOOK,Restart,null,.restartPostHook,16

@@ -96,3 +96,9 @@ There are two backup types:
 | Variable | Description | Default |
 |---|---|---|
 | `SUPERVISORCTL_BIN` | Binary used by the `server` command dispatcher | `supervisorctl` |
+
+## Restart Timing Variable
+
+| Variable | Description | Default |
+|---|---|---|
+| `RESTART_DOWNTIME_SECONDS` | Wait time between stop and start inside the restart job | `3` |

@@ -75,8 +75,10 @@ docker exec enshroudedserver restart [force|player-check|no-player-check]
 ```
 
 - What this command does: Runs the controlled restart job.
+- Restart flow: `stop -> wait (downtime) -> start`.
 - `docker exec enshroudedserver restart player-check`: Restarts only when no players are online.
 - `docker exec enshroudedserver restart`: Uses configured defaults (for example `restartCheckPlayers`).
+- Downtime wait is controlled by `RESTART_DOWNTIME_SECONDS` (default: `3`).
 - Args:
 - `force`: Forces restart.
 - `player-check`: Enforces player check before restart.
@@ -157,6 +159,7 @@ docker exec enshroudedserver backup inspect <backup.zip>
 
 - What this command does: Shows which content is available inside a backup ZIP.
 - `docker exec enshroudedserver backup inspect my-backup.zip`: Verifies savegame/config presence before restore.
+- Default output is human-readable (`yes/no` per component).
 - Args:
 - `inspect <backup.zip>`: Inspection mode with ZIP filename/path.
 - Advanced also supported: `--mode inspect --zip <backup.zip>`.

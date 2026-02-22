@@ -10,6 +10,7 @@ MENU_START_SCREEN="main"
 MENU_ONCE="false"
 MENU_NO_CLEAR="false"
 SERVER_JOB_BIN="${SERVER_JOB_BIN:-/usr/local/etc/enshrouded/jobs/server}"
+declare -A MENU_EXTERNAL_ENV
 
 usage() {
   cat <<'EOF'
@@ -47,6 +48,37 @@ parse_args() {
 
 server_run() {
   "$SERVER_JOB_BIN" "$@"
+}
+
+menu_list_known_env_vars() {
+  local var
+  local -a vars
+  vars=()
+
+  mapfile -t vars < <(
+    {
+      validation_list_envs_by_meta_field "managerJsonPath" 2>/dev/null || true
+      validation_list_envs_by_meta_field "enshroudedMenuJsonPath" 2>/dev/null || true
+      validation_list_envs_by_meta_field "enshroudedJsonPath" 2>/dev/null || true
+      compgen -A variable "ENSHROUDED_ROLE_" 2>/dev/null || true
+    } | awk 'NF {print}' | sort -u
+  )
+
+  for var in "${vars[@]}"; do
+    [[ -n "$var" ]] && printf "%s\n" "$var"
+  done
+}
+
+menu_capture_external_env_overrides() {
+  local var
+  MENU_EXTERNAL_ENV=()
+
+  while IFS= read -r var; do
+    [[ -z "$var" ]] && continue
+    if [[ -n "${!var+x}" ]]; then
+      MENU_EXTERNAL_ENV["$var"]="${!var}"
+    fi
+  done < <(menu_list_known_env_vars)
 }
 
 menu_spec__append_action_row() {
@@ -643,15 +675,60 @@ menu_wait_for_program_exit() {
 }
 
 menu_env_override_is_set() {
-  local name
+  local name k mode
   name="$1"
-  [[ -n "${MENU_EXTERNAL_ENV[$name]+x}" ]]
+  for k in "${!MENU_EXTERNAL_ENV[@]}"; do
+    if [[ "$k" == "$name" ]]; then
+      return 0
+    fi
+  done
+  mode="$(validation_env_mode "$name" 2>/dev/null || echo "soft")"
+  [[ "$mode" == "hard" ]]
 }
 
 menu_env_override_value() {
-  local name
+  local name k
   name="$1"
-  printf "%s" "${MENU_EXTERNAL_ENV[$name]-}"
+  for k in "${!MENU_EXTERNAL_ENV[@]}"; do
+    if [[ "$k" == "$name" ]]; then
+      printf "%s" "${MENU_EXTERNAL_ENV[$k]}"
+      return 0
+    fi
+  done
+  return 0
+}
+
+menu_compact_env_label() {
+  local env_var
+  env_var="$1"
+  case "$env_var" in
+    BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG)
+      printf "%s" "BACKUP_SCHED_ENS_CFG"
+      ;;
+    BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG)
+      printf "%s" "BACKUP_SCHED_MGR_CFG"
+      ;;
+    *)
+      printf "%s" "$env_var"
+      ;;
+  esac
+}
+
+menu_env_lock_value_for_display() {
+  local file env_var json_path raw
+  file="$1"
+  env_var="$2"
+  json_path="$3"
+
+  raw="$(menu_env_override_value "$env_var")"
+  if [[ -n "$raw" ]]; then
+    printf "%s" "$raw"
+    return 0
+  fi
+
+  # For hard env fields (e.g. PUID/PGID), show current config value when ENV is not exported.
+  raw="$(menu_spec_editor__json_get_scalar "$file" "$json_path")"
+  printf "%s" "$raw"
 }
 
 menu_env_override_pretty_value() {
@@ -932,8 +1009,12 @@ menu_restore_backup() {
 
     selected="${files[$selected_idx]}"
 
-    local has_savegame has_enshrouded has_manager
-    read -r has_savegame has_enshrouded has_manager <<<"$(server_run backup inspect "$selected" 2>/dev/null || true)"
+    local has_savegame has_enshrouded has_manager inspect_raw
+    inspect_raw="$(
+      BACKUP_INSPECT_FORMAT=raw server_run backup inspect "$selected" 2>/dev/null \
+        | awk '/^(true|false) (true|false) (true|false)$/{line=$0} END{print line}'
+    )"
+    read -r has_savegame has_enshrouded has_manager <<<"$inspect_raw"
     [[ "$has_savegame" == "true" || "$has_savegame" == "false" ]] || has_savegame="false"
     [[ "$has_enshrouded" == "true" || "$has_enshrouded" == "false" ]] || has_enshrouded="false"
     [[ "$has_manager" == "true" || "$has_manager" == "false" ]] || has_manager="false"
@@ -1118,17 +1199,28 @@ menu_spec_editor__set_jq() {
 
 menu_spec_editor__block_if_env_locked() {
   # Returns 0 if editable, 1 if locked by external env override.
-  local env_var env_value
+  local env_var env_value env_mode
   env_var="$1"
 
   if ! menu_env_override_is_set "$env_var"; then
     return 0
   fi
 
+  env_mode="$(validation_env_mode "$env_var" 2>/dev/null || echo "soft")"
   env_value="$(menu_env_override_value "$env_var")"
-  ui_warn_line "This setting is controlled by an environment variable and cannot be edited here."
-  ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
-  ui_note "Remove it from your docker-compose/container environment to edit this value."
+  if [[ "$env_mode" == "hard" ]]; then
+    ui_warn_line "This setting is hard ENV-managed and cannot be edited here."
+    if [[ -n "$env_value" ]]; then
+      ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
+    else
+      ui_kv "ENV" "$env_var=<required hard env>"
+    fi
+    ui_note "Set it via container environment (e.g. docker run/docker compose), then restart container."
+  else
+    ui_warn_line "This setting is controlled by an environment variable and cannot be edited here."
+    ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
+    ui_note "Remove it from your docker-compose/container environment to edit this value."
+  fi
   ui_pause
   return 1
 }
@@ -1142,7 +1234,7 @@ menu_spec_editor__display_value_for_var() {
 
   if menu_env_override_is_set "$env_var"; then
     local raw
-    raw="$(menu_env_override_value "$env_var")"
+    raw="$(menu_env_lock_value_for_display "$file" "$env_var" "$json_path")"
     if [[ -z "$raw" ]]; then
       printf "%s" "${C_DIM}${empty_label}${C_RESET}"
     else
@@ -1611,7 +1703,7 @@ menu_edit_json_from_spec() {
           label="${label#.}"
           ;;
         *)
-          label="$var"
+          label="$(menu_compact_env_label "$var")"
           ;;
       esac
 
@@ -2242,6 +2334,7 @@ menu_load_screen() {
 main() {
   parse_args "$@"
   info "Running interactive menu (start_screen=${MENU_START_SCREEN}, once=${MENU_ONCE})"
+  menu_capture_external_env_overrides
   init_runtime_env
 
   if ! menu_spec_init; then

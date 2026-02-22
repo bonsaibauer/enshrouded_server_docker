@@ -14,6 +14,7 @@
   "winedebug": "-all",
   "updateCheckPlayers": false,
   "restartCheckPlayers": false,
+  "restartDowntimeSeconds": 3,
   "backupDir": "backups",
   "backupMaxCount": 0,
   "backupScheduledIncludeEnshroudedConfig": true,

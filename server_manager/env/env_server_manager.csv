@@ -19,6 +19,7 @@
 "RESTORE_PRE_HOOK","soft","string","null","null","^[^[:cntrl:]]*$","null","null","Hook executed before backup restore.","Allowed: single-line string"
 "GAME_BRANCH","soft","string","null","null","^[^[:cntrl:]]*$","null","null","Steam branch name.","Allowed: single-line string"
 "RESTART_CHECK_PLAYERS","soft","bool","null","null","null","null","null","Only restart when 0 players are connected.","Allowed: true | false"
+"RESTART_DOWNTIME_SECONDS","soft","int","0","null","null","null","null","Seconds to wait between stop and start during restart.","Allowed: integer >= 0"
 "RESTART_CRON","soft","string","null","null","^[^[:cntrl:]]*$","null","null","Cron schedule for restart job (crond).","Allowed: single-line string"
 "RESTART_POST_HOOK","soft","string","null","null","^[^[:cntrl:]]*$","null","null","Hook executed after restart.","Allowed: single-line string"
 "RESTART_PRE_HOOK","soft","string","null","null","^[^[:cntrl:]]*$","null","null","Hook executed before restart.","Allowed: single-line string"

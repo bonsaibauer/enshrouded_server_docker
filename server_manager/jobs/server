@@ -85,6 +85,112 @@ run_supervisorctl() {
   "$SUPERVISORCTL_BIN" "$@"
 }
 
+is_supervisorctl_idempotent_notice() {
+  local action output
+  action="$1"
+  output="$2"
+  case "$action" in
+    start)
+      [[ "$output" == *"ERROR (already started)"* ]]
+      ;;
+    stop)
+      [[ "$output" == *"ERROR (not running)"* ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+run_supervisorctl_program_action() {
+  local action program output rc
+  action="$1"
+  program="$2"
+
+  output="$(run_supervisorctl "$action" "$program" 2>&1)"
+  rc=$?
+
+  if is_supervisorctl_idempotent_notice "$action" "$output"; then
+    case "$action" in
+      start)
+        info "${program}: already running"
+        ;;
+      stop)
+        info "${program}: already stopped"
+        ;;
+    esac
+    return 0
+  fi
+
+  if [[ -n "$output" ]]; then
+    if [[ "$rc" -eq 0 ]]; then
+      printf "%s\n" "$output"
+    else
+      printf "%s\n" "$output" >&2
+    fi
+  fi
+
+  return "$rc"
+}
+
+status_output_prepare_colors() {
+  local log_color_value
+  log_color_value="$(resolve_from_env_or_manager "LOG_COLOR" ".logColor" "true")"
+  if [[ "$log_color_value" == "true" || "$log_color_value" == "TRUE" ]]; then
+    C_RESET=$'\033[0m'
+    C_DIM=$'\033[2m'
+    C_RED=$'\033[31m'
+    C_YELLOW=$'\033[33m'
+    C_GREEN=$'\033[32m'
+    C_MAGENTA=$'\033[35m'
+  else
+    init_colors
+  fi
+}
+
+status_state_color() {
+  case "$1" in
+    RUNNING)
+      printf "%s" "$C_GREEN"
+      ;;
+    STARTING|STOPPING|EXITED)
+      printf "%s" "$C_YELLOW"
+      ;;
+    STOPPED|FATAL|BACKOFF|UNKNOWN)
+      printf "%s" "$C_RED"
+      ;;
+    *)
+      printf "%s" "$C_MAGENTA"
+      ;;
+  esac
+}
+
+render_colored_supervisor_status() {
+  local output rc line program state details color
+  output="$(run_supervisorctl status 2>&1)"
+  rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    printf "%s\n" "$output" >&2
+    return "$rc"
+  fi
+
+  status_output_prepare_colors
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)([[:space:]].*)?$ ]]; then
+      program="${BASH_REMATCH[1]}"
+      state="${BASH_REMATCH[2]}"
+      details="${BASH_REMATCH[3]-}"
+      color="$(status_state_color "$state")"
+      printf "%s%-16s%s %s%s%s%s\n" \
+        "${C_DIM}" "$program" "${C_RESET}" \
+        "${color}" "$state" "${C_RESET}" \
+        "${details}"
+    else
+      printf "%s\n" "$line"
+    fi
+  done <<<"$output"
+}
+
 debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && echo "DEBUG - $*" || true; }
 
 checkRunning() {
@@ -280,7 +386,7 @@ run_job_script() {
   if [[ "$script" == "updater" ]]; then
     guard_mode="job_ready:updater"
   fi
-  server_guard_run "$guard_mode" -- "${SCRIPT_DIR}/${script}" "$@"
+  server_guard_run "$guard_mode" -- run_as_enshrouded_if_root "${SCRIPT_DIR}/${script}" "$@"
 }
 
 run_job_or_supervisor_start() {
@@ -295,9 +401,9 @@ run_job_or_supervisor_start() {
     guard_mode="server_ready"
   fi
   if [[ "$#" -gt 0 ]]; then
-    server_guard_run "$guard_mode" -- "${SCRIPT_DIR}/${script}" "$@"
+    server_guard_run "$guard_mode" -- run_as_enshrouded_if_root "${SCRIPT_DIR}/${script}" "$@"
   else
-    server_guard_run "$guard_mode" -- run_supervisorctl start "$program"
+    server_guard_run "$guard_mode" -- run_supervisorctl_program_action start "$program"
   fi
 }
 
@@ -309,6 +415,27 @@ require_no_args() {
     echo "$cmd_name does not accept arguments" >&2
     exit 1
   fi
+}
+
+run_as_enshrouded_if_root() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    "$@"
+    return $?
+  fi
+
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u enshrouded -- "$@"
+    return $?
+  fi
+
+  if command -v su >/dev/null 2>&1; then
+    local cmd_quoted
+    printf -v cmd_quoted '%q ' "$@"
+    su -s /bin/bash enshrouded -c "$cmd_quoted"
+    return $?
+  fi
+
+  fatal "Cannot drop root privileges: neither runuser nor su is available"
 }
 
 is_non_flag_token() {
@@ -396,18 +523,18 @@ run_server_command() {
       ;;
     status)
       require_no_args "$command_name" "$@"
-      run_supervisorctl status
+      render_colored_supervisor_status
       ;;
     menu)
       run_job_script "menu" "$@"
       ;;
     start)
       require_no_args "$command_name" "$@"
-      server_guard_run "core_ready" -- run_supervisorctl start server
+      server_guard_run "core_ready" -- run_supervisorctl_program_action start server
       ;;
     stop)
       require_no_args "$command_name" "$@"
-      server_guard_run "core_ready" -- run_supervisorctl stop server
+      server_guard_run "core_ready" -- run_supervisorctl_program_action stop server
       ;;
     restart)
       if [[ "$#" -gt 0 ]] && is_non_flag_token "$1"; then
