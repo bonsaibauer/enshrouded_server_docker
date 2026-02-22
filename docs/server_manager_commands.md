@@ -1,6 +1,7 @@
 # Server Manager Commands
 
 Use your container name instead of `enshroudedserver`.
+For full container shutdowns, use a 90-second grace period: `docker stop -t 90 enshroudedserver`.
 
 Note: All commands below are shown without the `server` prefix. Internally, they are aliases to the same script. If needed, you can still run them as `docker exec enshroudedserver server <command>`.
 Most commands can run without extra arguments and then use defaults from `server_manager.json` / `enshrouded_server.json` (for example cron schedules and player-check behavior).
@@ -11,6 +12,7 @@ Most commands can run without extra arguments and then use defaults from `server
 - `docker exec -it enshroudedserver menu`: Opens the interactive management menu.
 - `docker exec enshroudedserver start`: Starts the server job.
 - `docker exec enshroudedserver stop`: Stops the server job.
+- `docker stop -t 90 enshroudedserver`: Stops the whole container with safe grace time.
 - `docker exec enshroudedserver restart`: Runs the restart job with defaults from `server_manager.json`.
 - `docker exec enshroudedserver update`: Runs normal updater flow (install if needed, then start server).
 - `docker exec enshroudedserver update force`: Forces full update path.
@@ -66,6 +68,8 @@ docker exec enshroudedserver stop
 
 - What this command does: Stops the server job via supervisor.
 - `docker exec enshroudedserver stop`: Use before maintenance or container updates.
+- Internal stop grace for this command is 90 seconds (`supervisord` `stopwaitsecs=90`).
+- Full container stop: `docker stop -t 90 enshroudedserver` (recommended for graceful container shutdown).
 - Args: None.
 
 ### 1.5 `restart`

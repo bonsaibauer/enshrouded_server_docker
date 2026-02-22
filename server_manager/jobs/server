@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null
 SUPERVISORCTL_BIN="${SUPERVISORCTL_BIN:-supervisorctl}"
 
 enshrouded_server_pid=-1
-timeout=60
+timeout=90
 kill_signal=INT
 WAIT_FOR_DOWNLOAD="true"
 enshrouded_server=""
@@ -1066,9 +1066,9 @@ shutdown() {
     debug "enshrouded server is not running yet - aborting startup"
     exit
   fi
-  shutdown_step_timeout="${SERVER_SHUTDOWN_STEP_TIMEOUT:-20}"
+  shutdown_step_timeout="${SERVER_SHUTDOWN_STEP_TIMEOUT:-30}"
   if [[ -z "$shutdown_step_timeout" || ! "$shutdown_step_timeout" =~ ^[0-9]+$ || "$shutdown_step_timeout" -le 0 ]]; then
-    shutdown_step_timeout=20
+    shutdown_step_timeout=30
   fi
   info "Shutting down enshrouded server with PID $enshrouded_server_pid"
   if [[ -d "/proc/$enshrouded_server_pid" ]]; then

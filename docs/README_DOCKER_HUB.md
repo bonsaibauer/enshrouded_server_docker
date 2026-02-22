@@ -15,12 +15,19 @@
 docker run \
   --name enshroudedserver \
   --restart=unless-stopped \
+  --stop-timeout 90 \
   -p 15637:${ENSHROUDED_QUERY_PORT:=15637}/udp \
   -e PUID="$(id -u enshrouded)" \
   -e PGID="$(id -g enshrouded)" \
   -e ENSHROUDED_QUERY_PORT \
   -v /home/enshrouded/server_1:/home/enshrouded/server \
   bonsaibauer/enshrouded_server_docker:latest
+```
+
+For a safe container shutdown, use:
+
+```bash
+docker stop -t 90 enshroudedserver
 ```
 
 ## Commands

@@ -593,7 +593,7 @@ menu_stop_server_now() {
     return 0
   fi
 
-  if ! "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 30 >/dev/null 2>&1; then
+  if ! "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 90 >/dev/null 2>&1; then
     ui_error "Timeout while stopping server. Aborting."
     return 1
   fi

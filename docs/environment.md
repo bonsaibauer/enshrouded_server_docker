@@ -33,10 +33,18 @@ Example:
 
 ```bash
 docker run \
+  --stop-timeout 90 \
   -p 15637:${ENSHROUDED_QUERY_PORT:=15637}/udp \
   -e ENSHROUDED_QUERY_PORT \
   ...
 ```
+
+## Container Stop Grace
+
+For a controlled shutdown of the Enshrouded process chain, use a 90-second Docker stop grace period.
+
+- `docker run`: add `--stop-timeout 90`
+- `docker stop`: use `docker stop -t 90 <container>`
 
 ## Validation Rules
 
