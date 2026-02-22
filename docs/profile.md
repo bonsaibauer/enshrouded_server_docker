@@ -85,6 +85,7 @@ Profile reset/apply is handled by the unified `profile` job (simple CLI mode):
   - `server profile enshrouded apply default`
   - `server profile manager reset`
   - Optional advanced flags are still supported (`--target`, `--action`, `--profile`, `--create-backup`).
+  - If `EN_PROFILE`/`MANAGER_PROFILE` is set via container ENV, the matching CLI profile apply/reset action is blocked.
 
 The job will:
 

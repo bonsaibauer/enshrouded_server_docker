@@ -37,6 +37,7 @@ RUN dpkg --add-architecture i386 \
         python3-pip \
         libfreetype6 \
         libfreetype6:i386 \
+    && pip3 install --no-cache-dir --break-system-packages python-a2s==1.3.0 \
     && apt autoremove --purge && apt clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 

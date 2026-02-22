@@ -14,36 +14,36 @@ docker exec -it enshroudedserver server menu
 
 ## Navigation
 
-- Enter a number (or command letter) and press Enter
-- `[0]` is always `Back` (or `Exit` in the main menu)
-- Global commands (available in most menus):
-  - `m` = Main Menu
-  - `x` (or `q`) = Exit menu
+- Enter a number (or `b`/`m`/`x`) and press Enter
+- `b` = Back in submenus (`b` in main menu exits)
+- `m` = Main Menu
+- `x` = Exit menu
 - Prompts use `yes/no` (also accepts `y/n`)
 - `[ENV]` marks settings controlled by container environment variables (locked in the editors)
 - Some actions (apply/restore) run as Supervisor jobs; their output is visible in `docker logs`.
 
 Exit behavior:
 
-- If `server` is `STOPPED` when you exit, the menu will ask whether it should be started before closing.
+- If `server` is `STOPPED` when you exit, the menu asks whether it should be started before closing.
+- If confirmed, the menu uses the bootstrap start flow.
 
 ## Main Menu
 
 1. `Enshrouded Server Settings`
 2. `Server Manager Settings`
-3. `Backups`
-4. `start`
-5. `stop`
-6. `restart`
-7. `update`
+3. `Backup Menu`
+4. `Start Server`
+5. `Stop Server`
+6. `Restart Server`
+7. `Update Server`
 8. `update_force`
-9. `password-view`
-10. `Create Savegame Backup (.zip)`
+9. `View Passwords`
+10. `Create Manual Backup (.zip)`
 11. `Other Commands`
 
 Notes:
 
-- `Create Savegame Backup (.zip)` is a shortcut for `Backups -> Create savegame backup now (.zip)`.
+- `Create Manual Backup (.zip)` is a shortcut for `Backup Menu -> Create manual full backup now`.
 - The items `start/stop/restart/update/password-view` are the same actions as `server <command>` and are shown in the main menu for convenience.
 - `update_force` in the menu maps to `update force`.
 
@@ -69,7 +69,7 @@ Notes:
      - Applies the selected template to `/home/enshrouded/server/enshrouded_server.json`
      - Ensures `.bans` exists and generates missing `userGroups[].password` values
      - Afterwards you should start/restart the server to apply changes.
-     - Bootstrap is available as a convenience (note: bootstrap does not start the server).
+     - Bootstrap is available as a convenience. The bootstrap job itself does not start the server; the menu can prompt for start afterwards.
 
 ### What Existing Commands Are Used?
 
@@ -111,31 +111,26 @@ When switching Server Manager profiles the menu reuses existing profile/init hel
 
 ## Backups
 
-This submenu provides restore operations for:
-
-- the persistent JSON configs (timestamped backups in `BACKUP_DIR/profiles`)
-- the savegame backups (zip files in `BACKUP_DIR`)
+This submenu provides backup and restore operations via the unified backup job.
 
 Menu options:
 
-1. `Restore Enshrouded settings (enshrouded_server.json)`
-   - If no config backups exist yet, the menu can create a backup of the current config.
-   - Before restoring, the menu offers to create a safety backup of the current config.
-2. `Restore Server Manager settings (server_manager.json)`
-   - If no config backups exist yet, the menu can create a backup of the current config.
-   - Before restoring, the menu offers to create a safety backup of the current config.
-3. `Create savegame backup now (.zip)`
-   - Runs `supervisorctl start backup`
-4. `Restore savegame from .zip backup`
-   - Lists zip backups from `BACKUP_DIR` (pattern: `*-$SAVEFILE_NAME.zip`)
-   - If no zip backups exist yet, the menu can create one first.
-   - Stops `server` first (required)
-   - Optional: create a backup of the current savegame before restoring
-   - Confirms before deleting current save files and extracting the selected backup
+1. `Restore from backup ZIP`
+   - Lists available ZIP files (manual + scheduled).
+   - Detects included components (`savegame`, `enshrouded_server.json`, `server_manager.json`).
+   - Lets you select which components to restore.
+   - Can optionally create a safety backup before restore.
+2. `Create manual full backup now`
+   - Runs a manual full backup (savegame + config includes according to backup job defaults).
+3. `Create config backup now`
+   - Offers:
+     - Enshrouded config only
+     - Server Manager config only
+     - Both config files
 
 Notes:
 
-- Savegame zip backups are always created by the same Supervisor job (`backup`), no matter if you trigger it manually (menu / `server backup`), via cron (`BACKUP_CRON`), or as a safety backup before restore.
+- ZIP backups are always created by the same backup job (`backup`), no matter if triggered manually, via cron, or as safety backup before restore.
 - `BACKUP_MAX_COUNT` keeps the newest N zip backups and deletes older ones (nothing is overwritten). Manual/safety backups count toward the same limit.
 - Config JSON backups under `BACKUP_DIR/profiles` are not affected by `BACKUP_MAX_COUNT`.
 

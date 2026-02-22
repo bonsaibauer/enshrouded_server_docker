@@ -213,6 +213,7 @@ docker exec enshroudedserver profile <manager|enshrouded> <apply|reset> [profile
 - `<apply|reset>`: Operation mode.
 - `[profile]`: Profile name (required for `apply`).
 - Note: A config backup is created by default before profile changes.
+- Note: If `MANAGER_PROFILE`/`EN_PROFILE` is set via container ENV for the selected target, profile apply/reset is blocked.
 - Advanced also supported: `--target`, `--action`, `--profile`, `--create-backup true|false`.
 
 ### 3.2 `password-view`

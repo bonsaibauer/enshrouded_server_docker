@@ -21,6 +21,23 @@ Profile selection is special:
 - The menu persists profile selection in `server_manager.json` under `actualProfilManager` / `actualProfilEnshrouded`.
 - `EN_PROFILE` / `MANAGER_PROFILE` environment values are mainly used for the first bootstrap (fresh volume / deleted config).
 
+## Query Port Pattern
+
+Recommended for consistent internal query-port behavior:
+
+- Keep host-side port fixed to `15637`.
+- Set the container-side query port and `ENSHROUDED_QUERY_PORT` from one value.
+- Use shell default assignment in `-p` (`:=`) and pass the same variable via `-e`.
+
+Example:
+
+```bash
+docker run \
+  -p 15637:${ENSHROUDED_QUERY_PORT:=15637}/udp \
+  -e ENSHROUDED_QUERY_PORT \
+  ...
+```
+
 ## Validation Rules
 
 ENV input validation is driven by CSV rule files:
@@ -96,6 +113,12 @@ There are two backup types:
 | Variable | Description | Default |
 |---|---|---|
 | `SUPERVISORCTL_BIN` | Binary used by the `server` command dispatcher | `supervisorctl` |
+
+## Python Dependency Variable
+
+| Variable | Description | Default |
+|---|---|---|
+| `A2S_PY_INSTALL_TIMEOUT_SECONDS` | Max seconds for runtime install fallback of `python-a2s` (`0` = no timeout) | `45` |
 
 ## Restart Timing Variable
 

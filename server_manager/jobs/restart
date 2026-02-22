@@ -42,7 +42,7 @@ load_runtime_values() {
 }
 
 run_restart() {
-  local players_check_rc players_check_arg
+  local players_check_rc players_check_arg server_was_running
   "${SCRIPT_DIR}/server" hook-run "restart pre" "${RESTART_PRE_HOOK:-}"
 
   if [[ "$RESTART_FORCE" != "true" ]]; then
@@ -66,12 +66,18 @@ run_restart() {
   fi
 
   info "Restarting Enshrouded server (downtime=${RESTART_DOWNTIME_SECONDS}s)"
-  info "Stopping Enshrouded server"
-  if ! "${SCRIPT_DIR}/server" guard-run server_ready -- supervisorctl stop server >/dev/null 2>&1; then
-    fatal "Failed to stop Enshrouded server via supervisor"
+  server_was_running="false"
+  if is_supervisor_running "server"; then
+    server_was_running="true"
+    info "Stopping Enshrouded server"
+    if ! "${SCRIPT_DIR}/server" guard-run core_ready -- supervisorctl stop server >/dev/null 2>&1; then
+      fatal "Failed to stop Enshrouded server via supervisor"
+    fi
+  else
+    info "Enshrouded server is already stopped - proceeding to start phase"
   fi
 
-  if [[ "$RESTART_DOWNTIME_SECONDS" -gt 0 ]]; then
+  if [[ "$server_was_running" == "true" && "$RESTART_DOWNTIME_SECONDS" -gt 0 ]]; then
     info "Waiting ${RESTART_DOWNTIME_SECONDS}s before starting Enshrouded server"
     sleep "$RESTART_DOWNTIME_SECONDS"
   fi

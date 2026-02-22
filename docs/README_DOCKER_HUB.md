@@ -15,9 +15,10 @@
 docker run \
   --name enshroudedserver \
   --restart=unless-stopped \
-  -p 15637:15637/udp \
+  -p 15637:${ENSHROUDED_QUERY_PORT:=15637}/udp \
   -e PUID="$(id -u enshrouded)" \
   -e PGID="$(id -g enshrouded)" \
+  -e ENSHROUDED_QUERY_PORT \
   -v /home/enshrouded/server_1:/home/enshrouded/server \
   bonsaibauer/enshrouded_server_docker:latest
 ```

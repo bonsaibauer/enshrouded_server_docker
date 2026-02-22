@@ -169,7 +169,9 @@ render_colored_supervisor_status() {
   local output rc line program state details color
   output="$(run_supervisorctl status 2>&1)"
   rc=$?
-  if [[ "$rc" -ne 0 ]]; then
+  # supervisorctl returns rc=3 when one or more programs are not RUNNING.
+  # For a status view this is expected and should still be rendered normally.
+  if [[ "$rc" -ne 0 && "$rc" -ne 3 ]]; then
     printf "%s\n" "$output" >&2
     return "$rc"
   fi
@@ -189,6 +191,8 @@ render_colored_supervisor_status() {
       printf "%s\n" "$line"
     fi
   done <<<"$output"
+
+  return 0
 }
 
 debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && echo "DEBUG - $*" || true; }
@@ -1115,13 +1119,26 @@ server_stop_safe() {
   done
 }
 
+server_resolve_query_port() {
+  local port cfg_file
+  port="${SERVER_QUERY_PORT:-${ENSHROUDED_QUERY_PORT:-}}"
+  if [[ -z "$port" ]]; then
+    cfg_file="${install_path}/enshrouded_server.json"
+    if command -v jq >/dev/null 2>&1 && [[ -f "$cfg_file" ]]; then
+      port="$(jq -r '.queryPort | if . == null then empty else tostring end' "$cfg_file" 2>/dev/null || true)"
+    fi
+  fi
+  [[ -n "$port" ]] || port="15637"
+  printf "%s" "$port"
+}
+
 server_players_check() {
   local port connected_players
   if [[ "$CHECK_PLAYERS" == "false" ]]; then
     return 0
   fi
 
-  port="${SERVER_QUERY_PORT:-${ENSHROUDED_QUERY_PORT:-15637}}"
+  port="$(server_resolve_query_port)"
   if [[ -z "$port" || ! "$port" =~ ^[0-9]+$ || "$port" -le 0 ]]; then
     fatal "Invalid query port: ${port:-<empty>}"
   fi
@@ -1170,7 +1187,9 @@ main() {
       return 0
       ;;
     players-check)
-      info "Running server action: players-check (check_players=${CHECK_PLAYERS}, query_port=${SERVER_QUERY_PORT:-${ENSHROUDED_QUERY_PORT:-15637}})"
+      local players_check_query_port
+      players_check_query_port="$(server_resolve_query_port)"
+      info "Running server action: players-check (check_players=${CHECK_PLAYERS}, query_port=${players_check_query_port})"
       server_players_check
       players_rc=$?
       if [[ "$players_rc" -eq 10 ]]; then

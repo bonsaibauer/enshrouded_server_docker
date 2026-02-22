@@ -57,6 +57,7 @@ menu_list_known_env_vars() {
 
   mapfile -t vars < <(
     {
+      validation_list_envs 2>/dev/null || true
       validation_list_envs_by_meta_field "managerJsonPath" 2>/dev/null || true
       validation_list_envs_by_meta_field "enshroudedMenuJsonPath" 2>/dev/null || true
       validation_list_envs_by_meta_field "enshroudedJsonPath" 2>/dev/null || true
@@ -70,13 +71,18 @@ menu_list_known_env_vars() {
 }
 
 menu_capture_external_env_overrides() {
-  local var
+  local var value mode
   MENU_EXTERNAL_ENV=()
 
   while IFS= read -r var; do
     [[ -z "$var" ]] && continue
     if [[ -n "${!var+x}" ]]; then
-      MENU_EXTERNAL_ENV["$var"]="${!var}"
+      value="${!var}"
+      mode="$(validation_env_mode "$var" 2>/dev/null || echo "soft")"
+      if [[ -z "$value" && "$mode" != "hard" ]]; then
+        continue
+      fi
+      MENU_EXTERNAL_ENV["$var"]="$value"
     fi
   done < <(menu_list_known_env_vars)
 }
@@ -385,20 +391,6 @@ ui_confirm_yes_no() {
   done
 }
 
-ui_prompt_number() {
-  local prompt ans
-  prompt="$1"
-  while :; do
-    ans="$(ui_read "$prompt: ")"
-    ans="$(echo "$ans" | xargs)"
-    if [[ "$ans" =~ ^[0-9]+$ ]]; then
-      printf "%s" "$ans"
-      return 0
-    fi
-    ui_warn_line "Please enter a number."
-  done
-}
-
 ui_prompt_choice() {
   # Reads and normalizes a choice (trim + lower-case).
   local prompt ans
@@ -410,7 +402,7 @@ ui_prompt_choice() {
 
 ui_actions_bar() {
   # Nano-like action hint bar (simple, line-based).
-  # Usage: ui_actions_bar "0 Back" "m Main" "x Exit"
+  # Usage: ui_actions_bar "b Back" "m Main" "x Exit"
   local item
   ui_hr
   printf "%s" "${C_MAGENTA}"
@@ -427,7 +419,7 @@ menu_nav_is_set() { [[ -n "${MENU_NAV:-}" ]]; }
 menu_nav_value() { printf "%s" "${MENU_NAV:-}"; }
 
 menu_prompt_nav_choice() {
-  # Prompt and handle shared nav keys (0/m/x).
+  # Prompt and handle shared nav keys (b/m/x).
   # Prints either the typed choice or a nav token:
   #   __nav_back__, __nav_main__, __nav_exit__
   local prompt main_screen choice
@@ -436,13 +428,13 @@ menu_prompt_nav_choice() {
 
   choice="$(ui_prompt_choice "$prompt")"
   case "$choice" in
-    x|q)
+    x)
       [[ "$main_screen" == "true" ]] && ui_clear
       menu_nav_set "exit"
       printf "%s" "__nav_exit__"
       return 0
       ;;
-    0)
+    b)
       if [[ "$main_screen" == "true" ]]; then
         ui_clear
         menu_nav_set "exit"
@@ -453,12 +445,8 @@ menu_prompt_nav_choice() {
       return 0
       ;;
     m)
-      if [[ "$main_screen" == "true" ]]; then
-        printf "%s" "$choice"
-      else
-        menu_nav_set "main"
-        printf "%s" "__nav_main__"
-      fi
+      menu_nav_set "main"
+      printf "%s" "__nav_main__"
       return 0
       ;;
   esac
@@ -591,7 +579,7 @@ ui_header() {
   ui_hr
 
   if ui_has_tty; then
-    ui_note "Navigation: enter a number (or command letter) and press Enter."
+    ui_note "Navigation: enter a number or b/m/x and press Enter."
     ui_note "Exit behavior: if the server is STOPPED, you will be asked if it should be started."
   else
     ui_warn_line "Hint: no TTY detected. Start with: docker exec -it CONTAINER_NAME server menu"
@@ -639,13 +627,40 @@ menu_stop_server_for_config_change() {
   return 0
 }
 
+menu_start_server_via_bootstrap() {
+  ui_note "Starting server via bootstrap flow..."
+  if ! server_run bootstrap >/dev/null 2>&1; then
+    ui_warn_line "Bootstrap start request failed."
+    return 1
+  fi
+
+  if ! menu_wait_for_program_exit "bootstrap" 900; then
+    ui_warn_line "Bootstrap did not finish in time."
+    return 1
+  fi
+
+  if is_supervisor_running "server"; then
+    ui_success "Server started via bootstrap."
+    return 0
+  fi
+
+  ui_note "Bootstrap completed; requesting server start..."
+  server_run start >/dev/null 2>&1 || true
+  if is_supervisor_running "server"; then
+    ui_success "Server start requested."
+    return 0
+  fi
+
+  ui_warn_line "Server is still not running. Check logs/status."
+  return 1
+}
+
 menu_prompt_start_server() {
   local prompt
   prompt="${1:-Start server now?}"
 
   if ui_confirm_yes_no "$prompt"; then
-    server_run start >/dev/null 2>&1 || true
-    ui_success "Server start requested."
+    menu_start_server_via_bootstrap || true
   else
     ui_note "Server remains stopped."
   fi
@@ -769,15 +784,25 @@ menu_warn_env_overrides_before_profile_selection() {
   case "$target" in
     manager)
       label="Server Manager"
-      mapfile -t keys < <(validation_list_envs_by_meta_field "managerJsonPath")
+      mapfile -t keys < <(
+        {
+          validation_list_envs_by_meta_field "managerJsonPath" 2>/dev/null || true
+          printf "%s\n" "MANAGER_PROFILE"
+        } | awk 'NF' | sort -u
+      )
       ;;
     enshrouded)
       label="Enshrouded"
-      for k in "${!MENU_EXTERNAL_ENV[@]}"; do
-        case "$k" in
-          ENSHROUDED_*) keys+=("$k") ;;
-        esac
-      done
+      mapfile -t keys < <(
+        {
+          printf "%s\n" "EN_PROFILE"
+          for k in "${!MENU_EXTERNAL_ENV[@]}"; do
+            case "$k" in
+              ENSHROUDED_*) printf "%s\n" "$k" ;;
+            esac
+          done
+        } | awk 'NF' | sort -u
+      )
       ;;
     *)
       return 1
@@ -918,7 +943,7 @@ menu_run_config_backup_now() {
     ui_opt 2 "Server Manager config only"
     ui_opt 3 "Both config files"
     echo
-    ui_actions_bar "0 Back" "m Main" "x Exit"
+    ui_actions_bar "b Back" "m Main" "x Exit"
     echo
 
     choice="$(menu_prompt_nav_choice "Choice")"
@@ -991,7 +1016,7 @@ menu_restore_backup() {
       idx=$((idx + 1))
     done
     echo
-    ui_actions_bar "0 Back" "m Main" "x Exit"
+    ui_actions_bar "b Back" "m Main" "x Exit"
     echo
 
     choice="$(menu_prompt_nav_choice "Backup")"
@@ -1264,6 +1289,62 @@ menu_spec_editor__display_value_for_var() {
   fi
 }
 
+menu_spec_editor__description_for_var() {
+  local env_var desc hint out
+  env_var="$1"
+
+  desc="$(validation_env_description "$env_var" 2>/dev/null || true)"
+  hint="$(validation_env_allowed_hint "$env_var" 2>/dev/null || true)"
+
+  out=""
+  if [[ -n "$desc" ]]; then
+    out="$desc"
+  fi
+  if [[ -n "$hint" ]]; then
+    if [[ -n "$out" ]]; then
+      out="${out} | ${hint}"
+    else
+      out="$hint"
+    fi
+  fi
+
+  if [[ -z "$out" ]]; then
+    out="-"
+  fi
+
+  printf "%s" "$out"
+}
+
+menu_spec_editor__prompt_value_from_options() {
+  # Prompt as numeric choice over a fixed set of values.
+  local prompt choice selected_idx
+  prompt="${1:-New value}"
+  shift || true
+  local -a options
+  options=("$@")
+
+  if [[ "${#options[@]}" -le 0 ]]; then
+    printf ""
+    return 0
+  fi
+
+  while :; do
+    choice="$(ui_prompt_choice "$prompt")"
+    if [[ -z "$choice" ]]; then
+      printf ""
+      return 0
+    fi
+
+    selected_idx="$(menu_choice_index "$choice" "${#options[@]}" || true)"
+    if [[ -n "$selected_idx" ]]; then
+      printf "%s" "${options[$selected_idx]}"
+      return 0
+    fi
+
+    ui_warn_line "Invalid selection. Enter a number between 1 and ${#options[@]}."
+  done
+}
+
 menu_spec_editor__prompt_value() {
   # Prompts for a new value. Prints the raw input to stdout.
   local env_var label current empty_action bool_toggle
@@ -1273,17 +1354,18 @@ menu_spec_editor__prompt_value() {
   empty_action="${4:-cancel}"   # cancel|null|clear_list
   bool_toggle="${5:-false}"
 
-  local type desc hint env_mode
+  local type env_mode rule enum_count
   type="$(validation_env_type "$env_var" 2>/dev/null || true)"
   [[ -z "$type" ]] && type="string"
+  rule="$(validation_rule_json "$env_var" 2>/dev/null || true)"
+  enum_count="$(jq -r 'if (.val_enum|type) == "array" then (.val_enum|length) else 0 end' <<<"$rule" 2>/dev/null || echo "0")"
+  if ! [[ "$enum_count" =~ ^[0-9]+$ ]]; then
+    enum_count=0
+  fi
 
   echo
   ui_kv "Field" "$label"
   ui_kv "Current" "${current:-<empty>}"
-  desc="$(validation_env_description "$env_var" 2>/dev/null || true)"
-  hint="$(validation_env_allowed_hint "$env_var" 2>/dev/null || true)"
-  [[ -n "$desc" ]] && ui_note "$desc"
-  [[ -n "$hint" ]] && ui_note "$hint"
 
   env_mode="$(validation_env_mode "$env_var" 2>/dev/null || echo "soft")"
   if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
@@ -1307,18 +1389,25 @@ menu_spec_editor__prompt_value() {
   fi
   echo
 
-  local value normalized
-  value="$(ui_read "New value: ")"
-  value="$(echo "$value" | xargs)"
-
-  # Normalize booleans for convenience.
+  local value i v
   if [[ "$type" == "bool" ]]; then
-    normalized="$(echo "$value" | tr '[:upper:]' '[:lower:]')"
-    case "$normalized" in
-      1|ja|j|y|yes) value="true" ;;
-      0|nein|n|no) value="false" ;;
-      true|false) value="$normalized" ;;
-    esac
+    ui_opt 1 "true"
+    ui_opt 2 "false"
+    value="$(menu_spec_editor__prompt_value_from_options "New value (1-2)" "true" "false")"
+  elif [[ "$enum_count" -gt 0 ]]; then
+    local -a enum_values
+    enum_values=()
+    while IFS= read -r v; do
+      enum_values+=("$v")
+    done < <(jq -r '.val_enum[] | tostring' <<<"$rule" 2>/dev/null || true)
+
+    for i in "${!enum_values[@]}"; do
+      ui_opt "$((i + 1))" "${enum_values[$i]}"
+    done
+    value="$(menu_spec_editor__prompt_value_from_options "New value (1-${#enum_values[@]})" "${enum_values[@]}")"
+  else
+    value="$(ui_read "New value: ")"
+    value="$(echo "$value" | xargs)"
   fi
 
   printf "%s" "$value"
@@ -1423,25 +1512,6 @@ menu_spec_editor__edit_var() {
   menu_spec_editor__set_jq "$file" "$jq_arg" val "$v" "$json_path = \$val" || true
 }
 
-menu_spec_editor__template_index_locked_badge() {
-  # Prints a group-level [ENV] badge if any field in the template is controlled by ENV.
-  local template env_prefix idx field env_var
-  template="$1"
-  env_prefix="$2"
-  idx="$3"
-
-  while IFS= read -r field; do
-    [[ -z "$field" ]] && continue
-    env_var="${env_prefix}_${idx}_${field}"
-    if menu_env_override_is_set "$env_var"; then
-      printf " %s" "${C_RED}[ENV]${C_RESET}"
-      return 0
-    fi
-  done < <(validation_list_template_fields "$template")
-
-  return 0
-}
-
 menu_spec_editor__user_groups_edit_group() {
   local file g template env_prefix backup_job empty_label
   file="$1"
@@ -1491,10 +1561,11 @@ menu_spec_editor__user_groups_edit_group() {
       fields+=("$field")
       field_count=$((field_count + 1))
 
-      printf "%s[%s]%s %-22s %s%s\n" \
+      printf "%s[%s]%s %-22s %s%s  %s%s%s\n" \
         "${C_MAGENTA}" "$field_count" "${C_RESET}" "$label" \
         "$(menu_spec_editor__display_value_for_var "$file" "$env_var" "$json_path" "$empty_label")" \
-        "$(menu_env_locked_badge "$env_var")"
+        "$(menu_env_locked_badge "$env_var")" \
+        "${C_DIM}" "$(menu_spec_editor__description_for_var "$env_var")" "${C_RESET}"
     done < <(menu_editor_template_fields "$template")
 
     if [[ "$field_count" -le 0 ]]; then
@@ -1504,7 +1575,7 @@ menu_spec_editor__user_groups_edit_group() {
     fi
 
     echo
-    ui_actions_bar "0 Back" "m Main" "x Exit"
+    ui_actions_bar "b Back" "m Main" "x Exit"
     echo
 
     local choice selected_idx
@@ -1575,7 +1646,7 @@ menu_edit_user_groups_from_spec() {
     if [[ "$count" -le 0 ]]; then
       ui_warn_line "No userGroups found."
       echo
-      ui_actions_bar "0 Back" "m Main" "x Exit"
+      ui_actions_bar "b Back" "m Main" "x Exit"
       echo
       choice="$(menu_prompt_nav_choice "Choice")"
       if menu_nav_choice_is_handled "$choice"; then
@@ -1588,11 +1659,11 @@ menu_edit_user_groups_from_spec() {
       name="$(jq -r ".userGroups[$idx].name | if . == null or . == \"\" then \"Group $idx\" else . end" "$file" 2>/dev/null || echo "Group $idx")"
       printf "%s[%s]%s %s%s%s\n" \
         "${C_MAGENTA}" "$((idx + 1))" "${C_RESET}" \
-        "${C_GREEN}" "$name" "${C_RESET}$(menu_spec_editor__template_index_locked_badge "$template" "$env_prefix" "$idx")"
+        "${C_GREEN}" "$name" "${C_RESET}"
     done
 
     echo
-    ui_actions_bar "0 Back" "m Main" "x Exit"
+    ui_actions_bar "b Back" "m Main" "x Exit"
     echo
 
     choice="$(menu_prompt_nav_choice "Group")"
@@ -1715,7 +1786,7 @@ menu_edit_json_from_spec() {
 
       options+=("$var")
       field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$label" "$(menu_spec_editor__display_value_for_var "$file" "$var" "$json_path" "$empty_label")" "$(menu_env_locked_badge "$var")"
+      printf "%s[%s]%s %-26s %s%s  %s%s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$label" "$(menu_spec_editor__display_value_for_var "$file" "$var" "$json_path" "$empty_label")" "$(menu_env_locked_badge "$var")" "${C_DIM}" "$(menu_spec_editor__description_for_var "$var")" "${C_RESET}"
     done < <(menu_editor_envs_for_meta_field "$meta_field")
 
     local i token extra_label extra_group cb
@@ -1734,7 +1805,7 @@ menu_edit_json_from_spec() {
 
       options+=("$token")
       field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$extra_label" "${C_DIM}<enter>${C_RESET}"
+      printf "%s[%s]%s %-26s %s  %s%s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$extra_label" "${C_DIM}<enter>${C_RESET}" "${C_DIM}" "Open submenu." "${C_RESET}"
     done
 
     if [[ "$field_count" -le 0 ]]; then
@@ -1744,7 +1815,7 @@ menu_edit_json_from_spec() {
     fi
 
     echo
-    ui_actions_bar "0 Back" "m Main" "x Exit"
+    ui_actions_bar "b Back" "m Main" "x Exit"
     echo
 
     local choice selected_idx
@@ -1870,13 +1941,21 @@ editor_enshrouded_json() {
 }
 
 menu_profile_actions_after_change() {
+  local action_choice
   echo
   ui_note "Apply changes:"
   ui_opt 1 "Start/restart Enshrouded server"
-  ui_opt 2 "Run bootstrap (recommended; does not start server)"
-  ui_opt 0 "Back to menu"
+  ui_opt 2 "Run bootstrap"
   echo
-  case "$(ui_prompt_number "Action")" in
+  ui_actions_bar "b Back" "m Main" "x Exit"
+  echo
+
+  action_choice="$(menu_prompt_nav_choice "Action")"
+  if menu_nav_choice_is_handled "$action_choice"; then
+    return 0
+  fi
+
+  case "$action_choice" in
     1)
       server_run restart || true
       ui_success "Restart requested."
@@ -1885,16 +1964,17 @@ menu_profile_actions_after_change() {
     2)
       server_run bootstrap || true
       ui_success "Bootstrap started."
-      ui_note "Note: bootstrap does not start the server."
       if menu_wait_for_program_exit "bootstrap" 600; then
         echo
-        menu_prompt_start_server "Start server now?"
+        if ! is_supervisor_running "server"; then
+          menu_prompt_start_server "Start server now?"
+        fi
       else
         ui_note "Start the server later once bootstrap has finished."
       fi
       ui_pause
       ;;
-    0) ;;
+    b) ;;
     *) ;;
   esac
 }
@@ -1908,6 +1988,38 @@ menu_run_profile_job() {
   cmd_args=(profile "$target" "$action")
   [[ -n "$profile" ]] && cmd_args+=("$profile")
   server_run "${cmd_args[@]}" >/dev/null 2>&1
+}
+
+menu_profile_selector_env_name() {
+  case "$1" in
+    enshrouded) printf "%s" "EN_PROFILE" ;;
+    manager) printf "%s" "MANAGER_PROFILE" ;;
+    *) printf "%s" "" ;;
+  esac
+}
+
+menu_profile_flow_blocked_by_env() {
+  local target mode selector_env selector_value
+  target="$1"
+  mode="${2:-apply}"
+  selector_env="$(menu_profile_selector_env_name "$target")"
+  [[ -n "$selector_env" ]] || return 1
+  if ! menu_env_override_is_set "$selector_env"; then
+    return 1
+  fi
+
+  selector_value="$(menu_env_override_value "$selector_env")"
+  ui_header "Profile Selection Locked by ENV"
+  ui_warn_line "This profile flow is controlled by environment variables."
+  if [[ -n "$selector_value" ]]; then
+    ui_kv "ENV" "$selector_env=$(menu_env_override_pretty_value "$selector_env" "$selector_value") ${C_RED}[ENV]${C_RESET}"
+  else
+    ui_kv "ENV" "$selector_env=<set> ${C_RED}[ENV]${C_RESET}"
+  fi
+  ui_note "Action '${mode}' is disabled in menu while this ENV selector is set."
+  ui_note "Remove it from docker-compose/container env and restart container to manage profiles in menu."
+  ui_pause
+  return 0
 }
 
 menu_profile_flow() {
@@ -1944,6 +2056,10 @@ menu_profile_flow() {
       ;;
   esac
 
+  if menu_profile_flow_blocked_by_env "$target" "$mode"; then
+    return 0
+  fi
+
   case "$mode" in
     apply)
       if ! menu_warn_env_overrides_before_profile_selection "$target"; then
@@ -1970,7 +2086,7 @@ menu_profile_flow() {
           idx=$((idx + 1))
         done
         echo
-        ui_actions_bar "0 Back" "m Main" "x Exit"
+        ui_actions_bar "b Back" "m Main" "x Exit"
         echo
 
         selected="$(menu_prompt_nav_choice "Profile")"
@@ -2299,7 +2415,7 @@ menu_load_screen() {
     if [[ "$screen" == "main" ]]; then
       ui_actions_bar "x Exit"
     else
-      ui_actions_bar "0 Back" "m Main" "x Exit"
+      ui_actions_bar "b Back" "m Main" "x Exit"
     fi
     echo
 
@@ -2358,13 +2474,7 @@ main() {
         ui_banner
         ui_warn_line "The Enshrouded server is currently STOPPED."
         echo
-        if ui_confirm_yes_no "Do you want me to start server before exiting?"; then
-          ui_note "Starting server..."
-          server_run start >/dev/null 2>&1 || true
-          ui_success "Start requested."
-        else
-          ui_note "Server remains stopped."
-        fi
+        menu_prompt_start_server "Do you want me to start server before exiting?"
       fi
       ;;
   esac

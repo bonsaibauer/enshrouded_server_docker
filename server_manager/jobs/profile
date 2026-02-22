@@ -81,8 +81,6 @@ refresh_steamcmd_path() {
   fi
 }
 
-refresh_steamcmd_path
-
 backup_dir_resolve() {
   local dir
   dir="${BACKUP_DIR:-backups}"
@@ -475,6 +473,25 @@ parse_bool_arg() {
   esac
 }
 
+profile_selector_env_key() {
+  case "$1" in
+    enshrouded) echo "EN_PROFILE" ;;
+    manager) echo "MANAGER_PROFILE" ;;
+    *) echo "" ;;
+  esac
+}
+
+enforce_profile_selector_env_not_set() {
+  local selector_key selector_value
+  selector_key="$(profile_selector_env_key "$target")"
+  [[ -n "$selector_key" ]] || return 0
+
+  if [[ -n "${!selector_key+x}" ]]; then
+    selector_value="${!selector_key-}"
+    fatal "Profile action blocked: ${selector_key} is set via container ENV (${selector_value:-<empty>}). Remove it and restart container to manage profiles via CLI."
+  fi
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -766,6 +783,7 @@ load_runtime_values() {
 
 main() {
   parse_args "$@"
+  refresh_steamcmd_path
   load_runtime_values
   info "Running profile job (mode=${PROFILE_MODE}, target=${target:-<none>}, action=${action:-<none>})"
 
@@ -774,6 +792,8 @@ main() {
     info "Profile job complete (mode=password-view)"
     return 0
   fi
+
+  enforce_profile_selector_env_not_set
 
   if [[ -z "$profile_name" ]]; then
     if [[ "$target" == "manager" ]]; then
