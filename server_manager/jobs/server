@@ -307,8 +307,8 @@ server_guard_check_job_ready() {
 
   case "$job" in
     updater)
-      [[ -n "${steamcmd_path:-}" ]] || {
-        server_guard_set_reason "missing_var:steamcmd_path"
+      [[ -n "${STEAMCMD_BIN:-}" && -x "$STEAMCMD_BIN" ]] || {
+        server_guard_set_reason "missing_tool:steamcmd"
         return 1
       }
       ;;

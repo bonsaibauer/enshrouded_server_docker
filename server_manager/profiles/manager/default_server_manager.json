@@ -10,7 +10,6 @@
   "steamAppId": 2278520,
   "gameBranch": "public",
   "steamcmdArgs": "validate",
-  "steamcmdPath": "/usr/games/steamcmd",
   "winedebug": "-all",
   "updateCheckPlayers": false,
   "restartCheckPlayers": false,

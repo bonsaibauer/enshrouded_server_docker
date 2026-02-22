@@ -122,6 +122,12 @@ There are two backup types:
 |---|---|---|
 | `SUPERVISORCTL_BIN` | Binary used by the `server` command dispatcher | `supervisorctl` |
 
+## SteamCMD Path
+
+The runtime uses a fixed internal path:
+
+- `/usr/games/steamcmd`
+
 ## Python Dependency Variable
 
 | Variable | Description | Default |

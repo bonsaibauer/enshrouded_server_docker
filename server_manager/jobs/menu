@@ -690,14 +690,29 @@ menu_wait_for_program_exit() {
 }
 
 menu_env_override_is_set() {
-  local name k mode
+  local name k mode value found
   name="$1"
+  mode="$(validation_env_mode "$name" 2>/dev/null || echo "soft")"
+  found="false"
+  value=""
+
   for k in "${!MENU_EXTERNAL_ENV[@]}"; do
     if [[ "$k" == "$name" ]]; then
-      return 0
+      found="true"
+      value="${MENU_EXTERNAL_ENV[$k]}"
+      break
     fi
   done
-  mode="$(validation_env_mode "$name" 2>/dev/null || echo "soft")"
+
+  if [[ "$found" == "true" ]]; then
+    # Soft ENV with empty value behaves like "not set" in runtime resolution.
+    if [[ -n "$value" ]]; then
+      return 0
+    fi
+    [[ "$mode" == "hard" ]]
+    return $?
+  fi
+
   [[ "$mode" == "hard" ]]
 }
 
