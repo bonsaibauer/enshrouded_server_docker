@@ -190,6 +190,7 @@ newgrp docker
 > `usermod -aG enshrouded "${SUDO_USER:-$USER}"`: grants the current login user the same access as enshrouded.
 > `usermod -aG docker enshrouded`: lets enshrouded run docker without sudo.
 > `newgrp enshrouded` / `newgrp docker`: applies group changes in the current session (each opens a new shell; run the one you need, or open a new terminal for the other).
+> 
 > 🛡️ This ensures that the container can write to `/home/enshrouded/server_1` and all server data stays in one clean location.
 
 --- 
@@ -345,31 +346,34 @@ docker exec enshroudedserver profile passwords
 
 ![Server Menu Selection Menu](images/menu.png)
 
-What you get in the selection menu:
+<details>
+<summary><strong>Detailed summary: What you get in the selection menu</strong></summary>
 
 1. `Enshrouded Server Settings`
->  - `Edit current settings`: edits `enshrouded_server.json` directly (including `gameSettings` and `userGroups`).
-> - `Reset current profile`: resets the active config to the currently selected profile.
-> - `Select and apply profile`: selects a profile and applies it to the active config.
-> - `Manage Banned Accounts`: shows merged banned entries (`bannedAccounts` + legacy `bans`) and supports `deban`/unban (removes from both arrays).
+- `Edit current settings`: edits `enshrouded_server.json` directly (including `gameSettings` and `userGroups`).
+- `Reset current profile`: resets the active config to the currently selected profile.
+- `Select and apply profile`: selects a profile and applies it to the active config.
+- `Manage Banned Accounts`: shows merged banned entries (`bannedAccounts` + legacy `bans`) and supports `deban`/unban (removes from both arrays).
 
 2. `Server Manager Settings`
-> - `Edit current settings`: edits `server_manager/server_manager.json` directly.
-> - `Reset current profile` and `Select and apply profile`: same flow as above, but for manager config.
+- `Edit current settings`: edits `server_manager/server_manager.json` directly.
+- `Reset current profile` and `Select and apply profile`: same flow as above, but for manager config.
 
 3. `Backup Menu`
-> - Restore from ZIP, manual full backup, config backup.
+- Restore from ZIP, manual full backup, config backup.
 
 4. `Start/Stop/Restart/Update/update_force/View Passwords/Create Manual Backup`
-> - Direct quick actions without changing menus.
+- Direct quick actions without changing menus.
 
 5. `Other Commands`
-> - `status`, `scheduled-restart`, `bootstrap`, `cron sync`.
+- `status`, `scheduled-restart`, `bootstrap`, `cron sync`.
 
 Navigation and behavior:
 - Enter by number, `b` (back), `m` (main menu), `x` (exit).
 - `[ENV]` marks fields controlled by container environment variables, which may be locked in the editor.
 - If the server is stopped when you exit, the menu offers the combined `bootstrap + start` flow.
+
+</details>
 
 ## Option 3.2: Edit config files directly in the shell terminal
 
@@ -443,7 +447,7 @@ docker exec enshroudedserver bootstrap
 docker exec enshroudedserver start
 ```
 
-# 4. Simple Docker Commands
+# 4. Docker Commands
 
 - `docker logs -f enshroudedserver`: Follows recent container logs live.
 - `docker start enshroudedserver`: Starts the existing container.
@@ -452,10 +456,12 @@ docker exec enshroudedserver start
 - `docker rm enshroudedserver`: Removes the stopped container.
 
 
-# 5. Simple Server Manager Commands (Quick Readme)
+# 5. Server Manager Commands (Quick Readme)
 
 > [!TIP]
 > 🎛️ Open the control center with: `docker exec -it enshroudedserver menu`
+>
+> Full command reference: [`docs/commands.md`](docs/commands.md)
 
 - `docker exec enshroudedserver help`: Shows built-in command overview from the server dispatcher.
 - `docker exec enshroudedserver status`: Shows supervisor status for all jobs (`server`, `updater`, `crond`, ...).
