@@ -11,20 +11,17 @@
 
 [![Report Problem](https://img.shields.io/badge/Report-new_Problem_or_Issue-critical?style=flat&logo=github)](https://github.com/bonsaibauer/enshrouded_server_docker/issues/new)
 
-![Enshrouded Server Docker Banner](images/banner.png)
+# Enshrouded Dedicated Server Docker
 
-# Enshrouded Dedicated Server Docker - Introduction
-
-> [!TIP]
+> [!NOTE]
 > 🔥 **HELLO FLAMEBORN** 🔥  
 > Start fast, stay stable, and spend your time playing instead of fixing server drama.
-
-> [!TIP]
 > 🧠 **Supervisor Foundation Credit**  
 > The Supervisor-based core approach in this project is based on ideas from [`mornedhels/enshrouded-server`](https://github.com/mornedhels/enshrouded-server). Big respect for the groundwork.
 
 This introduction is for players who want a strong Enshrouded server setup without becoming full-time Docker admins.  
-You launch the container, open the menu, and the server manager handles updates, restarts, backups, profile switching, validation, and process control.
+
+![Enshrouded Server Docker Banner](images/banner.png)
 
 ## Why People Use This Setup
 
