@@ -256,7 +256,7 @@ Common adjustments:
 </details>
 
 <details>
-<summary><strong>Profiles Explained + Default Tables</strong></summary>
+<summary><strong>Profiles Explained</strong></summary>
 
 ### Profiles Explained
 
@@ -270,46 +270,38 @@ Common adjustments:
 
 > [!NOTE]
 > You have 2 profile switches:
-> - `EN_PROFILE=<name>` = game rules (difficulty, slots, chat, world behavior).
-> - `MANAGER_PROFILE=<name>` = server helper rules (backups, restarts, updates, schedules).
+> - `EN_PROFILE=<name>` chooses the Enshrouded template file.
+> - `MANAGER_PROFILE=<name>` chooses the Server Manager template file.
 
 > [!TIP]
-> Simple examples:
-> - Easy/cozy server: use `EN_PROFILE` with `Relaxed`.
-> - Hard server: use `EN_PROFILE` with `Hard` or `Survival`.
-> - Want auto backups: use a `MANAGER_PROFILE` with `backupCron` and `backupMaxCount`.
+> Right now, only `default` is shipped for both profile selectors.
+> Use these for now:
+> - `EN_PROFILE=default`
+> - `MANAGER_PROFILE=default`
+>
+> You can still change gameplay and automation directly:
+> - ENV-Difficulty: `ENSHROUDED_GS_PRESET=Default|Relaxed|Hard|Survival|Custom`
+> - Auto backups: `BACKUP_CRON` + `BACKUP_MAX_COUNT`
 
 > [!IMPORTANT]
 > - Profiles are mostly used on first start (or when config files are missing).
 > - If a profile name is wrong, `default` is used.
 > - If `EN_PROFILE` / `MANAGER_PROFILE` are fixed via container env, menu apply/reset for profiles is locked.
 
-### Profiles (`server_manager.json`)
+### Current Template (`server_manager.json`)
 
-| Status | Profile name | Update check players | Restart check players | Manual backup | Scheduled backup | `backupMaxCount` | `backupCron` | `updateCron` | `restartCron` | Source | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `[x]` | `default` | ❌ (`updateCheckPlayers=false`) | ❌ (`restartCheckPlayers=false`, downtime=`5s`) | ✅ | ❌ | `0` | ❌ | ❌ | ❌ | [`default_server_manager.json`](server_manager/profiles/manager/default_server_manager.json) | Currently shipped and active in quickstart examples |
-| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+| Selector | Current value | Template file |
+| --- | --- | --- |
+| `MANAGER_PROFILE` | `default` | [`default_server_manager.json`](server_manager/profiles/manager/default_server_manager.json) |
 
-Persisted active selections live in `server_manager.json` as `actualProfilManager` and `actualProfilEnshrouded`.
+### Current Template (`enshrouded_server.json`)
 
-... [View full server manager settings here](docs/server_manager.md)  
-... [Open profile selection section](docs/profile.md#selection)
-
-### Profiles (`enshrouded_server.json`)
-
-| Status | Profile name | `slotCount` | Voice chat | Text chat | `gameSettingsPreset` | Detailed `gameSettings.*` active? | Detailed settings source | User-group model | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `[x]` | `default` | `16` | ❌ | ❌ | `"Default"` | ❌ (only active when preset is `"Custom"`) | [`default_enshrouded_server.json`](server_manager/profiles/enshrouded/default_enshrouded_server.json) | 4 groups: Admin/Friend/Guest/Visitor | Currently shipped and active in quickstart examples |
-| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
-
-> [!NOTE]
-> `gameSettingsPreset` options for Enshrouded profiles:
-> `Default` | `Relaxed` | `Hard` | `Survival` | `Custom`
->
-> These are gameplay presets inside a profile (not separate shipped profile files).
+| Selector | Current value | Template file |
+| --- | --- | --- |
+| `EN_PROFILE` | `default` | [`default_enshrouded_server.json`](server_manager/profiles/enshrouded/default_enshrouded_server.json) |
 
 ... [View full server settings here](docs/enshrouded_server.md)  
+... [View full server manager settings here](docs/server_manager.md)  
 ... [Read full profile docs here](docs/profile.md)
 
 </details>
