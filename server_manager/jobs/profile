@@ -676,6 +676,45 @@ resolve_enshrouded_profile_path() {
   printf "%s" "$source_profile"
 }
 
+merge_preserved_enshrouded_bans() {
+  # Preserve existing ban data across profile apply/reset.
+  # Merges current config bans into the staged profile config.
+  local source_profile current_config out_file
+  source_profile="$1"
+  current_config="$2"
+  out_file="$3"
+
+  if [[ -f "$current_config" ]] && jq -e 'type == "object"' "$current_config" >/dev/null 2>&1; then
+    jq -s '
+      def arr($v): if ($v | type) == "array" then $v else [] end;
+      def same_ban($a; $b):
+        if (($a|type) == "object" and ($b|type) == "object" and ($a|has("accountId")) and ($b|has("accountId"))) then
+          (($a.accountId | tostring) == ($b.accountId | tostring))
+        else
+          ($a == $b)
+        end;
+      def merge_unique($left; $right):
+        reduce (($left + $right)[]) as $item ([];
+          if any(.[]; same_ban(.; $item)) then . else . + [$item] end
+        );
+
+      .[0] as $profile
+      | .[1] as $current
+      | $profile
+      | .bans = merge_unique(arr($current.bans); arr($profile.bans))
+      | .bannedAccounts = merge_unique(arr($current.bannedAccounts); arr($profile.bannedAccounts))
+      | if has("bans") then . else . + {bans: []} end
+      | if has("bannedAccounts") then . else . + {bannedAccounts: []} end
+    ' "$source_profile" "$current_config" >"$out_file"
+    return $?
+  fi
+
+  jq '
+    if has("bans") then . else . + {bans: []} end
+    | if has("bannedAccounts") then . else . + {bannedAccounts: []} end
+  ' "$source_profile" >"$out_file"
+}
+
 apply_enshrouded_profile() {
   local profile source_profile config_file config_dir tmp
   profile="$1"
@@ -685,9 +724,9 @@ apply_enshrouded_profile() {
 
   mkdir -p "$config_dir" 2>/dev/null || true
   tmp="$(mktemp "${config_dir}/.enshrouded_server.json.profile.XXXXXX")"
-  jq 'if has("bans") then . else . + {bans: []} end' "$source_profile" >"$tmp" || {
+  merge_preserved_enshrouded_bans "$source_profile" "$config_file" "$tmp" || {
     rm -f "$tmp" 2>/dev/null || true
-    fatal "Failed to prepare Enshrouded profile JSON"
+    fatal "Failed to prepare Enshrouded profile JSON (preserving bans)"
   }
 
   create_config_backup "enshrouded"

@@ -67,8 +67,14 @@ Notes:
      - Lists profile templates from `EN_PROFILE_DIR` (default: `/home/enshrouded/server/profiles/enshrouded/`, seeded from `/usr/local/etc/enshrouded/profiles/enshrouded/`)
      - If an active config exists, the menu will confirm and then replace it when applying the selected profile
      - Applies the selected template to `/home/enshrouded/server/enshrouded_server.json`
-     - Ensures `.bans` exists and generates missing `userGroups[].password` values
+     - Ensures `.bans`/`.bannedAccounts` exist and generates missing `userGroups[].password` values
+     - Preserves existing ban lists (`.bannedAccounts` and legacy `.bans`) across apply/reset operations.
      - Afterwards the menu offers a unified `bootstrap + start` action.
+
+4. `Manage Banned Accounts`
+   - Lists current banned accounts from `.bannedAccounts` and legacy `.bans`.
+   - Lets you select an entry and remove it (unban).
+   - Changes are written to both ban arrays for compatibility.
 
 ### What Existing Commands Are Used?
 

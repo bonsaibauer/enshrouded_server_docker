@@ -5,6 +5,7 @@ action,backups_menu,null,null,null,null,internal,null,menu_load_screen,null,null
 action,enshrouded_edit,null,null,null,null,internal,null,editor_enshrouded_json,null,null,null,null,null,null,null,null,null,null,null,null
 action,enshrouded_reset,null,null,null,null,internal,null,menu_profile_flow,null,null,null,null,null,null,"[""enshrouded"",""reset""]",null,null,null,null,null
 action,enshrouded_apply,null,null,null,null,internal,null,menu_profile_flow,null,null,null,null,null,null,"[""enshrouded"",""apply""]",null,null,null,null,null
+action,enshrouded_bans_manage,null,null,null,null,internal,null,menu_manage_enshrouded_bans,null,null,null,null,null,null,null,null,null,null,null,null
 action,manager_edit,null,null,null,null,internal,null,editor_manager_json,null,null,null,null,null,null,null,null,null,null,null,null
 action,manager_reset,null,null,null,null,internal,null,menu_profile_flow,null,null,null,null,null,null,"[""manager"",""reset""]",null,null,null,null,null
 action,manager_apply,null,null,null,null,internal,null,menu_profile_flow,null,null,null,null,null,null,"[""manager"",""apply""]",null,null,null,null,null
@@ -36,6 +37,7 @@ screen,null,main,11,Other Commands,open_other_commands,null,null,null,null,null,
 screen,null,enshroudedSettings,1,Edit current settings,enshrouded_edit,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1
 screen,null,enshroudedSettings,2,Reset current profile,enshrouded_reset,null,null,null,null,null,null,null,null,null,null,null,null,null,null,2
 screen,null,enshroudedSettings,3,Select and apply profile,enshrouded_apply,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3
+screen,null,enshroudedSettings,4,Manage Banned Accounts,enshrouded_bans_manage,null,null,null,null,null,null,null,null,null,null,null,null,null,null,4
 screen,null,managerSettings,1,Edit current settings,manager_edit,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1
 screen,null,managerSettings,2,Reset current profile,manager_reset,null,null,null,null,null,null,null,null,null,null,null,null,null,null,2
 screen,null,managerSettings,3,Select and apply profile,manager_apply,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3

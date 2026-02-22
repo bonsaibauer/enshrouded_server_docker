@@ -1905,6 +1905,164 @@ enshrouded_editor_user_groups_menu() {
     "<empty>"
 }
 
+menu_enshrouded_bans_entries_tsv() {
+  local file
+  file="$1"
+  jq -r '
+    def arr($v): if ($v | type) == "array" then $v else [] end;
+    def same_ban($a; $b):
+      if (($a|type) == "object" and ($b|type) == "object" and ($a|has("accountId")) and ($b|has("accountId"))) then
+        (($a.accountId | tostring) == ($b.accountId | tostring))
+      else
+        ($a == $b)
+      end;
+    def display_label($i):
+      if ($i | type) == "object" then
+        if (($i.displayName // "") | tostring) != "" then ($i.displayName | tostring)
+        elif (($i.characterName // "") | tostring) != "" then ($i.characterName | tostring)
+        elif $i.accountId != null then ("Account " + ($i.accountId | tostring))
+        else "<unknown>"
+        end
+      else
+        ($i | tostring)
+      end;
+    def account_id($i):
+      if ($i | type) == "object" and $i.accountId != null then ($i.accountId | tostring) else "" end;
+    def character_name($i):
+      if ($i | type) == "object" then (($i.characterName // "") | tostring) else "" end;
+    def ban_ts($i):
+      if ($i | type) == "object" and ($i.banDate | type) == "object" and $i.banDate.value != null then ($i.banDate.value | tostring)
+      elif ($i | type) == "object" and $i.banDate != null then ($i.banDate | tostring)
+      else ""
+      end;
+
+    (arr(.bannedAccounts) + arr(.bans))
+    | reduce .[] as $item ([]; if any(.[]; same_ban(.; $item)) then . else . + [$item] end)
+    | to_entries[]
+    | [(.key + 1), display_label(.value), account_id(.value), character_name(.value), ban_ts(.value), (.value | tojson)]
+    | @tsv
+  ' "$file" 2>/dev/null || true
+}
+
+menu_manage_enshrouded_bans() {
+  local config_file backed_up choice selected_idx
+  local idx label account_id character_name ban_ts selected_json selected_label
+  local -a ban_json ban_labels
+
+  config_file="$(enshrouded_config_path)"
+  backed_up="false"
+
+  if [[ ! -f "$config_file" ]]; then
+    ui_warn_line "enshrouded_server.json is missing. Creating from profile..."
+    ensure_enshrouded_config_from_profile || true
+  fi
+
+  if [[ ! -f "$config_file" ]] || ! enshrouded_editor_jq_ok "$config_file"; then
+    ui_error "Invalid or missing config: $config_file"
+    ui_pause
+    return 1
+  fi
+
+  if ! menu_stop_server_for_config_change "manage banned accounts"; then
+    return 0
+  fi
+
+  while :; do
+    if menu_nav_is_set; then
+      return 0
+    fi
+
+    ui_header "Manage Banned Accounts"
+    ui_kv "File" "$(menu_display_path "$config_file")"
+    ui_note "Bans are preserved across profile apply/reset."
+    ui_note "Select an entry to remove the ban."
+    echo
+
+    ban_json=()
+    ban_labels=()
+
+    while IFS=$'\t' read -r idx label account_id character_name ban_ts selected_json; do
+      [[ -z "$idx" ]] && continue
+      ban_json+=("$selected_json")
+
+      selected_label="$label"
+      [[ -n "$account_id" ]] && selected_label="${selected_label} (ID: $account_id)"
+      if [[ -n "$character_name" && "$character_name" != "$label" ]]; then
+        selected_label="${selected_label}, Character: $character_name"
+      fi
+      [[ -n "$ban_ts" ]] && selected_label="${selected_label}, BanDate: $ban_ts"
+
+      ban_labels+=("$selected_label")
+      ui_opt "$idx" "$selected_label"
+    done < <(menu_enshrouded_bans_entries_tsv "$config_file")
+
+    if [[ "${#ban_json[@]}" -eq 0 ]]; then
+      ui_note "No banned accounts found."
+      echo
+      ui_actions_bar "b Back" "m Main" "x Exit"
+      echo
+      choice="$(menu_prompt_nav_choice "Choice")"
+      if menu_nav_choice_is_handled "$choice"; then
+        return 0
+      fi
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    echo
+    ui_actions_bar "b Back" "m Main" "x Exit"
+    echo
+
+    choice="$(menu_prompt_nav_choice "Ban")"
+    if menu_nav_choice_is_handled "$choice"; then
+      return 0
+    fi
+
+    selected_idx="$(menu_choice_index "$choice" "${#ban_json[@]}" || true)"
+    if [[ -z "$selected_idx" ]]; then
+      ui_warn_line "Invalid selection."
+      ui_pause
+      continue
+    fi
+
+    selected_json="${ban_json[$selected_idx]}"
+    selected_label="${ban_labels[$selected_idx]}"
+
+    ui_warn_line "This will remove the selected account from the ban list."
+    ui_kv "Selected" "$selected_label"
+    echo
+    if ! ui_confirm_yes_no "Unban this account now?"; then
+      ui_note "Cancelled."
+      ui_pause
+      continue
+    fi
+
+    menu_spec_editor__session_backup_if_needed "manual:enshrouded" || true
+    if ! menu_spec_editor__set_jq "$config_file" --argjson selected "$selected_json" '
+      def arr($v): if ($v | type) == "array" then $v else [] end;
+      def same_ban($a; $b):
+        if (($a|type) == "object" and ($b|type) == "object" and ($a|has("accountId")) and ($b|has("accountId"))) then
+          (($a.accountId | tostring) == ($b.accountId | tostring))
+        else
+          ($a == $b)
+        end;
+      def remove_all($a; $selected):
+        [ $a[] | select((same_ban(.; $selected) | not)) ];
+
+      .bannedAccounts = remove_all(arr(.bannedAccounts); $selected)
+      | .bans = remove_all(arr(.bans); $selected)
+    '; then
+      ui_warn_line "Failed to update ban list."
+      ui_pause
+      continue
+    fi
+
+    ui_success "Ban removed."
+    ui_pause
+  done
+}
+
 editor_enshrouded_json() {
   local config_file backed_up
   config_file="$(enshrouded_config_path)"

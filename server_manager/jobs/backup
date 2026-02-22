@@ -756,7 +756,10 @@ restore_json_config() {
   mkdir -p "$target_dir" 2>/dev/null || true
   tmp="$(mktemp "${target_dir}/.restore.XXXXXX")"
   if [[ "$ensure_bans" == "true" ]]; then
-    jq 'if has("bans") then . else . + {bans: []} end' "$src" >"$tmp" || {
+    jq '
+      if has("bans") then . else . + {bans: []} end
+      | if has("bannedAccounts") then . else . + {bannedAccounts: []} end
+    ' "$src" >"$tmp" || {
       rm -f "$tmp" 2>/dev/null || true
       fatal "Failed to restore config (jq error): $target"
     }

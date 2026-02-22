@@ -1427,7 +1427,10 @@ ensure_enshrouded_config_from_profile() {
 
   mkdir -p "$install_path"
   temp_file="$(mktemp)"
-  if jq 'if has("bans") then . else . + {bans: []} end' "$source_profile" >"$temp_file"; then
+  if jq '
+    if has("bans") then . else . + {bans: []} end
+    | if has("bannedAccounts") then . else . + {bannedAccounts: []} end
+  ' "$source_profile" >"$temp_file"; then
     mv "$temp_file" "$config_file"
     chmod 600 "$config_file" 2>/dev/null || true
     chown enshrouded:enshrouded "$config_file" 2>/dev/null || true
