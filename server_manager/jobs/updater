@@ -244,6 +244,7 @@ shutdown() {
 }
 
 download_enshrouded() {
+  local steamcmd_rc
   debug "Downloading Enshrouded server"
   mkdir -p "$install_path/steamapps/compatdata/$steam_app_id"
   export WINETRICKS="/usr/local/bin/winetricks"
@@ -252,7 +253,10 @@ download_enshrouded() {
   export STEAM_DIR="/home/enshrouded/.steam/steam/"
   [[ -x "${STEAMCMD_BIN:-}" ]] || fatal "Missing steamcmd binary: ${STEAMCMD_BIN:-<unset>}"
 
-  "$STEAMCMD_BIN" +@sSteamCmdForcePlatformType windows +force_install_dir "$install_path" +login anonymous +app_update "$steam_app_id" "$GAME_BRANCH $STEAMCMD_ARGS" +quit
+  "$STEAMCMD_BIN" +@sSteamCmdForcePlatformType windows +force_install_dir "$install_path" +login anonymous +app_update "$steam_app_id" "$GAME_BRANCH $STEAMCMD_ARGS" +quit \
+    2>&1 | sed -E $'s/\x1B\\[[0-9;]*[[:alpha:]]//g; s/#033\\[[0-9;]*[[:alpha:]]//g'
+  steamcmd_rc="${PIPESTATUS[0]}"
+  return "$steamcmd_rc"
 }
 
 check_for_updates() {

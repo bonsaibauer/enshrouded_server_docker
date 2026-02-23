@@ -280,6 +280,7 @@ setup_syslog() {
 \$FileGroup root
 \$PrivDropToUser root
 \$PrivDropToGroup root
+\$EscapeControlCharactersOnReceive off
 
 \$template custom,"%timegenerated:1:10:date-rfc3339% %timegenerated:12:23:date-rfc3339% %syslogtag%%msg:::sp-if-no-1st-sp%%msg:::drop-last-lf%\n"
 \$ActionFileDefaultTemplate custom
