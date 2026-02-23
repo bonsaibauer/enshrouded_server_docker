@@ -10,7 +10,7 @@ CHECK_ONLY="false"
 NO_PLAYER_CHECK="false"
 PLAYER_CHECK_FORCE=""
 
-debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && echo "DEBUG - $*" || true; }
+debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && log_line stderr "$C_MAGENTA" DEBUG "$*" || true; }
 
 is_unknown_version() {
   local value
@@ -51,6 +51,7 @@ checkLock() {
   if [[ -n "$pid" ]] && [[ "$pid" =~ ^[0-9]+$ ]] && [[ -d "/proc/$pid" ]]; then
     fatal "Lock active: $lock_file (pid=$pid)"
   fi
+  warn "Removing stale updater lock: $lock_file"
   rm -f "$lock_file" 2>/dev/null || true
   return 0
 }
@@ -133,6 +134,7 @@ update() {
   trap shutdown SIGINT SIGTERM
 
   if ! check_for_updates; then
+    info "No update required"
     if ! checkRunning "server"; then
       info "Enshrouded server is not running - starting"
       "${SCRIPT_DIR}/server" start
@@ -140,6 +142,7 @@ update() {
     return 0
   fi
 
+  info "Update required - running players-check before update"
   players_check_arg="--player-check"
   if [[ "${UPDATE_CHECK_PLAYERS:-true}" != "true" ]]; then
     players_check_arg="--no-player-check"
@@ -160,19 +163,27 @@ update() {
 
   run_update_flow &
   enshrouded_updater_pid=$!
+  info "Acquired updater lock: $pidfile (pid=$enshrouded_updater_pid)"
   echo "$enshrouded_updater_pid" >"$pidfile"
   wait "$enshrouded_updater_pid"
 }
 
 run_update_flow() {
+  info "Executing update pre-hook"
   "${SCRIPT_DIR}/server" hook-run "update pre" "${UPDATE_PRE_HOOK:-}"
   if checkRunning "server"; then
+    info "Stopping server before update"
     "${SCRIPT_DIR}/server" stop
   fi
 
   verify_cpu_mhz
+  info "Downloading Enshrouded server via steamcmd"
   if ! download_enshrouded; then
-    warn "Download of Enshrouded server failed - retry"
+    if [[ "${UPDATER_BOOTSTRAP_MODE:-false}" == "true" ]]; then
+      info "Download of Enshrouded server failed during bootstrap - retry"
+    else
+      warn "Download of Enshrouded server failed - retry"
+    fi
     remove_steamapps_tree
 
     if ! download_enshrouded; then
@@ -184,7 +195,9 @@ run_update_flow() {
   fi
 
   set_current_version
+  info "Starting server after update"
   "${SCRIPT_DIR}/server" start
+  info "Executing update post-hook"
   "${SCRIPT_DIR}/server" hook-run "update post" "${UPDATE_POST_HOOK:-}"
   clearLock "$pidfile"
 }
@@ -257,6 +270,7 @@ check_for_updates() {
   fi
 
   latest_version="$(resolve_latest_version)"
+  info "Version check: current=${current_version}, latest=${latest_version:-unknown}"
   if is_unknown_version "$latest_version"; then
     if [[ "$current_version" == "0" ]]; then
       if [[ "${UPDATER_BOOTSTRAP_MODE:-false}" == "true" ]]; then
@@ -275,7 +289,7 @@ check_for_updates() {
     return 0
   fi
 
-  info "Enshrouded server is already the latest version"
+  success "Enshrouded server is already the latest version"
   return 1
 }
 
@@ -304,13 +318,13 @@ main() {
     else
       info "Update check: no update required"
     fi
-    info "Updater check-only mode complete"
+    success "Updater check-only mode complete"
     return 0
   fi
 
   info "Running updater (force=${FORCE_UPDATE}, check_players=${UPDATE_CHECK_PLAYERS:-true})"
   update
-  info "Updater complete"
+  success "Updater complete"
 }
 
 main "$@"

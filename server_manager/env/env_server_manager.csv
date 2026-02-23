@@ -3,7 +3,7 @@
 "PROFILE_POST_HOOK","soft","string","null","null","^[^[:cntrl:]]*$","null","null","Hook executed after profile job.","Allowed: single-line string"
 "PROFILE_PRE_HOOK","soft","string","null","null","^[^[:cntrl:]]*$","null","null","Hook executed before profile job.","Allowed: single-line string"
 "EN_PROFILE","soft","string","null","null","^[A-Za-z0-9._-]+$","null","null","Selects the Enshrouded profile template on first bootstrap (fresh volume).","A-Z a-z 0-9 . _ -"
-"LOG_COLOR","soft","bool","null","null","null","null","null","Enable colored log levels (TTY only).","Allowed: true | false"
+"LOG_COLOR","soft","bool","null","null","null","null","null","Enable colored log levels.","Allowed: true | false"
 "MANAGER_PROFILE","soft","string","null","null","^[A-Za-z0-9._-]+$","null","null","Selects the Server Manager profile template on first bootstrap (fresh volume).","A-Z a-z 0-9 . _ -"
 "PGID","hard","int","1","null","null","null","null","GID for the enshrouded user.","Allowed: integer >= 1"
 "PUID","hard","int","1","null","null","null","null","UID for the enshrouded user.","Allowed: integer >= 1"

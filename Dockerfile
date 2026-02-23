@@ -63,6 +63,7 @@ COPY --chmod=755 ./server_manager/jobs/ /usr/local/etc/enshrouded/jobs/
 COPY --chmod=755 ./server_manager/env/ /usr/local/etc/enshrouded/env/
 COPY ./server_manager/profiles/ /usr/local/etc/enshrouded/profiles/
 RUN ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/server \
+    && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/help \
     && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/hook-run \
     && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/guard-run \
     && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/guard-require \

@@ -16,9 +16,62 @@ STEAMCMD_BIN="/usr/games/steamcmd"
 
 log_level="${LOG_LEVEL:-40}"
 
-info() { [[ "$log_level" -ge 40 ]] && echo "INFO - $*" || true; }
-warn() { [[ "$log_level" -ge 30 ]] && echo "WARN - $*" || true; }
-fatal() { echo "FATAL - $*" >&2; exit 1; }
+init_colors() {
+  if [[ "${LOG_COLOR:-}" != "true" && "${LOG_COLOR:-}" != "TRUE" ]]; then
+    C_RESET=""
+    C_RED=""
+    C_BLUE=""
+    C_YELLOW=""
+    C_GREEN=""
+    C_MAGENTA=""
+  else
+    C_RESET=$'\033[0m'
+    C_RED=$'\033[31m'
+    C_BLUE=$'\033[34m'
+    C_YELLOW=$'\033[33m'
+    C_GREEN=$'\033[32m'
+    C_MAGENTA=$'\033[35m'
+  fi
+}
+
+mirror_to_container_stderr() {
+  local line
+  line="$1"
+
+  if [[ -n "${SUPERVISOR_PROCESS_NAME:-}" || -n "${SUPERVISOR_GROUP_NAME:-}" ]]; then
+    return 0
+  fi
+
+  [[ -w /proc/1/fd/2 ]] || return 0
+  printf "%s\n" "$line" >/proc/1/fd/2 2>/dev/null || true
+}
+
+log_line() {
+  local stream level_color level message
+  local rendered
+  stream="$1"
+  level_color="$2"
+  level="$3"
+  shift 3
+  message="$*"
+  rendered="$(printf "%s%s%s: %s" "$level_color" "$level" "$C_RESET" "$message")"
+  if [[ "$stream" == "stderr" ]]; then
+    printf "%s\n" "$rendered" >&2
+  else
+    printf "%s\n" "$rendered"
+  fi
+  mirror_to_container_stderr "$rendered"
+}
+
+init_colors
+
+info() { [[ "$log_level" -ge 40 ]] && log_line stderr "$C_BLUE" INFO "$*" || true; }
+success() {
+  [[ "$log_level" -ge 40 ]] || return 0
+  log_line stderr "$C_BLUE" INFO "${C_GREEN}success${C_RESET}: $*"
+}
+warn() { [[ "$log_level" -ge 30 ]] && log_line stderr "$C_YELLOW" WARN "$*" || true; }
+fatal() { log_line stderr "$C_RED" FATAL "$*"; exit 1; }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fatal "Missing required command: $1"
@@ -370,6 +423,7 @@ create_config_backup() {
   kind="$1"
 
   if [[ "$create_backup" != "true" ]]; then
+    info "Config backup disabled (--create-backup=false), skipping backup archive for: $kind"
     return 0
   fi
 
@@ -416,6 +470,7 @@ create_config_backup() {
   esac
 
   if [[ ! -f "$source_file" ]]; then
+    warn "Config backup source missing, skipping backup archive: $source_file"
     rm -rf "$tmp_dir" 2>/dev/null || true
     return 0
   fi
@@ -445,6 +500,7 @@ create_config_backup() {
   chmod 600 "$archive_path" 2>/dev/null || true
   chown enshrouded:enshrouded "$archive_path" 2>/dev/null || true
   rm -rf "$tmp_dir" 2>/dev/null || true
+  info "Config backup created: $archive_path"
 }
 
 target=""
@@ -590,6 +646,7 @@ parse_args() {
 }
 
 stop_server_now() {
+  info "Stopping server before profile operation"
   "$SERVER_JOB_BIN" guard-run core_ready -- "${PROFILE_SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 90 \
     || fatal "Failed to stop server safely"
 }
@@ -602,6 +659,7 @@ apply_manager_profile() {
   source_profile="$(manager_profile_path "$profile")"
   config_file="$(manager_config_path)"
   config_dir="$(dirname "$config_file")"
+  info "Applying Server Manager profile: $profile"
 
   old_enshrouded="$(profiles_config_get "enshrouded")"
   old_env_manager="$(profiles_env_get "MANAGER_PROFILE")"
@@ -641,7 +699,7 @@ apply_manager_profile() {
   profiles_env_set_if_missing "MANAGER_PROFILE" "$old_env_manager" || true
   profiles_env_set_if_missing "EN_PROFILE" "$old_env_enshrouded" || true
 
-  info "Server Manager profile ${action} complete: $profile"
+  success "Server Manager profile ${action} complete: $profile"
 }
 
 resolve_enshrouded_profile_path() {
@@ -709,6 +767,7 @@ apply_enshrouded_profile() {
   source_profile="$(resolve_enshrouded_profile_path "$profile")"
   config_file="${install_path}/enshrouded_server.json"
   config_dir="$(dirname "$config_file")"
+  info "Applying Enshrouded profile: $profile"
 
   mkdir -p "$config_dir" 2>/dev/null || true
   tmp="$(mktemp "${config_dir}/.enshrouded_server.json.profile.XXXXXX")"
@@ -727,7 +786,7 @@ apply_enshrouded_profile() {
   profiles_ensure_schema || true
   profiles_config_set "enshrouded" "$profile" || true
 
-  info "Enshrouded profile ${action} complete: $profile"
+  success "Enshrouded profile ${action} complete: $profile"
 }
 
 profile_password_view() {
@@ -815,7 +874,7 @@ main() {
 
   if [[ "$PROFILE_MODE" == "password-view" ]]; then
     profile_password_view
-    info "Profile job complete (mode=password-view)"
+    success "Profile job complete (mode=password-view)"
     return 0
   fi
 
@@ -828,6 +887,7 @@ main() {
       profile_name="$(enshrouded_profile_resolve)"
     fi
   fi
+  info "Resolved profile selection: target=${target}, action=${action}, profile=${profile_name}"
 
   export PROFILE_TARGET="$target"
   export PROFILE_ACTION="$action"
@@ -842,7 +902,7 @@ main() {
   fi
 
   "$SERVER_JOB_BIN" hook-run "profile post" "${PROFILE_POST_HOOK:-}"
-  info "Profile job complete (target=${target}, action=${action}, profile=${profile_name})"
+  success "Profile job complete (target=${target}, action=${action}, profile=${profile_name})"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

@@ -113,21 +113,24 @@ run_supervisorctl_program_action() {
   if is_supervisorctl_idempotent_notice "$action" "$output"; then
     case "$action" in
       start)
-        info "${program}: already running"
+        success "${program}: already running"
         ;;
       stop)
-        info "${program}: already stopped"
+        success "${program}: already stopped"
         ;;
     esac
     return 0
   fi
 
   if [[ -n "$output" ]]; then
-    if [[ "$rc" -eq 0 ]]; then
-      printf "%s\n" "$output"
-    else
-      printf "%s\n" "$output" >&2
-    fi
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      if [[ "$rc" -eq 0 ]]; then
+        info "$line"
+      else
+        warn "$line"
+      fi
+    done <<<"$output"
   fi
 
   return "$rc"
@@ -140,6 +143,7 @@ status_output_prepare_colors() {
     C_RESET=$'\033[0m'
     C_DIM=$'\033[2m'
     C_RED=$'\033[31m'
+    C_BLUE=$'\033[34m'
     C_YELLOW=$'\033[33m'
     C_GREEN=$'\033[32m'
     C_MAGENTA=$'\033[35m'
@@ -195,7 +199,7 @@ render_colored_supervisor_status() {
   return 0
 }
 
-debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && echo "DEBUG - $*" || true; }
+debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && log_line stderr "$C_MAGENTA" DEBUG "$*" || true; }
 
 checkRunning() {
   is_supervisor_running "$1"
@@ -227,27 +231,33 @@ server_guard_set_reason() {
 }
 
 server_guard_classify_reason() {
-  local reason
+  local reason class
   reason="${1:-unknown}"
   case "$reason" in
     supervisor_unreachable|server_not_running:*)
-      echo "not_ready"
+      class="not_ready"
       ;;
     missing_tool:*|missing_var:*|missing_function:*|invalid_guard_mode:*)
-      echo "config_error"
+      class="config_error"
       ;;
     *)
-      echo "internal_error"
+      class="internal_error"
       ;;
   esac
+  debug "Guard classify reason='${reason}' -> class='${class}'"
+  echo "$class"
 }
 
 server_guard_rc_for_class() {
+  local class rc
+  class="$1"
   case "$1" in
-    not_ready) echo "$SERVER_GUARD_RC_NOT_READY" ;;
-    config_error) echo "$SERVER_GUARD_RC_CONFIG" ;;
-    *) echo "$SERVER_GUARD_RC_INTERNAL" ;;
+    not_ready) rc="$SERVER_GUARD_RC_NOT_READY" ;;
+    config_error) rc="$SERVER_GUARD_RC_CONFIG" ;;
+    *) rc="$SERVER_GUARD_RC_INTERNAL" ;;
   esac
+  debug "Guard class='${class}' -> rc='${rc}'"
+  echo "$rc"
 }
 
 server_guard_check_core_ready() {
@@ -390,6 +400,7 @@ run_job_script() {
   if [[ "$script" == "updater" ]]; then
     guard_mode="job_ready:updater"
   fi
+  info "Dispatching job script: ${script} (guard=${guard_mode})"
   server_guard_run "$guard_mode" -- run_as_enshrouded_if_root "${SCRIPT_DIR}/${script}" "$@"
 }
 
@@ -405,8 +416,10 @@ run_job_or_supervisor_start() {
     guard_mode="server_ready"
   fi
   if [[ "$#" -gt 0 ]]; then
+    info "Dispatching job script with args: ${script} (guard=${guard_mode})"
     server_guard_run "$guard_mode" -- run_as_enshrouded_if_root "${SCRIPT_DIR}/${script}" "$@"
   else
+    info "Starting supervisor program: ${program} (guard=${guard_mode})"
     server_guard_run "$guard_mode" -- run_supervisorctl_program_action start "$program"
   fi
 }
@@ -416,8 +429,7 @@ require_no_args() {
   cmd_name="$1"
   shift || true
   if [[ "$#" -gt 0 ]]; then
-    echo "$cmd_name does not accept arguments" >&2
-    exit 1
+    fatal "$cmd_name does not accept arguments"
   fi
 }
 
@@ -463,13 +475,19 @@ is_non_flag_token() {
 
 run_hook() {
   local hook_name hook_cmd
+  local hook_rc
   hook_name="$1"
   hook_cmd="$2"
   if [[ -z "$hook_cmd" ]]; then
     return 0
   fi
-  echo "INFO - Running ${hook_name} hook: $hook_cmd"
+  info "Running ${hook_name} hook: $hook_cmd"
   eval "$hook_cmd"
+  hook_rc=$?
+  if [[ "$hook_rc" -ne 0 ]]; then
+    warn "Hook failed: ${hook_name} (rc=${hook_rc})"
+  fi
+  return "$hook_rc"
 }
 
 run_hook_command() {
@@ -494,8 +512,7 @@ run_hook_command() {
       --name)
         hook_name="${2-}"
         [[ -n "$hook_name" ]] || {
-          echo "Missing value for --name" >&2
-          exit 1
+          fatal "Missing value for --name"
         }
         shift 2
         ;;
@@ -508,15 +525,12 @@ run_hook_command() {
         exit 0
         ;;
       *)
-        echo "Unknown argument for hook-run: $1" >&2
-        usage_hook_run >&2
-        exit 1
+        fatal "Unknown argument for hook-run: $1"
         ;;
     esac
   done
   [[ -n "$hook_name" ]] || {
-    echo "Missing hook name (usage: hook-run <name> [command...])" >&2
-    exit 1
+    fatal "Missing hook name (usage: hook-run <name> [command...])"
   }
   run_hook "$hook_name" "$hook_cmd"
 }
@@ -575,8 +589,7 @@ run_server_command() {
             set -- --help "$@"
             ;;
           *)
-            echo "Unknown restart mode: $1 (use: force|player-check|no-player-check)" >&2
-            exit 1
+            fatal "Unknown restart mode: $1 (use: force|player-check|no-player-check)"
             ;;
         esac
       fi
@@ -606,8 +619,7 @@ run_server_command() {
             set -- --help "$@"
             ;;
           *)
-            echo "Unknown update mode: $1 (use: force|check|player-check|no-player-check)" >&2
-            exit 1
+            fatal "Unknown update mode: $1 (use: force|check|player-check|no-player-check)"
             ;;
         esac
       fi
@@ -634,8 +646,7 @@ run_server_command() {
             local _zip
             _zip="${2-}"
             [[ -n "$_zip" ]] || {
-              echo "Missing zip filename (usage: backup inspect <zip>)" >&2
-              exit 1
+              fatal "Missing zip filename (usage: backup inspect <zip>)"
             }
             shift 2
             set -- --mode inspect --zip "$_zip" "$@"
@@ -644,8 +655,7 @@ run_server_command() {
             local _zip _target
             _zip="${2-}"
             [[ -n "$_zip" ]] || {
-              echo "Missing zip filename (usage: backup restore <zip> [savegame|enshrouded|manager|all])" >&2
-              exit 1
+              fatal "Missing zip filename (usage: backup restore <zip> [savegame|enshrouded|manager|all])"
             }
             if [[ $# -ge 3 && "${3#-}" == "$3" ]]; then
               _target="$3"
@@ -661,8 +671,7 @@ run_server_command() {
             set -- --help "$@"
             ;;
           *)
-            echo "Unknown backup mode: $1 (use: manual|scheduled|list|inspect|restore)" >&2
-            exit 1
+            fatal "Unknown backup mode: $1 (use: manual|scheduled|list|inspect|restore)"
             ;;
         esac
       fi
@@ -683,8 +692,7 @@ run_server_command() {
               apply)
                 _profile="${3-}"
                 [[ -n "$_profile" ]] || {
-                  echo "Missing profile name (usage: profile $_target apply <profile>)" >&2
-                  exit 1
+                  fatal "Missing profile name (usage: profile $_target apply <profile>)"
                 }
                 shift 3
                 set -- --target "$_target" --action apply --profile "$_profile" "$@"
@@ -694,8 +702,7 @@ run_server_command() {
                 set -- --target "$_target" --action reset "$@"
                 ;;
               *)
-                echo "Unknown profile action: ${_action:-<empty>} (use: apply|reset)" >&2
-                exit 1
+                fatal "Unknown profile action: ${_action:-<empty>} (use: apply|reset)"
                 ;;
             esac
             ;;
@@ -715,14 +722,12 @@ run_server_command() {
             set -- --help "$@"
             ;;
           *)
-            echo "Unknown profile mode: $1 (use: manager|enshrouded|passwords)" >&2
-            exit 1
+            fatal "Unknown profile mode: $1 (use: manager|enshrouded|passwords)"
             ;;
         esac
       fi
       if [[ "$#" -eq 0 ]]; then
-        echo "profile requires args (simple: profile <manager|enshrouded> <apply|reset> [profile])" >&2
-        exit 1
+        fatal "profile requires args (simple: profile <manager|enshrouded> <apply|reset> [profile])"
       fi
       run_job_script "profile" "$@"
       ;;
@@ -740,8 +745,7 @@ run_server_command() {
             set -- --help "$@"
             ;;
           *)
-            echo "Unknown password-view mode: $1 (use: text|json)" >&2
-            exit 1
+            fatal "Unknown password-view mode: $1 (use: text|json)"
             ;;
         esac
       fi
@@ -770,8 +774,7 @@ run_server_command() {
             set -- --help "$@"
             ;;
           *)
-            echo "Unknown scheduled-restart mode: $1 (use: force|player-check|no-player-check)" >&2
-            exit 1
+            fatal "Unknown scheduled-restart mode: $1 (use: force|player-check|no-player-check)"
             ;;
         esac
       fi
@@ -796,8 +799,7 @@ run_server_command() {
               _bootstrap_args+=(--help)
               ;;
             *)
-              echo "Unknown bootstrap mode: $1 (use: job|no-update|entrypoint)" >&2
-              exit 1
+              fatal "Unknown bootstrap mode: $1 (use: job|no-update|entrypoint)"
               ;;
           esac
           shift
@@ -824,8 +826,7 @@ run_server_command() {
             set -- --help "$@"
             ;;
           *)
-            echo "Unknown cron mode: $1 (use: sync|start|stop|restart|status)" >&2
-            exit 1
+            fatal "Unknown cron mode: $1 (use: sync|start|stop|restart|status)"
             ;;
         esac
       fi
@@ -835,9 +836,7 @@ run_server_command() {
       usage_commands
       ;;
     *)
-      echo "Unknown command: $command_name" >&2
-      usage_commands >&2
-      exit 1
+      fatal "Unknown command: $command_name"
       ;;
   esac
 }
@@ -867,7 +866,7 @@ run_server_command_entry() {
     warn "Server command post-hook failed: ${command_name} (rc=${post_rc})"
     return "$post_rc"
   fi
-  info "Server command complete: ${command_name}"
+  success "Server command complete: ${command_name}"
   return "$post_rc"
 }
 
@@ -1018,8 +1017,10 @@ parse_server_args() {
 }
 
 wait_for_server_download() {
+  info "Waiting for server binary download: $enshrouded_server"
   while :; do
     if [[ -f "$enshrouded_server" ]]; then
+      info "Server binary detected: $enshrouded_server"
       break
     else
       debug "enshrouded Server is not yet downloaded - waiting"
@@ -1041,6 +1042,7 @@ run_server_process() {
   chmod +x "$enshrouded_server"
   proton runinprefix "$enshrouded_server" &
   enshrouded_server_pid=$!
+  debug "Writing server PID ${enshrouded_server_pid} to ${enshrouded_server_pidfile}"
   echo "$enshrouded_server_pid" >"$enshrouded_server_pidfile"
 
   wait "$enshrouded_server_pid"
@@ -1048,7 +1050,7 @@ run_server_process() {
 
   cleanup_wine
   "${SCRIPT_DIR}/server" hook-run "server post" "${SERVER_POST_HOOK:-}"
-  info "Shutdown complete"
+  success "Shutdown complete"
   exit 0
 }
 
@@ -1198,7 +1200,7 @@ main() {
     stop-safe)
       info "Running server action: stop-safe"
       server_stop_safe
-      info "Server action complete: stop-safe"
+      success "Server action complete: stop-safe"
       return 0
       ;;
     players-check)
@@ -1209,22 +1211,22 @@ main() {
       players_rc=$?
       if [[ "$players_rc" -eq 10 ]]; then
         info "Players check result: active players detected"
-        info "Server action complete: players-check (rc=10, players_active=true)"
+        success "Server action complete: players-check (rc=10, players_active=true)"
       else
-        info "Server action complete: players-check (rc=${players_rc})"
+        success "Server action complete: players-check (rc=${players_rc})"
       fi
       return $players_rc
       ;;
     render-banner)
       info "Running server action: render-banner"
       server_render_banner
-      info "Server action complete: render-banner"
+      success "Server action complete: render-banner"
       return 0
       ;;
     startup-ui)
       info "Running server action: startup-ui"
       server_startup_ui
-      info "Server action complete: startup-ui"
+      success "Server action complete: startup-ui"
       return 0
       ;;
   esac

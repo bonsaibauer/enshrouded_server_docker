@@ -62,6 +62,7 @@ server_run() {
 }
 
 prepare_enshrouded_app_folders() {
+  info "Ensuring Enshrouded install directory exists: $install_path"
   mkdir -p "$install_path"
 }
 
@@ -94,6 +95,7 @@ prepare_steam_a2s_python_library() {
   local install_timeout pip_install_rc
 
   if is_steam_a2s_python_library_ready "$A2S_PY_PACKAGE_NAME" "$A2S_PY_PACKAGE_VERSION"; then
+    info "Python package already present: ${A2S_PY_PACKAGE_NAME}==${A2S_PY_PACKAGE_VERSION}"
     return 0
   fi
 
@@ -189,12 +191,14 @@ update_game_settings_config() {
 
 update_or_create_enshrouded_server_config() {
   local config_file
+  info "Preparing enshrouded_server.json from profile and ENV"
   ensure_enshrouded_config_from_profile || fatal "Failed to initialize enshrouded_server.json from profile"
   config_file="${install_path}/enshrouded_server.json"
   [[ -e "$config_file" ]] || fatal "Missing enshrouded_server.json at $config_file"
   enshrouded_bootstrap_apply_top_level_env_to_config "$config_file"
   update_user_group_config
   update_game_settings_config
+  info "Enshrouded config ready: $config_file"
 }
 
 create_folders() {
@@ -239,6 +243,7 @@ apply_permissions() {
   [[ "$BACKUP_DIR" == /* ]] && chown -R enshrouded:enshrouded "$BACKUP_DIR"
 
   chgrp enshrouded /etc/supervisor/supervisord.conf
+  success "Permissions applied for runtime directories"
 }
 
 setup_syslog() {
@@ -283,12 +288,12 @@ run_entrypoint_mode() {
   create_folders
   apply_permissions
   setup_syslog
-  info "Bootstrap entrypoint mode complete"
+  success "Bootstrap entrypoint mode complete"
   exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
 }
 
 run_job_mode() {
-  local bootstrap_pre_hook
+  local bootstrap_pre_hook updater_player_flag
   info "Running bootstrap job mode (skip_update=${skip_update})"
   server_run guard-require core_ready -- "${SCRIPT_DIR}/server" --startup-ui
   init_runtime_env
@@ -302,10 +307,16 @@ run_job_mode() {
   if [[ "$skip_update" == "true" ]]; then
     info "Skipping updater start (--no-update)"
   else
-    UPDATER_BOOTSTRAP_MODE=true server_run update
+    updater_player_flag="--player-check"
+    if [[ "${UPDATE_CHECK_PLAYERS:-true}" != "true" ]]; then
+      updater_player_flag="--no-player-check"
+    fi
+    # Pass an explicit updater arg so `server update` runs the updater script directly.
+    # This preserves UPDATER_BOOTSTRAP_MODE for bootstrap-specific log levels.
+    UPDATER_BOOTSTRAP_MODE=true server_run update "$updater_player_flag"
   fi
   server_run hook-run "bootstrap post" "${BOOTSTRAP_POST_HOOK:-}"
-  info "Bootstrap job mode complete"
+  success "Bootstrap job mode complete"
 }
 
 main() {

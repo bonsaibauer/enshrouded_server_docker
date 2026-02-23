@@ -15,7 +15,7 @@ This document includes:
 |-------------------------------|---------------------------------------------|--------------------------|---------------------------|
 | **puid** | Runtime UID for container user mapping | 4711 | Integer >= 1 (`PUID`) |
 | **pgid** | Runtime GID for container user mapping | 4711 | Integer >= 1 (`PGID`) |
-| **logColor** | Colored log output for TTY contexts | true | true / false (`LOG_COLOR`) |
+| **logColor** | Colored log output | true | true / false (`LOG_COLOR`) |
 | **MANAGER_PROFILE** | Selected Server Manager profile name | "default" | Profile selector (`MANAGER_PROFILE`) |
 | **EN_PROFILE** | Selected Enshrouded profile name | "default" | Profile selector (`EN_PROFILE`) |
 | **actualProfilManager** | Persisted active manager profile | "default" | Updated by menu/profile flows |

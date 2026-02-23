@@ -75,6 +75,8 @@ load_runtime_values() {
   if [[ -z "$ENSHROUDED_SAVE_DIR" ]]; then
     ENSHROUDED_SAVE_DIR="./savegame"
   fi
+
+  info "Loaded backup runtime values (save_dir=${ENSHROUDED_SAVE_DIR}, backup_dir=${BACKUP_DIR}, max_count=${BACKUP_MAX_COUNT})"
 }
 
 usage() {
@@ -297,6 +299,7 @@ acquire_lock() {
     rm -f "$pidfile" 2>/dev/null || true
   fi
   echo "$$" >"$pidfile" || fatal "Failed to create PID file: $pidfile"
+  info "Acquired backup lock: $pidfile (pid=$$)"
 }
 
 save_dir_resolve() {
@@ -552,15 +555,18 @@ cleanup_old_scheduled_backups() {
 
 run_backup_operation() {
   export BACKUP_MODE="$mode"
+  info "Executing backup pre-hook"
   "${SCRIPT_DIR}/server" hook-run "backup pre" "${BACKUP_PRE_HOOK:-}"
 
   stage_dir="$(mktemp -d)"
+  info "Preparing backup stage directory: $stage_dir"
   prepare_stage_content
   create_zip_from_stage
   cleanup_old_scheduled_backups
 
+  info "Executing backup post-hook"
   "${SCRIPT_DIR}/server" hook-run "backup post" "${BACKUP_POST_HOOK:-}"
-  info "Backup job complete: $backup_file"
+  success "Backup job complete: $backup_file"
 }
 
 list_backup_zip_paths() {
@@ -703,6 +709,7 @@ run_safety_backup_if_requested() {
 
 extract_zip() {
   work_dir="$(mktemp -d)"
+  info "Extracting backup archive: $zip_path -> $work_dir"
   python3 - "$zip_path" "$work_dir" <<'PY'
 import pathlib
 import sys
@@ -792,7 +799,9 @@ restore_manager_config_from_zip() {
 }
 
 run_restore_operation() {
+  info "Executing restore pre-hook"
   "${SCRIPT_DIR}/server" hook-run "restore pre" "${RESTORE_PRE_HOOK:-}"
+  info "Stopping server before restore"
   stop_server_now
   run_safety_backup_if_requested
 
@@ -801,8 +810,9 @@ run_restore_operation() {
   [[ "$restore_enshrouded_config" == "true" ]] && restore_enshrouded_config_from_zip
   [[ "$restore_manager_config" == "true" ]] && restore_manager_config_from_zip
 
+  info "Executing restore post-hook"
   "${SCRIPT_DIR}/server" hook-run "restore post" "${RESTORE_POST_HOOK:-}"
-  info "Restore operation complete: $zip_path"
+  success "Restore operation complete: $zip_path"
 }
 
 main() {

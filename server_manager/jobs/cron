@@ -84,6 +84,11 @@ sync_crontab() {
   cron_append "$crontab_file" "$backup_cron" "$SERVER_JOB_BIN scheduled-backup" "backups"
   cron_append "$crontab_file" "$restart_cron" "$SERVER_JOB_BIN scheduled-restart" "server restarts"
 
+  if [[ ! -s "$crontab_file" ]]; then
+    info "No schedules configured - clearing crontab"
+  else
+    info "Applying updated crontab entries"
+  fi
   crontab "$crontab_file"
   rm -f "$crontab_file"
 }
@@ -131,18 +136,21 @@ run_crond_supervisor_action() {
 
   if is_crond_idempotent_notice "$action" "$output"; then
     case "$action" in
-      start) info "crond: already running" ;;
-      stop) info "crond: already stopped" ;;
+      start) success "crond: already running" ;;
+      stop) success "crond: already stopped" ;;
     esac
     return 0
   fi
 
   if [[ -n "$output" ]]; then
-    if [[ "$rc" -eq 0 ]]; then
-      printf "%s\n" "$output"
-    else
-      printf "%s\n" "$output" >&2
-    fi
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      if [[ "$rc" -eq 0 ]]; then
+        info "$line"
+      else
+        warn "$line"
+      fi
+    done <<<"$output"
   fi
 
   return "$rc"
@@ -157,14 +165,14 @@ main() {
       start|stop|restart|status) run_crond_service_action "$service_action" ;;
       *) fatal "Invalid service action: $service_action" ;;
     esac
-    info "Cron service action complete: ${service_action}"
+    success "Cron service action complete: ${service_action}"
     return 0
   fi
 
   info "Running cron schedule sync (update=${update_cron:-<empty>}, backup=${backup_cron:-<empty>}, restart=${restart_cron:-<empty>})"
   init_runtime_env
   sync_crontab
-  info "Cron schedule sync complete"
+  success "Cron schedule sync complete"
 }
 
 main "$@"

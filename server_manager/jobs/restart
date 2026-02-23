@@ -10,7 +10,7 @@ RESTART_FORCE="false"
 RESTART_CHECK_PLAYERS_OVERRIDE=""
 RESTART_DOWNTIME_SECONDS=""
 
-debug() { [[ "$log_level" -ge 50 ]] && echo "DEBUG - $*" || true; }
+debug() { [[ "$log_level" -ge 50 ]] && log_line stderr "${C_MAGENTA:-}" DEBUG "$*" || true; }
 
 enshrouded_get_text() {
   local path
@@ -43,6 +43,7 @@ load_runtime_values() {
 
 run_restart() {
   local players_check_rc players_check_arg server_was_running
+  info "Executing restart pre-hook"
   "${SCRIPT_DIR}/server" hook-run "restart pre" "${RESTART_PRE_HOOK:-}"
 
   if [[ "$RESTART_FORCE" != "true" ]]; then
@@ -63,6 +64,8 @@ run_restart() {
         fatal "players-check failed (rc=$players_check_rc)"
         ;;
     esac
+  else
+    info "Skipping players-check because force restart is enabled"
   fi
 
   info "Restarting Enshrouded server (downtime=${RESTART_DOWNTIME_SECONDS}s)"
@@ -74,7 +77,7 @@ run_restart() {
       fatal "Failed to stop Enshrouded server via supervisor"
     fi
   else
-    info "Enshrouded server is already stopped - proceeding to start phase"
+    success "Enshrouded server is already stopped - proceeding to start phase"
   fi
 
   if [[ "$server_was_running" == "true" && "$RESTART_DOWNTIME_SECONDS" -gt 0 ]]; then
@@ -87,6 +90,7 @@ run_restart() {
     fatal "Failed to start Enshrouded server via supervisor"
   fi
 
+  info "Executing restart post-hook"
   "${SCRIPT_DIR}/server" hook-run "restart post" "${RESTART_POST_HOOK:-}"
 }
 
@@ -148,7 +152,7 @@ main() {
   fi
   info "Running restart job (force=${RESTART_FORCE}, check_players=${RESTART_CHECK_PLAYERS}, query_port=${ENSHROUDED_QUERY_PORT}, downtime_seconds=${RESTART_DOWNTIME_SECONDS})"
   run_restart
-  info "Restart job complete"
+  success "Restart job complete"
 }
 
 main "$@"

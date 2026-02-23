@@ -271,12 +271,15 @@ menu_spec_build_json_from_csv() {
 
 menu_spec_init() {
   if [[ -n "${MENU_SPEC_FILE:-}" && -f "$MENU_SPEC_FILE" ]]; then
+    info "Using menu specification file: $MENU_SPEC_FILE"
     return 0
   fi
   if [[ ! -f "$MENU_SPEC_CSV_FILE" ]]; then
+    warn "Menu CSV specification not found: $MENU_SPEC_CSV_FILE"
     return 1
   fi
   if ! command -v jq >/dev/null 2>&1; then
+    warn "jq not found - cannot build menu specification"
     return 1
   fi
 
@@ -287,6 +290,7 @@ menu_spec_init() {
     return 1
   fi
   MENU_SPEC_FILE="$MENU_SPEC_TMP_FILE"
+  info "Built menu specification from CSV: $MENU_SPEC_CSV_FILE"
   return 0
 }
 
@@ -2671,7 +2675,7 @@ main() {
   esac
 
   menu_run_post_hook_once
-  info "Interactive menu complete (nav=${MENU_NAV:-unknown})"
+  success "Interactive menu complete (nav=${MENU_NAV:-unknown})"
 }
 
 main "$@"
