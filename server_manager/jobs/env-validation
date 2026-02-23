@@ -21,7 +21,18 @@ LOG_LEVEL_WARN=30
 log_level="${LOG_LEVEL:-$LOG_LEVEL_INFO}"
 
 init_colors() {
-  if [[ "${LOG_COLOR:-}" != "true" && "${LOG_COLOR:-}" != "TRUE" ]]; then
+  local wants_color has_tty
+  wants_color="false"
+  has_tty="false"
+
+  if [[ "${LOG_COLOR:-}" == "true" || "${LOG_COLOR:-}" == "TRUE" ]]; then
+    wants_color="true"
+  fi
+  if [[ -t 1 || -t 2 ]]; then
+    has_tty="true"
+  fi
+
+  if [[ "$wants_color" != "true" || "$has_tty" != "true" ]]; then
     C_RESET=""
     C_DIM=""
     C_RED=""
