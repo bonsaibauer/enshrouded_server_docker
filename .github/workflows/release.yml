@@ -22,11 +22,23 @@ jobs:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
     steps:
-      - name: Ensure DOCKER_USER is set
-        if: env.DOCKER_USER == ''
+      - name: Log workflow context
         run: |
-          echo "DOCKER_USER repo variable is missing" >&2
-          exit 1
+          set -euo pipefail
+          echo "::notice::INFO: workflow=release repo=${GITHUB_REPOSITORY} ref=${GITHUB_REF_NAME} actor=${GITHUB_ACTOR}"
+
+      - name: Validate Docker secrets
+        run: |
+          set -euo pipefail
+          if [ -z "${DOCKER_USER:-}" ]; then
+            echo "::error::FATAL: DOCKER_USER secret is missing."
+            exit 1
+          fi
+          if [ -z "${DOCKER_TOKEN:-}" ]; then
+            echo "::error::FATAL: DOCKER_TOKEN secret is missing."
+            exit 1
+          fi
+          echo "::notice::SUCCESS: Docker secrets are present."
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,10 +57,12 @@ jobs:
       - name: Prepare build context
         run: |
           set -euo pipefail
+          echo "::notice::INFO: Preparing Docker build context."
           rm -rf ./image_context
           mkdir -p ./image_context
           cp -a Dockerfile ./image_context/Dockerfile
           cp -a server_manager ./image_context/
+          echo "::notice::SUCCESS: Build context prepared."
 
       - name: Build and load (no push yet)
         uses: docker/build-push-action@v6
@@ -74,8 +88,10 @@ jobs:
           if [ -n "$PREV" ]; then
             echo "base_tag=$PREV" >> "$GITHUB_OUTPUT"
             echo "has_base=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::INFO: Baseline tag detected: $PREV"
           else
             echo "has_base=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::WARN: No baseline tag found. Compare step will be skipped."
           fi
 
       - name: Docker Scout run (CRITICAL/HIGH, non-blocking)
@@ -168,8 +184,10 @@ jobs:
       - name: Push release tags (after successful scans)
         run: |
           set -euo pipefail
+          echo "::notice::INFO: Pushing release tags to Docker Hub."
           docker push ${{ env.DOCKER_USER }}/enshrouded_server_docker:latest
           docker push ${{ env.DOCKER_USER }}/enshrouded_server_docker:${{ github.event.release.tag_name }}
+          echo "::notice::SUCCESS: Push complete."
 
 
   update-readme:
@@ -182,7 +200,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Skip description update (password missing)
         if: env.DOCKER_TOKEN == ''
-        run: echo "DOCKER_TOKEN secret is missing; skipping description update."
+        run: echo "::warning::WARN: DOCKER_TOKEN secret is missing; skipping description update."
       - name: Update Docker Hub description
         if: env.DOCKER_TOKEN != ''
         uses: peter-evans/dockerhub-description@v5

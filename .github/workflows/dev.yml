@@ -27,11 +27,23 @@ jobs:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}
       DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
     steps:
-      - name: Ensure DOCKER_USER is set
-        if: env.DOCKER_USER == ''
+      - name: Log workflow context
         run: |
-          echo "DOCKER_USER repo variable is missing" >&2
-          exit 1
+          set -euo pipefail
+          echo "::notice::INFO: workflow=dev repo=${GITHUB_REPOSITORY} ref=${GITHUB_REF_NAME} actor=${GITHUB_ACTOR}"
+
+      - name: Validate Docker secrets
+        run: |
+          set -euo pipefail
+          if [ -z "${DOCKER_USER:-}" ]; then
+            echo "::error::FATAL: DOCKER_USER secret is missing."
+            exit 1
+          fi
+          if [ -z "${DOCKER_TOKEN:-}" ]; then
+            echo "::error::FATAL: DOCKER_TOKEN secret is missing."
+            exit 1
+          fi
+          echo "::notice::SUCCESS: Docker secrets are present."
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,14 +63,17 @@ jobs:
           set -euo pipefail
           slug=${GITHUB_REF_NAME//\//-}
           echo "branch_slug=$slug" >> "$GITHUB_OUTPUT"
+          echo "::notice::INFO: branch_slug=$slug"
 
       - name: Prepare build context
         run: |
           set -euo pipefail
+          echo "::notice::INFO: Preparing Docker build context."
           rm -rf ./image_context
           mkdir -p ./image_context
           cp -a Dockerfile ./image_context/Dockerfile
           cp -a server_manager ./image_context/
+          echo "::notice::SUCCESS: Build context prepared."
 
       - name: Build and load dev image (scan first)
         uses: docker/build-push-action@v6
@@ -156,5 +171,7 @@ jobs:
       - name: Push dev tags (after successful scans)
         run: |
           set -euo pipefail
+          echo "::notice::INFO: Pushing dev tags to Docker Hub."
           docker push ${{ env.DOCKER_USER }}/enshrouded_server_docker:dev_latest
           docker push ${{ env.DOCKER_USER }}/enshrouded_server_docker:${{ steps.vars.outputs.branch_slug }}
+          echo "::notice::SUCCESS: Push complete."
