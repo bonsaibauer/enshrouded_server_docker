@@ -5,6 +5,7 @@ For full container shutdowns, use a 90-second grace period: `docker stop -t 90 e
 
 Note: All commands below are shown without the `server` prefix. Internally, they are aliases to the same script. If needed, you can still run them as `docker exec enshroudedserver server <command>`.
 Most commands can run without extra arguments and then use defaults from `server_manager.json` / `enshrouded_server.json` (for example cron schedules and player-check behavior).
+Manager runtime logs (including `supervisord` main log) are written to `${ENSHROUDED_LOG_DIR}/server_manager.log` (default: `/home/enshrouded/server/logs/server_manager.log`).
 
 ## Simple Commands (Quick Readme)
 

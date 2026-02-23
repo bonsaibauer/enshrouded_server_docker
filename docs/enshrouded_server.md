@@ -15,7 +15,7 @@ This document includes:
 |--------------------|--------------------------------------------|--------------------------|---------------------------|
 | **name** | Name of the server | "Enshrouded Server" | Any string (`ENSHROUDED_NAME`) |
 | **saveDirectory** | Directory where savegames are stored | "./savegame" | File path (`ENSHROUDED_SAVE_DIR`) |
-| **logDirectory** | Directory for log files | "./logs" | File path (`ENSHROUDED_LOG_DIR`) |
+| **logDirectory** | Directory for log files | "./logs" | File path (`ENSHROUDED_LOG_DIR`). Also hosts `server_manager.log` and `server_manager_backup/`. |
 | **ip** | Server IP binding | "0.0.0.0" | Server IPv4 address (`ENSHROUDED_IP`) |
 | **queryPort** | Port used for server queries | 15637 | Integer 1..65535 (`ENSHROUDED_QUERY_PORT`) |
 | **slotCount** | Max number of players | 16 | Integer 1..16 (`ENSHROUDED_SLOT_COUNT`) |

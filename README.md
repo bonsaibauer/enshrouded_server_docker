@@ -404,7 +404,7 @@ Edit the `enshrouded_server.json` file to configure gameplay/world settings.
 |--------------------|--------------------------------------------|--------------------------|---------------------------|
 | **name** | Name of the server | "Enshrouded Server" | Any string |
 | **saveDirectory** | Directory where savegames are stored | "./savegame" | File path |
-| **logDirectory** | Directory for log files | "./logs" | File path |
+| **logDirectory** | Directory for log files | "./logs" | File path (`ENSHROUDED_LOG_DIR`). Also used for `server_manager.log` and `server_manager_backup/`. |
 | **ip** | Server IP binding | "0.0.0.0" | Server IP address |
 | ... | ... | ... | ... |
 
@@ -453,6 +453,8 @@ docker exec enshroudedserver start
 # 4. Docker Commands
 
 - `docker logs -f enshroudedserver`: Follows recent container logs live.
+- Manager runtime log file (including `supervisord` main log): `/home/enshrouded/server/logs/server_manager.log` (or `${ENSHROUDED_LOG_DIR}/server_manager.log`).
+- On bootstrap, an existing `server_manager.log` is rotated to `/home/enshrouded/server/logs/server_manager_backup/server_manager_<timestamp>.log`.
 - `docker start enshroudedserver`: Starts the existing container.
 - `docker stop enshroudedserver`: Stops the container with a safe 90s grace period.
 - `docker restart enshroudedserver`: Restarts the container with graceful shutdown behavior.

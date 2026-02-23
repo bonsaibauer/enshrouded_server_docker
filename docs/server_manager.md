@@ -118,3 +118,12 @@ This document includes:
 - `updateCron`, `backupCron`, and `restartCron` are optional cron schedules.
 - If a cron field is `null`, that schedule is disabled.
 - Hook commands run inside the container job runtime and should be idempotent where possible.
+
+---
+
+## Manager Runtime Logs
+
+- Manager runtime logs are written to `<resolved-log-dir>/server_manager.log` (default: `/home/enshrouded/server/logs/server_manager.log`).
+- Path resolution order: `ENSHROUDED_LOG_DIR` ENV -> `enshrouded_server.json` (`.logDirectory`) -> fallback `logs`.
+- This file also includes the `supervisord` main log output.
+- On bootstrap, if `server_manager.log` already exists and is non-empty, it is rotated to `<resolved-log-dir>/server_manager_backup/server_manager_<timestamp>.log`.

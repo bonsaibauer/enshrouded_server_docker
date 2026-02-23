@@ -161,3 +161,8 @@ docker run \
   bonsaibauer/enshrouded_server_docker:dev_latest
 ```
 
+Notes:
+- `ENSHROUDED_LOG_DIR` is also used by manager runtime logs.
+- Manager log file path: `${ENSHROUDED_LOG_DIR}/server_manager.log` (default: `/home/enshrouded/server/logs/server_manager.log`).
+- Rotated manager logs are stored in `${ENSHROUDED_LOG_DIR}/server_manager_backup/`.
+

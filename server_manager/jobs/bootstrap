@@ -69,8 +69,36 @@ prepare_enshrouded_app_folders() {
 A2S_PY_PACKAGE_NAME="${A2S_PY_PACKAGE_NAME:-python-a2s}"
 A2S_PY_PACKAGE_VERSION="${A2S_PY_PACKAGE_VERSION:-1.3.0}"
 A2S_PY_INSTALL_TIMEOUT_SECONDS="${A2S_PY_INSTALL_TIMEOUT_SECONDS:-45}"
-MANAGER_LOG_DIR_DEFAULT_SUFFIX="server_manager/logs"
+MANAGER_LOG_DIR_DEFAULT_SUFFIX="logs"
 MANAGER_LOG_FILE_NAME_DEFAULT="server_manager.log"
+MANAGER_LOG_BACKUP_DIR_NAME_DEFAULT="server_manager_backup"
+
+resolve_manager_log_paths() {
+  local base_log_dir manager_log_file manager_log_backup_dir config_log_dir config_file
+  base_log_dir="${ENSHROUDED_LOG_DIR:-}"
+
+  if [[ -z "$base_log_dir" ]]; then
+    config_file="${install_path}/enshrouded_server.json"
+    if [[ -f "$config_file" ]] && command -v jq >/dev/null 2>&1; then
+      config_log_dir="$(jq -r '.logDirectory // empty' "$config_file" 2>/dev/null || true)"
+      if [[ -n "$config_log_dir" && "$config_log_dir" != "null" ]]; then
+        base_log_dir="$config_log_dir"
+      fi
+    fi
+  fi
+
+  if [[ -z "$base_log_dir" ]]; then
+    base_log_dir="$MANAGER_LOG_DIR_DEFAULT_SUFFIX"
+  fi
+
+  if [[ "$base_log_dir" != /* ]]; then
+    base_log_dir="${install_path}/${base_log_dir}"
+  fi
+  manager_log_file="${base_log_dir}/${MANAGER_LOG_FILE_NAME_DEFAULT}"
+  manager_log_backup_dir="${base_log_dir}/${MANAGER_LOG_BACKUP_DIR_NAME_DEFAULT}"
+
+  printf '%s\n%s\n%s\n' "$base_log_dir" "$manager_log_file" "$manager_log_backup_dir"
+}
 
 is_steam_a2s_python_library_ready() {
   local package_name package_version
@@ -207,11 +235,13 @@ create_folders() {
   info "Creating server folders (save, logs, backup)"
   mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_DIR" "$EN_PROFILE_DIR"
 
-  local manager_log_dir_default manager_log_dir manager_log_backup_dir
-  manager_log_dir_default="${install_path}/${MANAGER_LOG_DIR_DEFAULT_SUFFIX}"
-  manager_log_dir="$manager_log_dir_default"
-  manager_log_backup_dir="${manager_log_dir}/backup"
+  local manager_log_dir manager_log_file manager_log_backup_dir
+  mapfile -t _manager_log_paths < <(resolve_manager_log_paths)
+  manager_log_dir="${_manager_log_paths[0]}"
+  manager_log_file="${_manager_log_paths[1]}"
+  manager_log_backup_dir="${_manager_log_paths[2]}"
   mkdir -p "$manager_log_dir" "$manager_log_backup_dir"
+  : >"$manager_log_file" 2>/dev/null || true
 
   if [[ -n "$ENSHROUDED_SAVE_DIR" ]]; then
     if [[ "$ENSHROUDED_SAVE_DIR" == /* ]]; then
@@ -246,7 +276,13 @@ apply_permissions() {
   [[ -n "${MANAGER_DATA_DIR:-}" && "$MANAGER_DATA_DIR" == /* ]] && chown -R enshrouded:enshrouded "$MANAGER_DATA_DIR"
   [[ -n "${MANAGER_PROFILE_DIR:-}" && "$MANAGER_PROFILE_DIR" == /* ]] && chown -R enshrouded:enshrouded "$MANAGER_PROFILE_DIR"
   [[ -n "${EN_PROFILE_DIR:-}" && "$EN_PROFILE_DIR" == /* ]] && chown -R enshrouded:enshrouded "$EN_PROFILE_DIR"
-  chown -R enshrouded:enshrouded "${install_path}/${MANAGER_LOG_DIR_DEFAULT_SUFFIX}"
+  local manager_log_dir manager_log_file manager_log_backup_dir
+  mapfile -t _manager_log_paths < <(resolve_manager_log_paths)
+  manager_log_dir="${_manager_log_paths[0]}"
+  manager_log_file="${_manager_log_paths[1]}"
+  manager_log_backup_dir="${_manager_log_paths[2]}"
+  chown -R enshrouded:enshrouded "$manager_log_dir" "$manager_log_backup_dir"
+  chown enshrouded:enshrouded "$manager_log_file" 2>/dev/null || true
   [[ "$ENSHROUDED_SAVE_DIR" == /* ]] && chown -R enshrouded:enshrouded "$ENSHROUDED_SAVE_DIR"
   [[ "$ENSHROUDED_LOG_DIR" == /* ]] && chown -R enshrouded:enshrouded "$ENSHROUDED_LOG_DIR"
   [[ "$BACKUP_DIR" == /* ]] && chown -R enshrouded:enshrouded "$BACKUP_DIR"
@@ -256,14 +292,15 @@ apply_permissions() {
 }
 
 setup_syslog() {
-  local rsyslog_conf_path supervisor_syslog_conf_path
-  local manager_log_dir_default manager_log_dir manager_log_backup_dir manager_log_file
+  local rsyslog_conf_path supervisor_syslog_conf_path supervisord_main_conf_path
+  local manager_log_dir manager_log_backup_dir manager_log_file
   rsyslog_conf_path="${rsyslog_conf:-/etc/rsyslog.d/stdout.conf}"
   supervisor_syslog_conf_path="${supervisor_syslog_conf:-/usr/local/etc/supervisor/conf.d/syslog.conf}"
-  manager_log_dir_default="${install_path}/${MANAGER_LOG_DIR_DEFAULT_SUFFIX}"
-  manager_log_dir="$manager_log_dir_default"
-  manager_log_backup_dir="${manager_log_dir}/backup"
-  manager_log_file="${manager_log_dir}/${MANAGER_LOG_FILE_NAME_DEFAULT}"
+  supervisord_main_conf_path="${supervisord_conf:-/etc/supervisor/supervisord.conf}"
+  mapfile -t _manager_log_paths < <(resolve_manager_log_paths)
+  manager_log_dir="${_manager_log_paths[0]}"
+  manager_log_file="${_manager_log_paths[1]}"
+  manager_log_backup_dir="${_manager_log_paths[2]}"
 
   mkdir -p "$(dirname "$rsyslog_conf_path")" "$(dirname "$supervisor_syslog_conf_path")" "$manager_log_dir" "$manager_log_backup_dir"
 
@@ -303,6 +340,23 @@ autostart=true
 autorestart=true
 priority=10
 EOF
+
+  if [[ -f "$supervisord_main_conf_path" ]]; then
+    # Keep supervisord main log in the same manager log file.
+    sed -i -E "s|^logfile=.*$|logfile=${manager_log_file}|" "$supervisord_main_conf_path"
+    if grep -q '^logfile_maxbytes=' "$supervisord_main_conf_path"; then
+      sed -i -E 's|^logfile_maxbytes=.*$|logfile_maxbytes=0|' "$supervisord_main_conf_path"
+    else
+      sed -i -E "/^logfile=/a logfile_maxbytes=0" "$supervisord_main_conf_path"
+    fi
+    if grep -q '^logfile_backups=' "$supervisord_main_conf_path"; then
+      sed -i -E 's|^logfile_backups=.*$|logfile_backups=0|' "$supervisord_main_conf_path"
+    else
+      sed -i -E "/^logfile_maxbytes=/a logfile_backups=0" "$supervisord_main_conf_path"
+    fi
+  else
+    warn "supervisord main config not found: $supervisord_main_conf_path"
+  fi
 }
 
 run_entrypoint_mode() {
