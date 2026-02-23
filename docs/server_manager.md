@@ -127,3 +127,4 @@ This document includes:
 - Path resolution order: `ENSHROUDED_LOG_DIR` ENV -> `enshrouded_server.json` (`.logDirectory`) -> fallback `logs`.
 - This file also includes the `supervisord` main log output.
 - On bootstrap, if `server_manager.log` already exists and is non-empty, it is rotated to `<resolved-log-dir>/server_manager_backup/server_manager_<timestamp>.log`.
+- Logging level/format functions (`info`, `warn`, `error`, `success`, `fatal`) are centrally defined in `server_manager/jobs/server` and imported by all job scripts.

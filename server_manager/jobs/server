@@ -1,5 +1,83 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+
+LOG_LEVEL_INFO=40
+LOG_LEVEL_ERROR=35
+LOG_LEVEL_WARN=30
+LOG_LEVEL_DEBUG=50
+log_level="${LOG_LEVEL:-$LOG_LEVEL_INFO}"
+
+init_colors() {
+  local wants_color
+  wants_color="false"
+
+  if [[ "${LOG_COLOR:-}" == "true" || "${LOG_COLOR:-}" == "TRUE" ]]; then
+    wants_color="true"
+  fi
+
+  if [[ "$wants_color" != "true" ]]; then
+    C_RESET=""
+    C_DIM=""
+    C_RED=""
+    C_BLUE=""
+    C_YELLOW=""
+    C_GREEN=""
+    C_MAGENTA=""
+  else
+    C_RESET=$'\033[0m'
+    C_DIM=$'\033[2m'
+    C_RED=$'\033[31m'
+    C_BLUE=$'\033[34m'
+    C_YELLOW=$'\033[33m'
+    C_GREEN=$'\033[32m'
+    C_MAGENTA=$'\033[35m'
+  fi
+}
+
+mirror_to_container_stderr() {
+  local line
+  line="$1"
+
+  if [[ -n "${SUPERVISOR_PROCESS_NAME:-}" || -n "${SUPERVISOR_GROUP_NAME:-}" ]]; then
+    return 0
+  fi
+
+  [[ -w /proc/1/fd/2 ]] || return 0
+  printf "%s\n" "$line" >/proc/1/fd/2 2>/dev/null || true
+}
+
+log_line() {
+  local stream level_color level message
+  local rendered
+  stream="$1"
+  level_color="$2"
+  level="$3"
+  shift 3
+  message="$*"
+  rendered="$(printf "%s%s%s: %s" "$level_color" "$level" "$C_RESET" "$message")"
+  if [[ "$stream" == "stderr" ]]; then
+    printf "%s\n" "$rendered" >&2
+  else
+    printf "%s\n" "$rendered"
+  fi
+  mirror_to_container_stderr "$rendered"
+}
+
+info() { [[ "$log_level" -ge "$LOG_LEVEL_INFO" ]] && log_line stderr "$C_BLUE" INFO "$*" || true; }
+success() {
+  [[ "$log_level" -ge "$LOG_LEVEL_INFO" ]] || return 0
+  log_line stderr "$C_BLUE" INFO "${C_GREEN}success${C_RESET}: $*"
+}
+error() { [[ "$log_level" -ge "$LOG_LEVEL_ERROR" ]] && log_line stderr "$C_RED" ERROR "$*" || true; }
+warn() { [[ "$log_level" -ge "$LOG_LEVEL_WARN" ]] && log_line stderr "$C_YELLOW" WARN "$*" || true; }
+fatal() { log_line stderr "$C_RED" FATAL "$*"; exit 1; }
+
+init_colors
+
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
+fi
+
 # shellcheck source=server_manager/jobs/env-validation
 . "${SCRIPT_DIR}/env-validation"
 

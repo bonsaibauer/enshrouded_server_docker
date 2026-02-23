@@ -48,6 +48,7 @@ Top-level selections:
 Logging:
 
 - Menu uses the same levels as the job scripts: `info`, `warn`, `error`, `success`, `fatal`.
+- Logging functions are defined centrally in `server_manager/jobs/server` and imported by all job scripts.
 - `info`: neutral runtime hints and progress messages (for example navigation/help text, "running command").
 - `success`: completed actions.
 - `warn`: non-critical problems, invalid input, or constraints where the current step can still continue.

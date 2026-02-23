@@ -1,5 +1,7 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs/server
+. "${SCRIPT_DIR}/server"
 # shellcheck source=server_manager/jobs/env-validation
 . "${SCRIPT_DIR}/env-validation"
 
@@ -486,9 +488,11 @@ menu_prompt_nav_choice() {
       return 0
       ;;
     m)
-      menu_nav_set "main"
-      printf "%s" "__nav_main__"
-      return 0
+      if [[ "$main_screen" != "true" ]]; then
+        menu_nav_set "main"
+        printf "%s" "__nav_main__"
+        return 0
+      fi
       ;;
   esac
 
@@ -592,8 +596,9 @@ menu_display_path() {
 }
 
 ui_header() {
-  local subtitle
+  local subtitle main_screen
   subtitle="${1:-}"
+  main_screen="${2:-false}"
 
   ui_clear
   ui_banner
@@ -620,7 +625,11 @@ ui_header() {
   ui_hr
 
   if ui_has_tty; then
-    ui_info "Navigation: enter a number or b/m/x and press Enter."
+    if [[ "$main_screen" == "true" ]]; then
+      ui_info "Navigation: enter a number or x and press Enter."
+    else
+      ui_info "Navigation: enter a number or b/m/x and press Enter."
+    fi
     ui_info "Exit behavior: if the server is STOPPED, you will be asked to run bootstrap + start before exit."
   else
     ui_warn "Hint: no TTY detected. Start with: docker exec -it CONTAINER_NAME server menu"
@@ -1300,6 +1309,73 @@ menu_spec_editor__set_jq() {
   return 1
 }
 
+menu_spec_editor__json_path_to_array_json() {
+  # Converts a restricted jq-style path (e.g. .a.b[0].c) to JSON array form.
+  # Supported segments: .name and [<index>].
+  local raw path rest key idx out first
+  raw="$1"
+  path="$(printf "%s" "$raw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  [[ -n "$path" ]] || return 1
+  [[ "$path" == .* || "$path" == \[* ]] || return 1
+
+  rest="$path"
+  out="["
+  first=1
+
+  while [[ -n "$rest" ]]; do
+    if [[ "$rest" == .* ]]; then
+      rest="${rest#.}"
+    fi
+
+    if [[ "$rest" =~ ^([A-Za-z_][A-Za-z0-9_]*)(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      rest="${BASH_REMATCH[2]}"
+      if [[ "$first" -eq 0 ]]; then
+        out+=","
+      fi
+      out+="\"$key\""
+      first=0
+    fi
+
+    while [[ "$rest" =~ ^\[([0-9]+)\](.*)$ ]]; do
+      idx="${BASH_REMATCH[1]}"
+      rest="${BASH_REMATCH[2]}"
+      if [[ "$first" -eq 0 ]]; then
+        out+=","
+      fi
+      out+="$idx"
+      first=0
+    done
+
+    if [[ -z "$rest" ]]; then
+      break
+    fi
+    if [[ "$rest" == .* ]]; then
+      continue
+    fi
+    return 1
+  done
+
+  out+="]"
+  printf "%s" "$out"
+}
+
+menu_spec_editor__set_path_with_jq() {
+  # Safe setter that avoids injecting the raw path into jq program text.
+  local file json_path path_array_json
+  file="$1"
+  json_path="$2"
+  shift 2
+
+  path_array_json="$(menu_spec_editor__json_path_to_array_json "$json_path" 2>/dev/null || true)"
+  if [[ -z "$path_array_json" ]]; then
+    ui_warn "Cannot save: unsupported JSON path mapping: ${json_path:-<empty>}"
+    return 1
+  fi
+
+  menu_spec_editor__set_jq "$file" --argjson p "$path_array_json" "$@" 'setpath($p; $val)'
+}
+
 menu_spec_editor__block_if_env_locked() {
   # Returns 0 if editable, 1 if locked by external env override.
   local env_var env_value env_mode
@@ -1531,7 +1607,7 @@ menu_spec_editor__edit_var() {
         return 0
       fi
       menu_spec_editor__session_backup_if_needed "$backup_job" || true
-      if ! menu_spec_editor__set_jq "$file" "$json_path = []"; then
+      if ! menu_spec_editor__set_path_with_jq "$file" "$json_path" --argjson val "[]"; then
         ui_pause
       fi
       return 0
@@ -1541,8 +1617,15 @@ menu_spec_editor__edit_var() {
       ui_pause
       return 0
     fi
+    local list_json
+    list_json="$(jq -cn --arg csv "$v" '$csv | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0))' 2>/dev/null || true)"
+    if [[ -z "$list_json" ]]; then
+      ui_warn "Cannot save: failed to convert list input"
+      ui_pause
+      return 0
+    fi
     menu_spec_editor__session_backup_if_needed "$backup_job" || true
-    if ! menu_spec_editor__set_jq "$file" --arg val "$v" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))"; then
+    if ! menu_spec_editor__set_path_with_jq "$file" "$json_path" --argjson val "$list_json"; then
       ui_pause
     fi
     return 0
@@ -1570,7 +1653,7 @@ menu_spec_editor__edit_var() {
           return 0
         fi
         menu_spec_editor__session_backup_if_needed "$backup_job" || true
-        if ! menu_spec_editor__set_jq "$file" "$json_path = null"; then
+        if ! menu_spec_editor__set_path_with_jq "$file" "$json_path" --argjson val "null"; then
           ui_pause
         fi
       fi
@@ -1591,7 +1674,7 @@ menu_spec_editor__edit_var() {
   esac
 
   menu_spec_editor__session_backup_if_needed "$backup_job" || true
-  if ! menu_spec_editor__set_jq "$file" "$jq_arg" val "$v" "$json_path = \$val"; then
+  if ! menu_spec_editor__set_path_with_jq "$file" "$json_path" "$jq_arg" val "$v"; then
     ui_pause
   fi
 }
@@ -2652,7 +2735,7 @@ menu_load_screen() {
       ui_fatal "Menu screen '${screen}' missing or empty in ${MENU_SPEC_FILE}"
     fi
 
-    ui_header "$title"
+    ui_header "$title" "$main_screen"
     for action in "${entries[@]}"; do
       IFS='|' read -r key label action_id <<<"$action"
       [[ -z "$key" || -z "$action_id" ]] && continue
