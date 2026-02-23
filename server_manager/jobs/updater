@@ -1,7 +1,5 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-# shellcheck source=server_manager/jobs/server
-. "${SCRIPT_DIR}/server"
 # shellcheck source=server_manager/jobs/env-validation
 . "${SCRIPT_DIR}/env-validation"
 
@@ -11,6 +9,7 @@ FORCE_UPDATE="false"
 CHECK_ONLY="false"
 NO_PLAYER_CHECK="false"
 PLAYER_CHECK_FORCE=""
+runtime_ready="false"
 
 debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && log_line stderr "$C_MAGENTA" DEBUG "$*" || true; }
 
@@ -71,7 +70,7 @@ usage() {
   cat <<'EOF'
 Usage:
   updater [force|check|player-check|no-player-check]
-  updater [--force] [--check-only] [--player-check|--no-player-check]
+  updater [--force] [--check-only] [--runtime-ready] [--player-check|--no-player-check]
 EOF
 }
 
@@ -105,6 +104,10 @@ parse_args() {
         ;;
       --check-only)
         CHECK_ONLY="true"
+        shift
+        ;;
+      --runtime-ready|runtime-ready)
+        runtime_ready="true"
         shift
         ;;
       --player-check)
@@ -317,7 +320,11 @@ check_proton_files_available() {
 
 main() {
   parse_args "$@"
-  init_runtime_env
+  if [[ "$runtime_ready" == "true" ]]; then
+    info "Skipping runtime initialization (--runtime-ready)"
+  else
+    init_runtime_env
+  fi
 
   if [[ -n "$PLAYER_CHECK_FORCE" ]]; then
     UPDATE_CHECK_PLAYERS="$PLAYER_CHECK_FORCE"

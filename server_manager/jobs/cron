@@ -1,7 +1,5 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-# shellcheck source=server_manager/jobs/server
-. "${SCRIPT_DIR}/server"
 # shellcheck source=server_manager/jobs/env-validation
 . "${SCRIPT_DIR}/env-validation"
 
@@ -9,6 +7,7 @@ update_cron="${UPDATE_CRON:-}"
 backup_cron="${BACKUP_CRON:-}"
 restart_cron="${RESTART_CRON:-}"
 service_action=""
+runtime_ready="false"
 SERVER_JOB_BIN="${SERVER_JOB_BIN:-${SCRIPT_DIR}/server}"
 
 usage() {
@@ -16,7 +15,7 @@ usage() {
 Usage:
   cron [sync] [--update-cron "<expr>"] [--backup-cron "<expr>"] [--restart-cron "<expr>"]
   cron <start|stop|restart|status>
-  cron [--sync] [--update-cron "<expr>"] [--backup-cron "<expr>"] [--restart-cron "<expr>"]
+  cron [--sync] [--runtime-ready] [--update-cron "<expr>"] [--backup-cron "<expr>"] [--restart-cron "<expr>"]
   cron --service <start|stop|restart|status>
 EOF
 }
@@ -36,6 +35,10 @@ parse_args() {
         exit 0
         ;;
       --sync)
+        shift
+        ;;
+      --runtime-ready|runtime-ready)
+        runtime_ready="true"
         shift
         ;;
       --service)
@@ -172,7 +175,11 @@ main() {
   fi
 
   info "Running cron schedule sync (update=${update_cron:-<empty>}, backup=${backup_cron:-<empty>}, restart=${restart_cron:-<empty>})"
-  init_runtime_env
+  if [[ "$runtime_ready" == "true" ]]; then
+    info "Skipping runtime initialization (--runtime-ready)"
+  else
+    init_runtime_env
+  fi
   sync_crontab
   success "Cron schedule sync complete"
 }

@@ -2,8 +2,8 @@
 
 _validation_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-# shellcheck source=server_manager/jobs/server
-. "${_validation_dir}/server"
+# shellcheck source=server_manager/lib/log
+. "${_validation_dir}/../lib/log"
 
 # Shared profile/path helpers are centralized in `profile`.
 # shellcheck source=server_manager/jobs/profile
@@ -1352,6 +1352,12 @@ load_enshrouded_env_from_profile() {
 }
 
 init_runtime_env() {
+  local query_port_env_is_set
+  query_port_env_is_set="false"
+  if printenv ENSHROUDED_QUERY_PORT >/dev/null 2>&1; then
+    query_port_env_is_set="true"
+  fi
+
   # Ensure MANAGER_PROFILE_DIR contains a persistent copy of shipped Server Manager templates.
   info "Initializing runtime environment"
   info "Ensuring manager profile catalog"
@@ -1376,6 +1382,17 @@ init_runtime_env() {
 
   savefile_name="$SAVEFILE_NAME"
   steam_app_id="$STEAM_APP_ID"
+
+  if [[ -n "${ENSHROUDED_QUERY_PORT:-}" ]]; then
+    if [[ "$query_port_env_is_set" == "true" ]]; then
+      success "Resolved deferred runtime value for ENSHROUDED_QUERY_PORT via ENV (value=${ENSHROUDED_QUERY_PORT})."
+    else
+      info "Resolved deferred runtime value for ENSHROUDED_QUERY_PORT via config/profile fallback (value=${ENSHROUDED_QUERY_PORT})."
+    fi
+  else
+    warn "Deferred runtime value ENSHROUDED_QUERY_PORT is empty after initialization."
+  fi
+
   info "Runtime environment initialized (steam_app_id=${steam_app_id:-<empty>}, savefile_name=${savefile_name:-<empty>})"
 }
 

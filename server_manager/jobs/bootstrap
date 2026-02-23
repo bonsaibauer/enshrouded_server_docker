@@ -1,7 +1,5 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-# shellcheck source=server_manager/jobs/server
-. "${SCRIPT_DIR}/server"
 # shellcheck source=server_manager/jobs/env-validation
 . "${SCRIPT_DIR}/env-validation"
 
@@ -61,32 +59,6 @@ parse_args() {
 
 server_run() {
   "${SCRIPT_DIR}/server" "$@"
-}
-
-wait_for_rsyslogd_running() {
-  local timeout interval started_at now elapsed remaining status_line state
-  timeout=60
-  interval=1
-
-  started_at="$(date +%s)"
-  while true; do
-    status_line="$(supervisorctl status rsyslogd 2>/dev/null || true)"
-    state="$(awk 'NR==1 {print $2}' <<<"$status_line")"
-    if [[ "$state" == "RUNNING" ]]; then
-      info "rsyslogd is RUNNING; bootstrap job can continue"
-      return 0
-    fi
-
-    now="$(date +%s)"
-    elapsed="$((now - started_at))"
-    remaining="$((timeout - elapsed))"
-    if (( remaining <= 0 )); then
-      fatal "Timeout waiting for rsyslogd to reach RUNNING state (last_status='${status_line:-unknown}')"
-    fi
-
-    info "Waiting for rsyslogd RUNNING state... (${elapsed}s elapsed, ${remaining}s remaining; status='${status_line:-unknown}')"
-    sleep "$interval"
-  done
 }
 
 prepare_enshrouded_app_folders() {
@@ -398,15 +370,14 @@ run_entrypoint_mode() {
 
 run_job_mode() {
   local bootstrap_pre_hook updater_player_flag
-  wait_for_rsyslogd_running
   info "Running bootstrap job mode (skip_update=${skip_update})"
-  server_run guard-require core_ready -- "${SCRIPT_DIR}/server" --startup-ui
+  server_run --startup-ui
   init_runtime_env
   verify_variables
   prepare_enshrouded_app_folders
   update_or_create_enshrouded_server_config
   prepare_steam_a2s_python_library
-  server_run cron sync --update-cron "${UPDATE_CRON:-}" --backup-cron "${BACKUP_CRON:-}" --restart-cron "${RESTART_CRON:-}"
+  server_run cron sync --runtime-ready --update-cron "${UPDATE_CRON:-}" --backup-cron "${BACKUP_CRON:-}" --restart-cron "${RESTART_CRON:-}"
   bootstrap_pre_hook="${BOOTSTRAP_PRE_HOOK:-${BOOTSTRAP_HOOK:-}}"
   server_run hook-run "bootstrap pre" "$bootstrap_pre_hook"
   if [[ "$skip_update" == "true" ]]; then
@@ -418,7 +389,7 @@ run_job_mode() {
     fi
     # Pass an explicit updater arg so `server update` runs the updater script directly.
     # This preserves UPDATER_BOOTSTRAP_MODE for bootstrap-specific log levels.
-    UPDATER_BOOTSTRAP_MODE=true server_run update "$updater_player_flag"
+    UPDATER_BOOTSTRAP_MODE=true server_run update --runtime-ready "$updater_player_flag"
   fi
   server_run hook-run "bootstrap post" "${BOOTSTRAP_POST_HOOK:-}"
   success "Bootstrap job mode complete"

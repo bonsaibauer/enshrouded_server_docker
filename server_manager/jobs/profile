@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 PROFILE_SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-# shellcheck source=server_manager/jobs/server
-. "${PROFILE_SCRIPT_DIR}/server"
+# shellcheck source=server_manager/lib/log
+. "${PROFILE_SCRIPT_DIR}/../lib/log"
 
 install_path="${INSTALL_PATH:-/home/enshrouded/server}"
 MANAGER_DATA_DIR="${MANAGER_DATA_DIR:-${install_path}/server_manager}"

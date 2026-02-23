@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-# shellcheck source=server_manager/jobs/server
-. "${SCRIPT_DIR}/server"
 # shellcheck source=server_manager/jobs/profile
 . "${SCRIPT_DIR}/profile"
 
