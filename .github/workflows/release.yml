@@ -200,7 +200,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Skip description update (password missing)
         if: env.DOCKER_TOKEN == ''
-        run: echo "::warning::WARN: DOCKER_TOKEN secret is missing; skipping description update."
+        run: 'echo "::warning::WARN: DOCKER_TOKEN secret is missing; skipping description update."'
       - name: Update Docker Hub description
         if: env.DOCKER_TOKEN != ''
         uses: peter-evans/dockerhub-description@v5
