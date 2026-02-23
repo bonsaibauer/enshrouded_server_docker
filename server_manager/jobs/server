@@ -1,6 +1,12 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
 
+# Guard against recursive sourcing (server -> env-validation -> server).
+if [[ "${__ENSHROUDED_SERVER_SOURCE_GUARD:-0}" == "1" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
+__ENSHROUDED_SERVER_SOURCE_GUARD=1
+
 LOG_LEVEL_INFO=40
 LOG_LEVEL_ERROR=35
 LOG_LEVEL_WARN=30
@@ -34,17 +40,7 @@ init_colors() {
   fi
 }
 
-mirror_to_container_stderr() {
-  local line
-  line="$1"
-
-  if [[ -n "${SUPERVISOR_PROCESS_NAME:-}" || -n "${SUPERVISOR_GROUP_NAME:-}" ]]; then
-    return 0
-  fi
-
-  [[ -w /proc/1/fd/2 ]] || return 0
-  printf "%s\n" "$line" >/proc/1/fd/2 2>/dev/null || true
-}
+mirror_to_container_stderr() { :; }
 
 log_line() {
   local stream level_color level message

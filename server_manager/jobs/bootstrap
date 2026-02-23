@@ -63,6 +63,32 @@ server_run() {
   "${SCRIPT_DIR}/server" "$@"
 }
 
+wait_for_rsyslogd_running() {
+  local timeout interval started_at now elapsed remaining status_line state
+  timeout=60
+  interval=1
+
+  started_at="$(date +%s)"
+  while true; do
+    status_line="$(supervisorctl status rsyslogd 2>/dev/null || true)"
+    state="$(awk 'NR==1 {print $2}' <<<"$status_line")"
+    if [[ "$state" == "RUNNING" ]]; then
+      info "rsyslogd is RUNNING; bootstrap job can continue"
+      return 0
+    fi
+
+    now="$(date +%s)"
+    elapsed="$((now - started_at))"
+    remaining="$((timeout - elapsed))"
+    if (( remaining <= 0 )); then
+      fatal "Timeout waiting for rsyslogd to reach RUNNING state (last_status='${status_line:-unknown}')"
+    fi
+
+    info "Waiting for rsyslogd RUNNING state... (${elapsed}s elapsed, ${remaining}s remaining; status='${status_line:-unknown}')"
+    sleep "$interval"
+  done
+}
+
 prepare_enshrouded_app_folders() {
   info "Ensuring Enshrouded install directory exists: $install_path"
   mkdir -p "$install_path"
@@ -363,7 +389,6 @@ EOF
 
 run_entrypoint_mode() {
   info "Running bootstrap entrypoint mode"
-  verify_variables
   create_folders
   apply_permissions
   setup_syslog
@@ -373,6 +398,7 @@ run_entrypoint_mode() {
 
 run_job_mode() {
   local bootstrap_pre_hook updater_player_flag
+  wait_for_rsyslogd_running
   info "Running bootstrap job mode (skip_update=${skip_update})"
   server_run guard-require core_ready -- "${SCRIPT_DIR}/server" --startup-ui
   init_runtime_env
