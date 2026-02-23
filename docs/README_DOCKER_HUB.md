@@ -41,6 +41,9 @@ docker run \
   bonsaibauer/enshrouded_server_docker:dev_latest
 ```
 
+> [!NOTE]
+> `ENSHROUDED_QUERY_PORT` is `env_mode=deferred`: early startup validation can proceed when empty, but runtime still needs a resolved value (ENV or valid config/profile fallback). In menu editors this field is treated as hard ENV-managed (locked).
+
 > [!TIP]
 > 🎛️ Open the control center with: `docker exec -it enshroudedserver menu`
 

@@ -260,12 +260,18 @@ Common adjustments:
 | `-e PUID/PGID` | In this tutorial: `-e PUID=$(id -u enshrouded) -e PGID=$(id -g enshrouded)`; you can also set them directly, e.g. `-e PUID=1001 -e PGID=1001`. |
 | `-e EN_PROFILE` | `-e EN_PROFILE=default` (selects Enshrouded profile template on first bootstrap for fresh/missing config). |
 | `-e MANAGER_PROFILE` | `-e MANAGER_PROFILE=default` (selects Server Manager profile template on first bootstrap for fresh/missing config). |
-| `-e ENSHROUDED_QUERY_PORT` | `-e ENSHROUDED_QUERY_PORT=15637` (must match the internal port in `-p ...:<internal>/udp`). |
+| `-e ENSHROUDED_QUERY_PORT` | `-e ENSHROUDED_QUERY_PORT=15637` (must match the internal port in `-p ...:<internal>/udp`; `env_mode=deferred`, so runtime can also resolve from config/profile fallback). |
 | `-e ENSHROUDED_NAME` | `-e ENSHROUDED_NAME="My Enshrouded Server"` (server name shown in the in-game server browser). |
 | `-v <host_path>:/home/enshrouded/server` | `-v /home/enshrouded/server_1:/home/enshrouded/server` |
 | `bonsaibauer/enshrouded_server_docker:<tag>` | `bonsaibauer/enshrouded_server_docker:dev_latest` (or `latest`; see [Docker Hub tags](https://hub.docker.com/r/bonsaibauer/enshrouded_server_docker/tags)). |
 
 </details>
+
+> [!NOTE]
+> `ENSHROUDED_QUERY_PORT` uses `env_mode=deferred`:
+> - startup validation does not hard-fail if it is initially empty,
+> - runtime init still requires a final resolved value (ENV or valid config/profile fallback),
+> - the menu treats this field as hard ENV-managed (locked in editors).
 
 <details>
 <summary><strong>Profiles Explained</strong></summary>

@@ -17,7 +17,7 @@ This document includes:
 | **saveDirectory** | Directory where savegames are stored | "./savegame" | File path (`ENSHROUDED_SAVE_DIR`) |
 | **logDirectory** | Directory for log files | "./logs" | File path (`ENSHROUDED_LOG_DIR`). Also hosts `server_manager.log` and `server_manager_backup/`. |
 | **ip** | Server IP binding | "0.0.0.0" | Server IPv4 address (`ENSHROUDED_IP`) |
-| **queryPort** | Port used for server queries | 15637 | Integer 1..65535 (`ENSHROUDED_QUERY_PORT`) |
+| **queryPort** | Port used for server queries | 15637 | Integer 1..65535 (`ENSHROUDED_QUERY_PORT`, `env_mode=deferred`: can initialize from ENV or config/profile fallback at runtime). |
 | **slotCount** | Max number of players | 16 | Integer 1..16 (`ENSHROUDED_SLOT_COUNT`) |
 | **tags** | Optional server browser tags | [] | Comma-separated tags in ENV (`ENSHROUDED_TAGS`), each tag: `A-Z a-z 0-9 . _ -` |
 | **voiceChatMode** | Voice chat type | Proximity | Proximity / Global (`ENSHROUDED_VOICE_CHAT_MODE`) |

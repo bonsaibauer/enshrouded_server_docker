@@ -44,6 +44,7 @@ Top-level selections:
 - `x` = Exit menu.
 - Prompts use `yes/no` (also accepts `y/n`).
 - `[ENV]` marks settings controlled by container environment variables (locked in the editors).
+- Fields with `env_mode=hard` and `env_mode=deferred` are treated as hard ENV-managed in the editors and cannot be changed there.
 
 Logging:
 

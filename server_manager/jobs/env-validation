@@ -1179,7 +1179,7 @@ manager_profile_value_for_var() {
 }
 
 update_or_create_manager_config() {
-  local config_file profile value env_value var created_config env_mode env_is_set env_rule
+  local config_file profile value env_value var created_config env_mode env_is_set env_rule deferred_fallback_attempted
   created_config="false"
 
   if ! command -v jq >/dev/null 2>&1; then
@@ -1210,6 +1210,7 @@ update_or_create_manager_config() {
 
   while IFS= read -r var; do
     [[ -z "$var" ]] && continue
+    deferred_fallback_attempted="false"
     if ! validation_rule_json_read env_rule "$var"; then
       fatal "Validation unavailable for $var: ${VALIDATION_LAST_ERROR:-rule_lookup_failed}"
     fi
@@ -1241,11 +1242,19 @@ update_or_create_manager_config() {
     if [[ "$env_is_set" == "true" ]]; then
       if manager_value_is_valid "$var" "$env_value"; then
         value="$env_value"
+        if [[ "$env_mode" == "deferred" ]]; then
+          success "Resolved deferred runtime value for $var via ENV."
+        fi
       else
         fatal "Invalid ENV value for $var (actual: $env_value). ${VALIDATION_LAST_ERROR:-Validation failed.}"
       fi
     elif [[ "$env_mode" == "hard" ]]; then
       fatal "Missing required ENV $var (env_mode=hard). No fallback from config/profile is allowed."
+    fi
+
+    if [[ -z "$value" && "$env_mode" == "deferred" ]]; then
+      warn "ENV $var is not available at this stage (env_mode=deferred). Trying config/profile fallback during init-runtime."
+      deferred_fallback_attempted="true"
     fi
 
     # Fallback: active config -> profile template.
@@ -1264,8 +1273,12 @@ update_or_create_manager_config() {
       fi
     fi
 
+    if [[ -n "$value" && "$env_mode" == "deferred" && "$deferred_fallback_attempted" == "true" ]]; then
+      info "Resolved deferred runtime value for $var via config/profile fallback."
+    fi
+
     if [[ -z "$value" && "$env_mode" == "deferred" ]]; then
-      fatal "Missing runtime value for $var (env_mode=deferred). Provide ENV or a valid config/profile fallback."
+      fatal "Missing runtime value for $var (env_mode=deferred): ENV not set and no valid config/profile fallback found."
     fi
 
     printf -v "$var" '%s' "$value"

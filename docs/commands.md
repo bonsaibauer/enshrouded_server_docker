@@ -260,6 +260,10 @@ docker exec enshroudedserver env-validation [verify|init-runtime|check <name> <v
 - `verify`: Full ENV validation.
 - `init-runtime`: Initializes runtime values/defaults.
 - `check <name> <value>`: Validates one variable.
+- ENV policy modes from spec:
+- `soft`: Optional ENV (fallbacks allowed).
+- `hard`: Required ENV at validation time (no fallback when empty/missing).
+- `deferred`: May be empty during early `verify`, but must resolve during `init-runtime` (from ENV or valid config/profile fallback).
 
 ### 4.2 `bootstrap`
 
