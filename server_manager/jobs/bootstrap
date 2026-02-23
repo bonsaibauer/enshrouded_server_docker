@@ -69,6 +69,8 @@ prepare_enshrouded_app_folders() {
 A2S_PY_PACKAGE_NAME="${A2S_PY_PACKAGE_NAME:-python-a2s}"
 A2S_PY_PACKAGE_VERSION="${A2S_PY_PACKAGE_VERSION:-1.3.0}"
 A2S_PY_INSTALL_TIMEOUT_SECONDS="${A2S_PY_INSTALL_TIMEOUT_SECONDS:-45}"
+MANAGER_LOG_DIR_DEFAULT_SUFFIX="server_manager/logs"
+MANAGER_LOG_FILE_NAME_DEFAULT="server_manager.log"
 
 is_steam_a2s_python_library_ready() {
   local package_name package_version
@@ -205,6 +207,12 @@ create_folders() {
   info "Creating server folders (save, logs, backup)"
   mkdir -p "$MANAGER_DATA_DIR" "$MANAGER_PROFILE_DIR" "$EN_PROFILE_DIR"
 
+  local manager_log_dir_default manager_log_dir manager_log_backup_dir
+  manager_log_dir_default="${install_path}/${MANAGER_LOG_DIR_DEFAULT_SUFFIX}"
+  manager_log_dir="$manager_log_dir_default"
+  manager_log_backup_dir="${manager_log_dir}/backup"
+  mkdir -p "$manager_log_dir" "$manager_log_backup_dir"
+
   if [[ -n "$ENSHROUDED_SAVE_DIR" ]]; then
     if [[ "$ENSHROUDED_SAVE_DIR" == /* ]]; then
       mkdir -p "$ENSHROUDED_SAVE_DIR"
@@ -238,6 +246,7 @@ apply_permissions() {
   [[ -n "${MANAGER_DATA_DIR:-}" && "$MANAGER_DATA_DIR" == /* ]] && chown -R enshrouded:enshrouded "$MANAGER_DATA_DIR"
   [[ -n "${MANAGER_PROFILE_DIR:-}" && "$MANAGER_PROFILE_DIR" == /* ]] && chown -R enshrouded:enshrouded "$MANAGER_PROFILE_DIR"
   [[ -n "${EN_PROFILE_DIR:-}" && "$EN_PROFILE_DIR" == /* ]] && chown -R enshrouded:enshrouded "$EN_PROFILE_DIR"
+  chown -R enshrouded:enshrouded "${install_path}/${MANAGER_LOG_DIR_DEFAULT_SUFFIX}"
   [[ "$ENSHROUDED_SAVE_DIR" == /* ]] && chown -R enshrouded:enshrouded "$ENSHROUDED_SAVE_DIR"
   [[ "$ENSHROUDED_LOG_DIR" == /* ]] && chown -R enshrouded:enshrouded "$ENSHROUDED_LOG_DIR"
   [[ "$BACKUP_DIR" == /* ]] && chown -R enshrouded:enshrouded "$BACKUP_DIR"
@@ -248,10 +257,22 @@ apply_permissions() {
 
 setup_syslog() {
   local rsyslog_conf_path supervisor_syslog_conf_path
+  local manager_log_dir_default manager_log_dir manager_log_backup_dir manager_log_file
   rsyslog_conf_path="${rsyslog_conf:-/etc/rsyslog.d/stdout.conf}"
   supervisor_syslog_conf_path="${supervisor_syslog_conf:-/usr/local/etc/supervisor/conf.d/syslog.conf}"
+  manager_log_dir_default="${install_path}/${MANAGER_LOG_DIR_DEFAULT_SUFFIX}"
+  manager_log_dir="$manager_log_dir_default"
+  manager_log_backup_dir="${manager_log_dir}/backup"
+  manager_log_file="${manager_log_dir}/${MANAGER_LOG_FILE_NAME_DEFAULT}"
 
-  mkdir -p "$(dirname "$rsyslog_conf_path")" "$(dirname "$supervisor_syslog_conf_path")"
+  mkdir -p "$(dirname "$rsyslog_conf_path")" "$(dirname "$supervisor_syslog_conf_path")" "$manager_log_dir" "$manager_log_backup_dir"
+
+  if [[ -f "$manager_log_file" ]] && [[ -s "$manager_log_file" ]]; then
+    local timestamp backup_log_file
+    timestamp="$(date +%Y-%m-%dT%H-%M-%S)"
+    backup_log_file="${manager_log_backup_dir}/server_manager_${timestamp}.log"
+    mv "$manager_log_file" "$backup_log_file" || warn "Failed to rotate manager log to backup: $backup_log_file"
+  fi
 
   info "Setting up syslogd - logging to stdout"
   cat >"$rsyslog_conf_path" <<EOF
@@ -263,6 +284,7 @@ setup_syslog() {
 \$template custom,"%timegenerated:1:10:date-rfc3339% %timegenerated:12:23:date-rfc3339% %syslogtag%%msg:::sp-if-no-1st-sp%%msg:::drop-last-lf%\n"
 \$ActionFileDefaultTemplate custom
 
+*.* -${manager_log_file}
 :msg, contains, "[session] Pending packets list is full" stop
 *.*;cron,auth,authpriv.none /proc/self/fd/1
 EOF

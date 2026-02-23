@@ -1120,6 +1120,7 @@ shutdown() {
 server_stop_safe() {
   local deadline now
   if ! is_supervisor_running "server"; then
+    success "Server is already stopped"
     return 0
   fi
 

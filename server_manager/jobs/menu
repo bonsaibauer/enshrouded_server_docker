@@ -329,20 +329,57 @@ ui_kv() {
   printf "%s: %s\n" "${C_DIM}${k}${C_RESET}" "$v"
 }
 
-ui_note() {
-  printf "%s%s%s\n" "${C_DIM}" "$*" "${C_RESET}"
+ui_info() {
+  ui_emit "info" "${C_DIM}" "stdout" "$*"
+}
+
+ui_warn() {
+  ui_emit "warn" "${C_YELLOW}" "stdout" "$*"
 }
 
 ui_error() {
-  printf "%s%s%s\n" "${C_RED}" "$*" "${C_RESET}" >&2
-}
-
-ui_warn_line() {
-  printf "%s%s%s\n" "${C_YELLOW}" "$*" "${C_RESET}"
+  ui_emit "error" "${C_RED}" "stderr" "$*"
 }
 
 ui_success() {
-  printf "%s%s%s\n" "${C_GREEN}" "$*" "${C_RESET}"
+  ui_emit "success" "${C_GREEN}" "stdout" "$*"
+}
+
+ui_fatal() {
+  fatal "$*"
+}
+
+menu_log_ui() {
+  # Reuse shared job logging without duplicating lines in interactive TTY output.
+  local level message
+  level="$1"
+  shift || true
+  message="$*"
+
+  case "$level" in
+    info) (info "$message") >/dev/null 2>&1 || true ;;
+    warn) (warn "$message") >/dev/null 2>&1 || true ;;
+    error) (error "$message") >/dev/null 2>&1 || true ;;
+    success) (success "$message") >/dev/null 2>&1 || true ;;
+    *) ;;
+  esac
+}
+
+ui_emit() {
+  local level color stream text
+  level="$1"
+  color="$2"
+  stream="$3"
+  shift 3 || true
+  text="$*"
+
+  if [[ "$stream" == "stderr" ]]; then
+    printf "%s%s%s\n" "$color" "$text" "${C_RESET}" >&2
+  else
+    printf "%s%s%s\n" "$color" "$text" "${C_RESET}"
+  fi
+
+  menu_log_ui "$level" "$text"
 }
 
 ui_opt() {
@@ -389,7 +426,7 @@ ui_confirm_yes_no() {
         return 1
         ;;
       *)
-        ui_warn_line "Please answer yes or no."
+        ui_warn "Please answer yes or no."
         ;;
     esac
   done
@@ -583,10 +620,10 @@ ui_header() {
   ui_hr
 
   if ui_has_tty; then
-    ui_note "Navigation: enter a number or b/m/x and press Enter."
-    ui_note "Exit behavior: if the server is STOPPED, you will be asked to run bootstrap + start before exit."
+    ui_info "Navigation: enter a number or b/m/x and press Enter."
+    ui_info "Exit behavior: if the server is STOPPED, you will be asked to run bootstrap + start before exit."
   else
-    ui_warn_line "Hint: no TTY detected. Start with: docker exec -it CONTAINER_NAME server menu"
+    ui_warn "Hint: no TTY detected. Start with: docker exec -it CONTAINER_NAME server menu"
   fi
   echo
 }
@@ -598,7 +635,7 @@ menu_stop_server_now() {
   fi
 
   if ! "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 90 >/dev/null 2>&1; then
-    ui_error "Timeout while stopping server. Aborting."
+    ui_error "Timeout while stopping server."
     return 1
   fi
 
@@ -613,13 +650,13 @@ menu_stop_server_for_config_change() {
     return 0
   fi
 
-  ui_warn_line "The Enshrouded server is currently RUNNING."
-  ui_warn_line "To $reason, the server must be stopped first to avoid conflicts."
-  ui_warn_line "All players will be disconnected."
+  ui_warn "The Enshrouded server is currently RUNNING."
+  ui_warn "To $reason, the server must be stopped first to avoid conflicts."
+  ui_warn "All players will be disconnected."
   echo
 
   if ! ui_confirm_yes_no "Stop server now?"; then
-    ui_note "Cancelled."
+    ui_info "Cancelled."
     return 1
   fi
 
@@ -632,14 +669,14 @@ menu_stop_server_for_config_change() {
 }
 
 menu_start_server_via_bootstrap() {
-  ui_note "Starting server via bootstrap flow..."
+  ui_info "Starting server via bootstrap flow..."
   if ! server_run bootstrap >/dev/null 2>&1; then
-    ui_warn_line "Bootstrap start request failed."
+    ui_warn "Bootstrap start request failed."
     return 1
   fi
 
   if ! menu_wait_for_program_exit "bootstrap" 900; then
-    ui_warn_line "Bootstrap did not finish in time."
+    ui_warn "Bootstrap did not finish in time."
     return 1
   fi
 
@@ -648,14 +685,14 @@ menu_start_server_via_bootstrap() {
     return 0
   fi
 
-  ui_note "Bootstrap completed; requesting server start..."
+  ui_info "Bootstrap completed; requesting server start..."
   server_run start >/dev/null 2>&1 || true
   if is_supervisor_running "server"; then
     ui_success "Server start requested."
     return 0
   fi
 
-  ui_warn_line "Server is still not running. Check logs/status."
+  ui_warn "Server is still not running. Check logs/status."
   return 1
 }
 
@@ -666,7 +703,7 @@ menu_prompt_start_server() {
   if ui_confirm_yes_no "$prompt"; then
     menu_start_server_via_bootstrap || true
   else
-    ui_note "Server remains stopped."
+    ui_info "Server remains stopped."
   fi
 }
 
@@ -679,12 +716,12 @@ menu_wait_for_program_exit() {
     return 0
   fi
 
-  ui_note "Waiting for $proc to finish..."
+  ui_info "Waiting for $proc to finish..."
   deadline=$(( $(date +%s) + timeout ))
   while is_supervisor_running "$proc"; do
     now="$(date +%s)"
     if [[ "$now" -ge "$deadline" ]]; then
-      ui_warn_line "Timeout while waiting for $proc."
+      ui_warn "Timeout while waiting for $proc."
       return 1
     fi
     sleep 1
@@ -842,10 +879,10 @@ menu_warn_env_overrides_before_profile_selection() {
   mapfile -t active < <(printf "%s\n" "${active[@]}" | sort)
 
   ui_header "Environment Overrides Detected"
-  ui_warn_line "Some ${label} settings are controlled by environment variables."
-  ui_warn_line "They will overwrite profile/template values on bootstrap or next container start."
+  ui_warn "Some ${label} settings are controlled by environment variables."
+  ui_warn "They will overwrite profile/template values on bootstrap or next container start."
   echo
-  ui_note "Active overrides:"
+  ui_info "Active overrides:"
   for k in "${active[@]}"; do
     value="$(menu_env_override_value "$k")"
     printf "%s=%s\n" "$k" "$(menu_env_override_pretty_value "$k" "$value")"
@@ -853,7 +890,7 @@ menu_warn_env_overrides_before_profile_selection() {
   echo
 
   if ! ui_confirm_yes_no "Continue anyway?"; then
-    ui_note "Cancelled."
+    ui_info "Cancelled."
     ui_pause
     return 1
   fi
@@ -904,7 +941,7 @@ menu_run_config_backup_job() {
       menu_run_backup_job "manual" "false" "true" "true" "false"
       ;;
     *)
-      ui_warn_line "Unknown config backup selector: ${1:-manual:all}"
+      ui_warn "Unknown config backup selector: ${1:-manual:all}"
       return 1
       ;;
   esac
@@ -928,7 +965,7 @@ menu_run_savegame_backup() {
   save_dir="$(menu_save_dir_resolve)"
 
   ui_header "Create Manual Backup"
-  ui_note "Manual backups are stored under BACKUP_DIR/manual and are never pruned by backupMaxCount."
+  ui_info "Manual backups are stored under BACKUP_DIR/manual and are never pruned by backupMaxCount."
   echo
   ui_kv "Save Directory" "$save_dir"
   ui_kv "Backup Root" "$backup_dir"
@@ -936,7 +973,7 @@ menu_run_savegame_backup() {
   echo
 
   if ! ui_confirm_yes_no "Create manual full backup now?"; then
-    ui_note "Cancelled."
+    ui_info "Cancelled."
     ui_pause
     return 0
   fi
@@ -944,7 +981,7 @@ menu_run_savegame_backup() {
   if menu_run_backup_job "manual" "true" "true" "true" "false"; then
     ui_success "Manual backup created."
   else
-    ui_warn_line "Backup failed or timed out."
+    ui_warn "Backup failed or timed out."
   fi
 
   ui_pause
@@ -956,7 +993,7 @@ menu_run_config_backup_now() {
 
   while :; do
     ui_header "Create Config Backup"
-    ui_note "Creates a config-only ZIP under BACKUP_DIR/manual."
+    ui_info "Creates a config-only ZIP under BACKUP_DIR/manual."
     echo
     ui_opt 1 "Enshrouded config only"
     ui_opt 2 "Server Manager config only"
@@ -975,7 +1012,7 @@ menu_run_config_backup_now() {
       2) selector="manual:manager" ;;
       3) selector="manual:all" ;;
       *)
-        ui_warn_line "Invalid selection."
+        ui_warn "Invalid selection."
         ui_pause
         continue
         ;;
@@ -984,7 +1021,7 @@ menu_run_config_backup_now() {
     if menu_run_config_backup_job "$selector"; then
       ui_success "Config backup created."
     else
-      ui_warn_line "Config backup failed or timed out."
+      ui_warn "Config backup failed or timed out."
     fi
     ui_pause
     return 0
@@ -1012,7 +1049,7 @@ menu_restore_backup() {
     echo
 
     if [[ "${#files[@]}" -eq 0 ]]; then
-      ui_warn_line "No backup ZIP files found."
+      ui_warn "No backup ZIP files found."
       echo
       if ui_confirm_yes_no "Create a manual backup now?"; then
         menu_run_savegame_backup || true
@@ -1021,7 +1058,7 @@ menu_restore_backup() {
       return 0
     fi
 
-    ui_note "Backups (newest first):"
+    ui_info "Backups (newest first):"
     echo
     local idx base kind
     idx=1
@@ -1046,7 +1083,7 @@ menu_restore_backup() {
     local selected_idx
     selected_idx="$(menu_choice_index "$choice" "${#files[@]}" || true)"
     if [[ -z "$selected_idx" ]]; then
-      ui_warn_line "Invalid selection."
+      ui_warn "Invalid selection."
       ui_pause
       continue
     fi
@@ -1063,21 +1100,21 @@ menu_restore_backup() {
     [[ "$has_enshrouded" == "true" || "$has_enshrouded" == "false" ]] || has_enshrouded="false"
     [[ "$has_manager" == "true" || "$has_manager" == "false" ]] || has_manager="false"
     if [[ "$has_savegame" != "true" && "$has_enshrouded" != "true" && "$has_manager" != "true" ]]; then
-      ui_warn_line "No restorable components detected in this backup."
+      ui_warn "No restorable components detected in this backup."
       ui_pause
       continue
     fi
 
     ui_header "Restore Backup"
-    ui_warn_line "WARNING: Selected components will overwrite current data."
-    ui_warn_line "The server will be stopped and players disconnected."
+    ui_warn "WARNING: Selected components will overwrite current data."
+    ui_warn "The server will be stopped and players disconnected."
     echo
     ui_kv "Selected Backup" "$(basename "$selected")"
     ui_kv "Detected Components" "savegame=$has_savegame, enshrouded=$has_enshrouded, manager=$has_manager"
     echo
 
     if ! ui_confirm_yes_no "Continue to component selection?"; then
-      ui_note "Cancelled."
+      ui_info "Cancelled."
       ui_pause
       continue
     fi
@@ -1099,7 +1136,7 @@ menu_restore_backup() {
     fi
 
     if [[ "$restore_savegame" != "true" && "$restore_enshrouded" != "true" && "$restore_manager" != "true" ]]; then
-      ui_warn_line "Nothing selected for restore."
+      ui_warn "Nothing selected for restore."
       ui_pause
       continue
     fi
@@ -1218,7 +1255,7 @@ menu_spec_editor__session_backup_if_needed() {
   if [[ "${backed_up:-false}" == "true" ]]; then
     return 0
   fi
-  ui_note "Creating config backup (logged via Supervisor)..."
+  ui_info "Creating config backup (logged via Supervisor)..."
   menu_run_config_backup_job "$backup_job" || true
   backed_up="true"
   return 0
@@ -1226,18 +1263,40 @@ menu_spec_editor__session_backup_if_needed() {
 
 menu_spec_editor__set_jq() {
   # Apply a jq transform to $file atomically.
-  local file tmp
+  local file dir base tmp err_file err_last
   file="$1"
   shift
 
-  tmp="$(mktemp)"
-  if jq "$@" "$file" >"$tmp"; then
-    mv "$tmp" "$file"
-    chmod 600 "$file" 2>/dev/null || true
-    chown enshrouded:enshrouded "$file" 2>/dev/null || true
-    return 0
+  if [[ -z "$file" || ! -f "$file" ]]; then
+    ui_warn "Cannot save: config file missing: ${file:-<empty>}"
+    return 1
+  fi
+
+  dir="$(dirname "$file")"
+  base="$(basename "$file")"
+  if [[ ! -w "$dir" ]]; then
+    ui_warn "Cannot save: no write permission for directory: $dir"
+    return 1
+  fi
+
+  tmp="$(mktemp "${dir}/.${base}.menu.XXXXXX" 2>/dev/null || mktemp)"
+  err_file="$(mktemp)"
+
+  if jq "$@" "$file" >"$tmp" 2>"$err_file"; then
+    if mv -f "$tmp" "$file"; then
+      chmod 600 "$file" 2>/dev/null || true
+      chown enshrouded:enshrouded "$file" 2>/dev/null || true
+      rm -f "$err_file" 2>/dev/null || true
+      return 0
+    fi
+    ui_warn "Cannot save: failed to replace file: $file"
+  else
+    err_last="$(awk 'NF{last=$0} END{print last}' "$err_file" 2>/dev/null || true)"
+    [[ -z "$err_last" ]] && err_last="jq update failed"
+    ui_warn "Cannot save: $err_last"
   fi
   rm -f "$tmp" 2>/dev/null || true
+  rm -f "$err_file" 2>/dev/null || true
   return 1
 }
 
@@ -1253,17 +1312,17 @@ menu_spec_editor__block_if_env_locked() {
   env_mode="$(validation_env_mode "$env_var" 2>/dev/null || echo "soft")"
   env_value="$(menu_env_override_value "$env_var")"
   if [[ "$env_mode" == "hard" ]]; then
-    ui_warn_line "This setting is hard ENV-managed and cannot be edited here."
+    ui_warn "This setting is hard ENV-managed and cannot be edited here."
     if [[ -n "$env_value" ]]; then
       ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
     else
       ui_kv "ENV" "$env_var=<required hard env>"
     fi
-    ui_note "Set it via container environment (e.g. docker run/docker compose), then restart container."
+    ui_info "Set it via container environment (e.g. docker run/docker compose), then restart container."
   else
-    ui_warn_line "This setting is controlled by an environment variable and cannot be edited here."
+    ui_warn "This setting is controlled by an environment variable and cannot be edited here."
     ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
-    ui_note "Remove it from your docker-compose/container environment to edit this value."
+    ui_info "Remove it from your docker-compose/container environment to edit this value."
   fi
   ui_pause
   return 1
@@ -1363,7 +1422,7 @@ menu_spec_editor__prompt_value_from_options() {
       return 0
     fi
 
-    ui_warn_line "Invalid selection. Enter a number between 1 and ${#options[@]}."
+    ui_warn "Invalid selection. Enter a number between 1 and ${#options[@]}."
   done
 }
 
@@ -1391,20 +1450,20 @@ menu_spec_editor__prompt_value() {
 
   env_mode="$(validation_env_mode "$env_var" 2>/dev/null || echo "soft")"
   if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
-    ui_note "Enter = toggle"
+    ui_info "Enter = toggle"
   else
     if [[ "$env_mode" == "hard" ]]; then
-      ui_note "Empty is not allowed"
+      ui_info "Empty is not allowed"
     else
       case "$empty_action" in
         null)
-          ui_note "Empty = null"
+          ui_info "Empty = null"
           ;;
         clear_list)
-          ui_note "Empty = clear"
+          ui_info "Empty = clear"
           ;;
         *)
-          ui_note "Empty = cancel"
+          ui_info "Empty = cancel"
           ;;
       esac
     fi
@@ -1452,7 +1511,7 @@ menu_spec_editor__edit_var() {
     json_path="$(validation_env_meta_field "$env_var" "$meta_field" 2>/dev/null || true)"
   fi
   if [[ -z "$json_path" ]]; then
-    ui_warn_line "No config mapping for: $env_var"
+    ui_warn "No config mapping for: $env_var"
     ui_pause
     return 0
   fi
@@ -1467,21 +1526,25 @@ menu_spec_editor__edit_var() {
     v="$(menu_spec_editor__prompt_value "$env_var" "$label" "$current" "clear_list" "false")"
     if [[ -z "$v" ]]; then
       if ! validation_check "$env_var" ""; then
-        ui_warn_line "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
+        ui_warn "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
         ui_pause
         return 0
       fi
       menu_spec_editor__session_backup_if_needed "$backup_job" || true
-      menu_spec_editor__set_jq "$file" "$json_path = []" || true
+      if ! menu_spec_editor__set_jq "$file" "$json_path = []"; then
+        ui_pause
+      fi
       return 0
     fi
     if ! validation_check "$env_var" "$v"; then
-      ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value}"
+      ui_warn "${VALIDATION_LAST_ERROR:-Invalid value}"
       ui_pause
       return 0
     fi
     menu_spec_editor__session_backup_if_needed "$backup_job" || true
-    menu_spec_editor__set_jq "$file" --arg val "$v" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))" || true
+    if ! menu_spec_editor__set_jq "$file" --arg val "$v" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))"; then
+      ui_pause
+    fi
     return 0
   fi
 
@@ -1502,19 +1565,21 @@ menu_spec_editor__edit_var() {
     else
       if [[ "$empty_action" == "null" ]]; then
         if ! validation_check "$env_var" ""; then
-          ui_warn_line "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
+          ui_warn "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
           ui_pause
           return 0
         fi
         menu_spec_editor__session_backup_if_needed "$backup_job" || true
-        menu_spec_editor__set_jq "$file" "$json_path = null" || true
+        if ! menu_spec_editor__set_jq "$file" "$json_path = null"; then
+          ui_pause
+        fi
       fi
       return 0
     fi
   fi
 
   if ! validation_check "$env_var" "$v"; then
-    ui_warn_line "${VALIDATION_LAST_ERROR:-Invalid value}"
+    ui_warn "${VALIDATION_LAST_ERROR:-Invalid value}"
     ui_pause
     return 0
   fi
@@ -1526,7 +1591,9 @@ menu_spec_editor__edit_var() {
   esac
 
   menu_spec_editor__session_backup_if_needed "$backup_job" || true
-  menu_spec_editor__set_jq "$file" "$jq_arg" val "$v" "$json_path = \$val" || true
+  if ! menu_spec_editor__set_jq "$file" "$jq_arg" val "$v" "$json_path = \$val"; then
+    ui_pause
+  fi
 }
 
 menu_spec_editor__user_groups_edit_group() {
@@ -1550,8 +1617,8 @@ menu_spec_editor__user_groups_edit_group() {
     current_name="$(jq -r "$base.name | if . == null or . == \"\" then \"Group $g\" else . end" "$file" 2>/dev/null || echo "Group $g")"
 
     ui_header "User Group: $current_name"
-    ui_note "Changes are written immediately."
-    ui_note "[ENV] = controlled by container environment (locked)"
+    ui_info "Changes are written immediately."
+    ui_info "[ENV] = controlled by container environment (locked)"
     echo
 
     local field_count last_group field env_var json_key json_path group label
@@ -1586,7 +1653,7 @@ menu_spec_editor__user_groups_edit_group() {
     done < <(menu_editor_template_fields "$template")
 
     if [[ "$field_count" -le 0 ]]; then
-      ui_warn_line "No role fields found in validation spec."
+      ui_warn "No role fields found in validation spec."
       ui_pause
       return 0
     fi
@@ -1603,7 +1670,7 @@ menu_spec_editor__user_groups_edit_group() {
 
     selected_idx="$(menu_choice_index "$choice" "$field_count" || true)"
     if [[ -z "$selected_idx" ]]; then
-      ui_warn_line "Invalid selection."
+      ui_warn "Invalid selection."
       ui_pause
       continue
     fi
@@ -1641,7 +1708,7 @@ menu_edit_user_groups_from_spec() {
   empty_label="${5:-<empty>}"
 
   if [[ -z "$file" ]]; then
-    ui_warn_line "menu_edit_user_groups_from_spec: missing file"
+    ui_warn "menu_edit_user_groups_from_spec: missing file"
     ui_pause
     return 1
   fi
@@ -1653,7 +1720,7 @@ menu_edit_user_groups_from_spec() {
     fi
 
     ui_header "Edit User Groups"
-    ui_note "[ENV] = controlled by container environment (locked)"
+    ui_info "[ENV] = controlled by container environment (locked)"
 
     count="$(jq -r '(.userGroups // []) | if type == "array" then length else 0 end' "$file" 2>/dev/null || echo 0)"
     if ! [[ "$count" =~ ^[0-9]+$ ]]; then
@@ -1661,7 +1728,7 @@ menu_edit_user_groups_from_spec() {
     fi
 
     if [[ "$count" -le 0 ]]; then
-      ui_warn_line "No userGroups found."
+      ui_warn "No userGroups found."
       echo
       ui_actions_bar "b Back" "m Main" "x Exit"
       echo
@@ -1691,7 +1758,7 @@ menu_edit_user_groups_from_spec() {
     local selected_idx
     selected_idx="$(menu_choice_index "$choice" "$count" || true)"
     if [[ -z "$selected_idx" ]]; then
-      ui_warn_line "Invalid selection."
+      ui_warn "Invalid selection."
       ui_pause
       continue
     fi
@@ -1747,7 +1814,7 @@ menu_edit_json_from_spec() {
   done
 
   if [[ -z "$file" || -z "$meta_field" ]]; then
-    ui_warn_line "menu_edit_json_from_spec: missing file or meta field"
+    ui_warn "menu_edit_json_from_spec: missing file or meta field"
     ui_pause
     return 1
   fi
@@ -1759,8 +1826,8 @@ menu_edit_json_from_spec() {
 
     ui_header "${title:-Edit Settings}"
     ui_kv "File" "$(menu_display_path "$file")"
-    ui_note "Changes are written immediately."
-    ui_note "[ENV] = controlled by container environment (locked)"
+    ui_info "Changes are written immediately."
+    ui_info "[ENV] = controlled by container environment (locked)"
     echo
 
     local field_count last_group var json_path group label
@@ -1826,7 +1893,7 @@ menu_edit_json_from_spec() {
     done
 
     if [[ "$field_count" -le 0 ]]; then
-      ui_warn_line "No settings found in validation spec."
+      ui_warn "No settings found in validation spec."
       ui_pause
       return 0
     fi
@@ -1843,7 +1910,7 @@ menu_edit_json_from_spec() {
 
     selected_idx="$(menu_choice_index "$choice" "$field_count" || true)"
     if [[ -z "$selected_idx" ]]; then
-      ui_warn_line "Invalid selection."
+      ui_warn "Invalid selection."
       ui_pause
       continue
     fi
@@ -1970,7 +2037,7 @@ menu_manage_enshrouded_bans() {
   backed_up="false"
 
   if [[ ! -f "$config_file" ]]; then
-    ui_warn_line "enshrouded_server.json is missing. Creating from profile..."
+    ui_warn "enshrouded_server.json is missing. Creating from profile..."
     ensure_enshrouded_config_from_profile || true
   fi
 
@@ -1991,8 +2058,8 @@ menu_manage_enshrouded_bans() {
 
     ui_header "Manage Banned Accounts"
     ui_kv "File" "$(menu_display_path "$config_file")"
-    ui_note "Bans are preserved across profile apply/reset."
-    ui_note "Select an entry to remove the ban."
+    ui_info "Bans are preserved across profile apply/reset."
+    ui_info "Select an entry to remove the ban."
     echo
 
     ban_json=()
@@ -2014,7 +2081,7 @@ menu_manage_enshrouded_bans() {
     done < <(menu_enshrouded_bans_entries_tsv "$config_file")
 
     if [[ "${#ban_json[@]}" -eq 0 ]]; then
-      ui_note "No banned accounts found."
+      ui_info "No banned accounts found."
       echo
       ui_actions_bar "b Back" "m Main" "x Exit"
       echo
@@ -2022,7 +2089,7 @@ menu_manage_enshrouded_bans() {
       if menu_nav_choice_is_handled "$choice"; then
         return 0
       fi
-      ui_warn_line "Invalid selection."
+      ui_warn "Invalid selection."
       ui_pause
       continue
     fi
@@ -2038,7 +2105,7 @@ menu_manage_enshrouded_bans() {
 
     selected_idx="$(menu_choice_index "$choice" "${#ban_json[@]}" || true)"
     if [[ -z "$selected_idx" ]]; then
-      ui_warn_line "Invalid selection."
+      ui_warn "Invalid selection."
       ui_pause
       continue
     fi
@@ -2046,11 +2113,11 @@ menu_manage_enshrouded_bans() {
     selected_json="${ban_json[$selected_idx]}"
     selected_label="${ban_labels[$selected_idx]}"
 
-    ui_warn_line "This will remove the selected account from the ban list."
+    ui_warn "This will remove the selected account from the ban list."
     ui_kv "Selected" "$selected_label"
     echo
     if ! ui_confirm_yes_no "Unban this account now?"; then
-      ui_note "Cancelled."
+      ui_info "Cancelled."
       ui_pause
       continue
     fi
@@ -2070,7 +2137,7 @@ menu_manage_enshrouded_bans() {
       .bannedAccounts = remove_all(arr(.bannedAccounts); $selected)
       | .bans = remove_all(arr(.bans); $selected)
     '; then
-      ui_warn_line "Failed to update ban list."
+      ui_warn "Failed to update ban list."
       ui_pause
       continue
     fi
@@ -2086,7 +2153,7 @@ editor_enshrouded_json() {
   backed_up="false"
 
   if [[ ! -f "$config_file" ]]; then
-    ui_warn_line "enshrouded_server.json is missing. Creating from profile..."
+    ui_warn "enshrouded_server.json is missing. Creating from profile..."
     ensure_enshrouded_config_from_profile || true
   fi
 
@@ -2118,7 +2185,7 @@ editor_enshrouded_json() {
 menu_profile_actions_after_change() {
   local action_choice
   echo
-  ui_note "Apply changes:"
+  ui_info "Apply changes:"
   ui_opt 1 "Bootstrap + start Enshrouded server"
   echo
   ui_actions_bar "b Back" "m Main" "x Exit"
@@ -2160,7 +2227,7 @@ menu_show_last_job_error() {
   [[ -n "${MENU_LAST_JOB_ERROR:-}" ]] || return 0
   line="$(printf "%s\n" "$MENU_LAST_JOB_ERROR" | awk 'NF{last=$0} END{print last}')"
   [[ -n "$line" ]] || line="$MENU_LAST_JOB_ERROR"
-  [[ -n "$line" ]] && ui_warn_line "$line"
+  [[ -n "$line" ]] && ui_warn "$line"
 }
 
 menu_profile_selector_env_name() {
@@ -2183,14 +2250,14 @@ menu_profile_flow_blocked_by_env() {
 
   selector_value="$(menu_env_override_value "$selector_env")"
   ui_header "Profile Selection Locked by ENV"
-  ui_warn_line "This profile flow is controlled by environment variables."
+  ui_warn "This profile flow is controlled by environment variables."
   if [[ -n "$selector_value" ]]; then
     ui_kv "ENV" "$selector_env=$(menu_env_override_pretty_value "$selector_env" "$selector_value") ${C_RED}[ENV]${C_RESET}"
   else
     ui_kv "ENV" "$selector_env=<set> ${C_RED}[ENV]${C_RESET}"
   fi
-  ui_note "Action '${mode}' is disabled in menu while this ENV selector is set."
-  ui_note "Remove it from docker-compose/container env and restart container to manage profiles in menu."
+  ui_info "Action '${mode}' is disabled in menu while this ENV selector is set."
+  ui_info "Remove it from docker-compose/container env and restart container to manage profiles in menu."
   ui_pause
   return 0
 }
@@ -2223,9 +2290,7 @@ menu_profile_flow() {
       fi
       ;;
     *)
-      ui_error "Unknown profile target: $target"
-      ui_pause
-      return 1
+      ui_fatal "Unknown profile target: $target"
       ;;
   esac
 
@@ -2270,7 +2335,7 @@ menu_profile_flow() {
         local selected_idx
         selected_idx="$(menu_choice_index "$selected" "$profile_count" || true)"
         if [[ -z "$selected_idx" ]]; then
-          ui_warn_line "Invalid selection."
+          ui_warn "Invalid selection."
           ui_pause
           continue
         fi
@@ -2278,23 +2343,23 @@ menu_profile_flow() {
         profile="${profiles[$selected_idx]}"
 
         if is_supervisor_running "server" || [[ -f "$config_file" ]]; then
-          ui_warn_line "This will replace the active ${label} config with the selected profile."
-          ui_warn_line "All players will be disconnected."
+          ui_warn "This will replace the active ${label} config with the selected profile."
+          ui_warn "All players will be disconnected."
           echo
           ui_kv "Selected Profile" "$profile"
           ui_kv "Target File" "$(menu_display_path "$config_file")"
           echo
           if ! ui_confirm_yes_no "Stop server (if running) and apply this profile now?"; then
-            ui_note "Cancelled."
+            ui_info "Cancelled."
             ui_pause
             continue
           fi
         fi
 
         if ! menu_run_profile_job "$target" "apply" "$profile"; then
-          ui_warn_line "Failed to apply profile."
+          ui_warn "Failed to apply profile."
           menu_show_last_job_error
-          ui_note "Check: server status"
+          ui_info "Check: server status"
           ui_pause
           continue
         fi
@@ -2307,23 +2372,23 @@ menu_profile_flow() {
 
     reset)
       ui_header "Reset ${label} Profile"
-      ui_warn_line "This resets $(basename "$config_file") from the currently selected profile."
-      ui_warn_line "All players will be disconnected."
+      ui_warn "This resets $(basename "$config_file") from the currently selected profile."
+      ui_warn "All players will be disconnected."
       echo
       ui_kv "Profile" "$profile"
       ui_kv "Target File" "$(menu_display_path "$config_file")"
       echo
 
       if ! ui_confirm_yes_no "Stop server (if running) and reset now?"; then
-        ui_note "Cancelled."
+        ui_info "Cancelled."
         ui_pause
         return 0
       fi
 
       if ! menu_run_profile_job "$target" "reset" "$profile"; then
-        ui_warn_line "Failed to reset profile."
+        ui_warn "Failed to reset profile."
         menu_show_last_job_error
-        ui_note "Check: server status"
+        ui_info "Check: server status"
         ui_pause
         return 1
       fi
@@ -2333,9 +2398,7 @@ menu_profile_flow() {
       return 0
       ;;
     *)
-      ui_error "Unknown profile mode: $mode"
-      ui_pause
-      return 1
+      ui_fatal "Unknown profile mode: $mode"
       ;;
   esac
 }
@@ -2347,7 +2410,7 @@ editor_manager_json() {
   backed_up="false"
 
   if [[ ! -f "$config_file" ]] || ! jq -e 'type == "object"' "$config_file" >/dev/null 2>&1; then
-    ui_warn_line "server_manager.json is missing or invalid. Initializing..."
+    ui_warn "server_manager.json is missing or invalid. Initializing..."
     update_or_create_manager_config || true
   fi
 
@@ -2401,14 +2464,14 @@ menu_execute_action_by_type() {
 
   action_type="$(jq -r '.type // empty' <<<"$action_json" 2>/dev/null || true)"
   if [[ -z "$action_type" || "$action_type" == "null" ]]; then
-    ui_warn_line "Action '${action_name}' has no valid type."
+    ui_warn "Action '${action_name}' has no valid type."
     ui_pause
     return 1
   fi
 
   requires_running="$(jq -r '(.requiresRunning // false) | tostring' <<<"$action_json" 2>/dev/null || echo "false")"
   if [[ "$requires_running" == "true" ]] && ! is_supervisor_running "server"; then
-    ui_warn_line "Action '${action_name}' requires the server to be running."
+    ui_warn "Action '${action_name}' requires the server to be running."
     ui_pause
     return 1
   fi
@@ -2436,7 +2499,7 @@ menu_execute_action_by_type() {
 
   if [[ -n "$confirm_message" ]]; then
     if ! ui_confirm_yes_no "$confirm_message"; then
-      ui_note "Cancelled."
+      ui_info "Cancelled."
       ui_pause
       return 0
     fi
@@ -2446,7 +2509,7 @@ menu_execute_action_by_type() {
     server)
       command_name="$(jq -r '.command // empty' <<<"$action_json" 2>/dev/null || true)"
       if [[ -z "$command_name" || "$command_name" == "null" ]]; then
-        ui_warn_line "Action '${action_name}' is missing command."
+        ui_warn "Action '${action_name}' is missing command."
         ui_pause
         return 1
       fi
@@ -2455,26 +2518,26 @@ menu_execute_action_by_type() {
       ui_hr
       case "$command_name" in
         start)
-          ui_note "Running: bootstrap + start"
+          ui_info "Running: bootstrap + start"
           echo
           menu_start_server_via_bootstrap || true
           ;;
         restart)
           if is_supervisor_running "server"; then
-            ui_note "Running: server restart"
+            ui_info "Running: server restart"
             echo
             server_run restart "${command_args[@]}" || true
           else
-            ui_note "Server is STOPPED. Running: bootstrap + start"
+            ui_info "Server is STOPPED. Running: bootstrap + start"
             echo
             menu_start_server_via_bootstrap || true
           fi
           ;;
         *)
           if [[ "${#command_args[@]}" -gt 0 ]]; then
-            ui_note "Running: server $command_name ${command_args[*]}"
+            ui_info "Running: server $command_name ${command_args[*]}"
           else
-            ui_note "Running: server $command_name"
+            ui_info "Running: server $command_name"
           fi
           echo
           server_run "$command_name" "${command_args[@]}" || true
@@ -2487,19 +2550,19 @@ menu_execute_action_by_type() {
     internal)
       fn="$(jq -r '.fn // empty' <<<"$action_json" 2>/dev/null || true)"
       if [[ -z "$fn" || "$fn" == "null" ]]; then
-        ui_warn_line "Action '${action_name}' is missing 'fn'."
+        ui_warn "Action '${action_name}' is missing 'fn'."
         ui_pause
         return 1
       fi
 
       if ! [[ "$fn" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-        ui_warn_line "Invalid internal function name in action '${action_name}': $fn"
+        ui_warn "Invalid internal function name in action '${action_name}': $fn"
         ui_pause
         return 1
       fi
 
       if ! declare -F "$fn" >/dev/null 2>&1; then
-        ui_warn_line "Internal function not found for action '${action_name}': $fn"
+        ui_warn "Internal function not found for action '${action_name}': $fn"
         ui_pause
         return 1
       fi
@@ -2509,7 +2572,7 @@ menu_execute_action_by_type() {
       ;;
 
     *)
-      ui_warn_line "Unknown action type '${action_type}' for action '${action_name}'."
+      ui_warn "Unknown action type '${action_type}' for action '${action_name}'."
       ui_pause
       return 1
       ;;
@@ -2523,14 +2586,12 @@ menu_dispatch_action() {
   action_name="$1"
 
   if ! menu_spec_ready; then
-    ui_error "Menu specification unavailable: ${MENU_SPEC_FILE}"
-    ui_pause
-    return 1
+    ui_fatal "Menu specification unavailable: ${MENU_SPEC_FILE}"
   fi
 
   action_json="$(menu_spec_query -c --arg action "$action_name" '.actions[$action] // empty' || true)"
   if [[ -z "$action_json" || "$action_json" == "null" ]]; then
-    ui_warn_line "Unknown menu action: ${action_name}"
+    ui_warn "Unknown menu action: ${action_name}"
     ui_pause
     return 1
   fi
@@ -2554,10 +2615,7 @@ menu_load_screen() {
   fi
 
   if ! menu_spec_ready; then
-    ui_error "Menu specification unavailable: ${MENU_SPEC_FILE}"
-    ui_pause
-    menu_nav_set "exit"
-    return 1
+    ui_fatal "Menu specification unavailable: ${MENU_SPEC_FILE}"
   fi
 
   if [[ "$screen" == "main" ]]; then
@@ -2591,12 +2649,7 @@ menu_load_screen() {
     ' || true)
 
     if [[ "${#entries[@]}" -eq 0 ]]; then
-      ui_error "Menu screen '${screen}' missing or empty in ${MENU_SPEC_FILE}"
-      ui_pause
-      if [[ "$screen" == "main" ]]; then
-        menu_nav_set "exit"
-      fi
-      return 1
+      ui_fatal "Menu screen '${screen}' missing or empty in ${MENU_SPEC_FILE}"
     fi
 
     ui_header "$title"
@@ -2630,7 +2683,7 @@ menu_load_screen() {
     done
 
     if [[ -z "$action_id" ]]; then
-      ui_warn_line "Invalid selection."
+      ui_warn "Invalid selection."
       ui_pause
       continue
     fi
@@ -2649,8 +2702,7 @@ main() {
   init_runtime_env
 
   if ! menu_spec_init; then
-    ui_error "Menu specification unavailable: ${MENU_SPEC_CSV_FILE}"
-    exit 1
+    ui_fatal "Menu specification unavailable: ${MENU_SPEC_CSV_FILE}"
   fi
 
   trap menu_run_post_hook_once EXIT
@@ -2667,7 +2719,7 @@ main() {
       if ! is_supervisor_running "server"; then
         ui_clear
         ui_banner
-        ui_warn_line "The Enshrouded server is currently STOPPED."
+        ui_warn "The Enshrouded server is currently STOPPED."
         echo
         menu_prompt_start_server "Do you want me to start server before exiting?"
       fi

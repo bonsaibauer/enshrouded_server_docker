@@ -14,7 +14,10 @@ PROFILE_SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/
 SERVER_JOB_BIN="${SERVER_JOB_BIN:-${PROFILE_SCRIPT_DIR}/server}"
 STEAMCMD_BIN="/usr/games/steamcmd"
 
-log_level="${LOG_LEVEL:-40}"
+LOG_LEVEL_INFO=40
+LOG_LEVEL_ERROR=35
+LOG_LEVEL_WARN=30
+log_level="${LOG_LEVEL:-$LOG_LEVEL_INFO}"
 
 init_colors() {
   if [[ "${LOG_COLOR:-}" != "true" && "${LOG_COLOR:-}" != "TRUE" ]]; then
@@ -65,12 +68,13 @@ log_line() {
 
 init_colors
 
-info() { [[ "$log_level" -ge 40 ]] && log_line stderr "$C_BLUE" INFO "$*" || true; }
+info() { [[ "$log_level" -ge "$LOG_LEVEL_INFO" ]] && log_line stderr "$C_BLUE" INFO "$*" || true; }
 success() {
-  [[ "$log_level" -ge 40 ]] || return 0
+  [[ "$log_level" -ge "$LOG_LEVEL_INFO" ]] || return 0
   log_line stderr "$C_BLUE" INFO "${C_GREEN}success${C_RESET}: $*"
 }
-warn() { [[ "$log_level" -ge 30 ]] && log_line stderr "$C_YELLOW" WARN "$*" || true; }
+error() { [[ "$log_level" -ge "$LOG_LEVEL_ERROR" ]] && log_line stderr "$C_RED" ERROR "$*" || true; }
+warn() { [[ "$log_level" -ge "$LOG_LEVEL_WARN" ]] && log_line stderr "$C_YELLOW" WARN "$*" || true; }
 fatal() { log_line stderr "$C_RED" FATAL "$*"; exit 1; }
 
 require_cmd() {
@@ -496,7 +500,11 @@ create_config_backup() {
       }
     }' >"${tmp_dir}/manifest.json" 2>/dev/null || true
 
-  (cd "$tmp_dir" && zip -qr "$archive_path" .) || true
+  if ! (cd "$tmp_dir" && zip -qr "$archive_path" .); then
+    warn "Failed to create config backup archive: $archive_path"
+    rm -rf "$tmp_dir" 2>/dev/null || true
+    return 1
+  fi
   chmod 600 "$archive_path" 2>/dev/null || true
   chown enshrouded:enshrouded "$archive_path" 2>/dev/null || true
   rm -rf "$tmp_dir" 2>/dev/null || true
@@ -683,7 +691,7 @@ apply_manager_profile() {
     fatal "Failed to stage Server Manager profile"
   }
 
-  create_config_backup "manager"
+  create_config_backup "manager" || warn "Proceeding without config backup for manager profile apply"
 
   mv -f "$tmp" "$config_file"
   chmod 600 "$config_file" 2>/dev/null || true
@@ -776,7 +784,7 @@ apply_enshrouded_profile() {
     fatal "Failed to prepare Enshrouded profile JSON (preserving bans)"
   }
 
-  create_config_backup "enshrouded"
+  create_config_backup "enshrouded" || warn "Proceeding without config backup for enshrouded profile apply"
 
   mv -f "$tmp" "$config_file"
   chmod 600 "$config_file" 2>/dev/null || true

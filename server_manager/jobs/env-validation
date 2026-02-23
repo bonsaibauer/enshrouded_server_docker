@@ -16,6 +16,7 @@ enshrouded_updater_pidfile="${ENSHROUDED_UPDATER_PIDFILE:-/var/run/enshrouded/up
 enshrouded_backup_pidfile="${ENSHROUDED_BACKUP_PIDFILE:-/var/run/enshrouded/backup.pid}"
 
 LOG_LEVEL_INFO=40
+LOG_LEVEL_ERROR=35
 LOG_LEVEL_WARN=30
 log_level="${LOG_LEVEL:-$LOG_LEVEL_INFO}"
 
@@ -76,6 +77,7 @@ success() {
   [[ "$log_level" -ge "$LOG_LEVEL_INFO" ]] || return 0
   log_line stderr "$C_BLUE" INFO "${C_GREEN}success${C_RESET}: $*"
 }
+error() { [[ "$log_level" -ge "$LOG_LEVEL_ERROR" ]] && log_line stderr "$C_RED" ERROR "$*" || true; }
 warn() { [[ "$log_level" -ge "$LOG_LEVEL_WARN" ]] && log_line stderr "$C_YELLOW" WARN "$*" || true; }
 fatal() { log_line stderr "$C_RED" FATAL "$*"; exit 1; }
 
@@ -705,18 +707,18 @@ apply_env_to_json() {
         shift 2
         ;;
       *)
-        echo "apply_env_to_json: unknown arg: $1" >&2
+        warn "apply_env_to_json: unknown arg: $1"
         return 1
         ;;
     esac
   done
 
   if [[ -z "$file" || -z "$meta_field" ]]; then
-    echo "apply_env_to_json: missing --file or --meta-field" >&2
+    warn "apply_env_to_json: missing --file or --meta-field"
     return 1
   fi
   if [[ ! -f "$file" ]]; then
-    echo "apply_env_to_json: file not found: $file" >&2
+    warn "apply_env_to_json: file not found: $file"
     return 1
   fi
 
@@ -896,18 +898,18 @@ apply_env_template_to_json_array() {
         shift 2
         ;;
       *)
-        echo "apply_env_template_to_json_array: unknown arg: $1" >&2
+        warn "apply_env_template_to_json_array: unknown arg: $1"
         return 1
         ;;
     esac
   done
 
   if [[ -z "$file" || -z "$template" || -z "$env_prefix" || -z "$array_path" ]]; then
-    echo "apply_env_template_to_json_array: missing --file/--template/--env-prefix/--array-path" >&2
+    warn "apply_env_template_to_json_array: missing --file/--template/--env-prefix/--array-path"
     return 1
   fi
   if [[ ! -f "$file" ]]; then
-    echo "apply_env_template_to_json_array: file not found: $file" >&2
+    warn "apply_env_template_to_json_array: file not found: $file"
     return 1
   fi
 
@@ -1249,6 +1251,7 @@ update_or_create_manager_config() {
 
   ensure_manager_paths
   profile="$(manager_profile_resolve)"
+  info "Preparing server_manager.json with profile: $profile"
 
   if ! ensure_manager_profile_file "$MANAGER_PROFILE_DEFAULT"; then
     return 1
@@ -1342,6 +1345,7 @@ update_or_create_manager_config() {
   else
     profiles_config_set "enshrouded" "$(enshrouded_profile_resolve)" || true
   fi
+  info "server_manager.json runtime values synchronized"
 }
 
 load_enshrouded_env_from_profile() {
@@ -1371,9 +1375,11 @@ load_enshrouded_env_from_profile() {
   fi
 
   if [[ ! -f "$profile_file" ]]; then
+    warn "Enshrouded profile file not found while loading runtime defaults: $profile"
     return 1
   fi
   if ! jq -e '.' "$profile_file" >/dev/null 2>&1; then
+    warn "Invalid JSON in enshrouded profile while loading runtime defaults: $profile_file"
     return 1
   fi
 
@@ -1392,15 +1398,20 @@ load_enshrouded_env_from_profile() {
 
 init_runtime_env() {
   # Ensure MANAGER_PROFILE_DIR contains a persistent copy of shipped Server Manager templates.
+  info "Initializing runtime environment"
+  info "Ensuring manager profile catalog"
   ensure_manager_profile_catalog || true
 
+  info "Loading manager runtime configuration"
   if ! update_or_create_manager_config; then
     fatal "Failed to initialize server_manager.json from profile"
   fi
 
   # Ensure EN_PROFILE_DIR contains a persistent copy of shipped Enshrouded templates.
+  info "Ensuring enshrouded profile catalog"
   ensure_enshrouded_profile_catalog || true
 
+  info "Loading enshrouded defaults from selected profile"
   if ! load_enshrouded_env_from_profile; then
     fatal "Failed to load Enshrouded profile defaults"
   fi
@@ -1410,6 +1421,7 @@ init_runtime_env() {
 
   savefile_name="$SAVEFILE_NAME"
   steam_app_id="$STEAM_APP_ID"
+  info "Runtime environment initialized (steam_app_id=${steam_app_id:-<empty>}, savefile_name=${savefile_name:-<empty>})"
 }
 
 ensure_enshrouded_config_from_profile() {
@@ -1482,15 +1494,33 @@ validate_known_env_from_spec() {
   done < <(validation_list_envs)
 }
 
-validate_unknown_game_settings_env_values() {
-  local var_name
+validate_unknown_managed_env_values() {
+  local var_name prefix is_managed
+  local -a managed_prefixes
+
   if ! validation__has_spec_files || ! command -v jq >/dev/null 2>&1; then
     return 0
   fi
-  for var_name in $(compgen -A variable | grep '^ENSHROUDED_GS_' || true); do
-    if ! validation_rule_json "$var_name" >/dev/null 2>&1; then
-      warn "Unknown game setting env var detected: $var_name"
+
+  mapfile -t managed_prefixes < <(validation_list_envs | awk -F'_' 'NF > 1 { print $1 "_" }' | sort -u)
+
+  for var_name in $(compgen -e); do
+    [[ -n "$var_name" ]] || continue
+
+    if validation_rule_json "$var_name" >/dev/null 2>&1; then
+      continue
     fi
+
+    is_managed="false"
+    for prefix in "${managed_prefixes[@]}"; do
+      if [[ "$var_name" == "${prefix}"* ]]; then
+        is_managed="true"
+        break
+      fi
+    done
+    [[ "$is_managed" == "true" ]] || continue
+
+    fatal "Unknown ENV not allowed: $var_name (must be defined in env_server_manager.csv or env_enshrouded_server.csv)"
   done
 }
 
@@ -1530,8 +1560,8 @@ verify_variables() {
   validate_known_env_from_spec
   info "Validating template ENV values from spec"
   validate_template_env_values
-  info "Checking for unknown game setting ENV values"
-  validate_unknown_game_settings_env_values
+  info "Validating unknown managed ENV values from spec"
+  validate_unknown_managed_env_values
 }
 
 usage() {

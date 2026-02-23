@@ -19,6 +19,7 @@ is_unknown_version() {
 }
 
 resolve_latest_version() {
+  info "Resolving latest build version from Steam API (app_id=${steam_app_id}, branch=${GAME_BRANCH})"
   curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" \
     | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid"
 }
@@ -125,7 +126,7 @@ parse_args() {
 }
 
 update() {
-  local players_check_rc players_check_arg
+  local players_check_rc players_check_arg updater_rc
   if [[ -f "$pidfile" ]]; then
     info "Found existing PID file - checking process"
     checkLock "$pidfile"
@@ -166,6 +167,12 @@ update() {
   info "Acquired updater lock: $pidfile (pid=$enshrouded_updater_pid)"
   echo "$enshrouded_updater_pid" >"$pidfile"
   wait "$enshrouded_updater_pid"
+  updater_rc=$?
+  if [[ "$updater_rc" -ne 0 ]]; then
+    warn "Updater flow finished with non-zero exit code: $updater_rc"
+    return "$updater_rc"
+  fi
+  success "Updater flow finished successfully"
 }
 
 run_update_flow() {
@@ -298,6 +305,7 @@ check_proton_files_available() {
     info "Proton files are not available. Performing Enshrouded update to generate proton files"
     return 0
   fi
+  debug "Proton files are available: $install_path/steamapps/compatdata/$steam_app_id"
   return 1
 }
 

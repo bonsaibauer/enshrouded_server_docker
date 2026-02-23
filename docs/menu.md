@@ -45,6 +45,16 @@ Top-level selections:
 - Prompts use `yes/no` (also accepts `y/n`).
 - `[ENV]` marks settings controlled by container environment variables (locked in the editors).
 
+Logging:
+
+- Menu uses the same levels as the job scripts: `info`, `warn`, `error`, `success`, `fatal`.
+- `info`: neutral runtime hints and progress messages (for example navigation/help text, "running command").
+- `success`: completed actions.
+- `warn`: non-critical problems, invalid input, or constraints where the current step can still continue.
+- `error`: action failed, but the interactive flow continues (for example backup/restore failure or invalid config in an editor flow).
+- `fatal`: unrecoverable menu state (for example missing/invalid menu spec) and aborts the current menu run.
+- Menu messages are shown in the interactive UI and are also written to job logging (`docker logs`) with the same level.
+
 Exit behavior:
 
 - If `server` is `STOPPED` when you exit, the menu asks whether it should be started before closing.
