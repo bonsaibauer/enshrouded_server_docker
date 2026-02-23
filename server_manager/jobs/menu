@@ -81,7 +81,7 @@ menu_capture_external_env_overrides() {
     if [[ -n "${!var+x}" ]]; then
       value="${!var}"
       mode="$(validation_env_mode "$var" 2>/dev/null || echo "soft")"
-      if [[ -z "$value" && "$mode" != "hard" ]]; then
+      if [[ -z "$value" && "$mode" != "hard" && "$mode" != "deferred" ]]; then
         continue
       fi
       MENU_EXTERNAL_ENV["$var"]="$value"
@@ -759,11 +759,11 @@ menu_env_override_is_set() {
     if [[ -n "$value" ]]; then
       return 0
     fi
-    [[ "$mode" == "hard" ]]
+    [[ "$mode" == "hard" || "$mode" == "deferred" ]]
     return $?
   fi
 
-  [[ "$mode" == "hard" ]]
+  [[ "$mode" == "hard" || "$mode" == "deferred" ]]
 }
 
 menu_env_override_value() {
@@ -1387,7 +1387,7 @@ menu_spec_editor__block_if_env_locked() {
 
   env_mode="$(validation_env_mode "$env_var" 2>/dev/null || echo "soft")"
   env_value="$(menu_env_override_value "$env_var")"
-  if [[ "$env_mode" == "hard" ]]; then
+  if [[ "$env_mode" == "hard" || "$env_mode" == "deferred" ]]; then
     ui_warn "This setting is hard ENV-managed and cannot be edited here."
     if [[ -n "$env_value" ]]; then
       ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
@@ -1528,7 +1528,7 @@ menu_spec_editor__prompt_value() {
   if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
     ui_info "Enter = toggle"
   else
-    if [[ "$env_mode" == "hard" ]]; then
+    if [[ "$env_mode" == "hard" || "$env_mode" == "deferred" ]]; then
       ui_info "Empty is not allowed"
     else
       case "$empty_action" in

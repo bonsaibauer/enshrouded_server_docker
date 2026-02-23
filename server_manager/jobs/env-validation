@@ -419,6 +419,7 @@ validation_env_mode() {
   # Returns env policy mode:
   # - hard: required ENV (no fallback)
   # - soft: optional ENV (fallback allowed)
+  # - deferred: optional at early bootstrap, but must resolve via ENV or fallback at runtime init
   local var rule mode
   var="$1"
   validation_rule_json_read rule "$var" || return $?
@@ -456,8 +457,8 @@ validation_check() {
 
   mode="$(jq -r '.env_mode // "soft"' <<<"$rule" 2>/dev/null || echo "soft")"
   [[ "$mode" == "null" || -z "$mode" ]] && mode="soft"
-  if [[ "$mode" != "hard" && "$mode" != "soft" ]]; then
-    validation__set_error "$var has invalid env_mode in CSV: $mode (expected: hard|soft)"
+  if [[ "$mode" != "hard" && "$mode" != "soft" && "$mode" != "deferred" ]]; then
+    validation__set_error "$var has invalid env_mode in CSV: $mode (expected: hard|soft|deferred)"
     return 2
   fi
 
@@ -1214,8 +1215,8 @@ update_or_create_manager_config() {
     fi
     env_mode="$(jq -r '.env_mode // "soft"' <<<"$env_rule" 2>/dev/null || echo "soft")"
     [[ "$env_mode" == "null" || -z "$env_mode" ]] && env_mode="soft"
-    if [[ "$env_mode" != "hard" && "$env_mode" != "soft" ]]; then
-      fatal "Invalid env_mode for $var: $env_mode (expected: hard|soft)"
+    if [[ "$env_mode" != "hard" && "$env_mode" != "soft" && "$env_mode" != "deferred" ]]; then
+      fatal "Invalid env_mode for $var: $env_mode (expected: hard|soft|deferred)"
     fi
     env_is_set="false"
     env_value=""
@@ -1248,7 +1249,7 @@ update_or_create_manager_config() {
     fi
 
     # Fallback: active config -> profile template.
-    if [[ -z "$value" && "$env_mode" == "soft" ]]; then
+    if [[ -z "$value" && "$env_mode" != "hard" ]]; then
       value="$(manager_json_get "$config_file" "$var")"
       if [[ -n "$value" ]] && ! manager_value_is_valid "$var" "$value"; then
         warn "Invalid server_manager.json value for $var (actual: $value) - resetting to selected profile/default (${VALIDATION_LAST_ERROR:-validation failed})"
@@ -1261,6 +1262,10 @@ update_or_create_manager_config() {
           value=""
         fi
       fi
+    fi
+
+    if [[ -z "$value" && "$env_mode" == "deferred" ]]; then
+      fatal "Missing runtime value for $var (env_mode=deferred). Provide ENV or a valid config/profile fallback."
     fi
 
     printf -v "$var" '%s' "$value"
