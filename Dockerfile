@@ -61,6 +61,7 @@ COPY --from=builder /etc/machine-id /etc/machine-id
 COPY ./server_manager/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
 COPY --chmod=755 ./server_manager/jobs/ /usr/local/etc/enshrouded/jobs/
 COPY --chmod=755 ./server_manager/env/ /usr/local/etc/enshrouded/env/
+COPY --chmod=755 ./server_manager/lib/ /usr/local/etc/enshrouded/lib/
 COPY ./server_manager/profiles/ /usr/local/etc/enshrouded/profiles/
 RUN ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/server \
     && ln -sf /usr/local/etc/enshrouded/jobs/server /usr/local/bin/help \
