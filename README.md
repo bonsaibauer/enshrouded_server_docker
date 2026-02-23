@@ -35,11 +35,12 @@ You get one clean workflow instead of scattered scripts and manual fixes. This s
 ## Feature Breakdown (Simple + Powerful) ⚡
 
 - **Menu (`server menu`)**: Your all-in-one control center for start, stop, restart, update, profile apply/reset, backup, and restore, plus editing both Enshrouded gameplay settings and Server Manager automation settings.
+- **Custom Profiles via JSON**: Create your own Enshrouded/Manager profiles as JSON files and select/apply them directly in the menu.
 - **Supervisor**: Orchestrates jobs like `server`, `updater`, `backup`, `restart`, `bootstrap`, and `cron` for predictable behavior, better uptime, and cleaner recovery.
 - **Backup + Restore**: Manual and scheduled backups, backup listing/inspection, component-level restore (savegame only, Enshrouded config only, Manager config only), or full recovery with optional safety backup before restore.
 - **GE-Proton Runtime**: Uses current **GE-Proton** (default: **GE-Proton 10-30**) for strong compatibility and stable long-running performance, combined with controlled restart/update flows, player-aware checks, and safe stop grace.
 
-## Command + Feature Roadmap
+## Feature Roadmap
 
 > [!NOTE]
 > Status legend: `✅ Live` = available now, `🟡 In Progress` = currently being built, `⚪ Not Yet` = planned idea.
@@ -64,11 +65,13 @@ You get one clean workflow instead of scattered scripts and manual fixes. This s
 | `backup restore <zip> [target]` | Restores full backup or only selected components. | ✅ Live |
 | `backup-config` | Creates config-only backup without savegame data. | ✅ Live |
 | `profile <manager\|enshrouded> <apply\|reset>` | Applies or resets profile-based server configurations. | ✅ Live |
+| `profile create (menu/json)` | Create custom profiles from JSON files directly via the menu flow. | ⚪ Not Yet |
 | `password-view` | Displays user-group password/rights information from config. | ✅ Live |
 | `cron sync` | Rebuilds cron entries from current runtime config. | ✅ Live |
 | `env-validation verify` | Validates env values and setup consistency. | ✅ Live |
 | `hook-run` | Runs custom hook commands for automation workflows. | ✅ Live |
 | `profile packs` | Ready-made profile packs for different playstyles. | 🟡 In Progress |
+| `language support` | Multi-language support for menu and user-facing command output. | ⚪ Not Yet |
 | `dashboard` | Optional browser-based admin panel experience. | ⚪ Not Yet |
 | `notify` | Built-in notification channel integration (e.g., webhook/Discord style). | ⚪ Not Yet |
 
