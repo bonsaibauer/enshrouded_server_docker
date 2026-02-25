@@ -32,14 +32,14 @@ server_manager/
   jobs/
     server
     bootstrap
-    crond
+    cron
     rsyslogd
     restart
     update
     backup
     profile
     env
-    menu                          # run (Menu-Orchestrierung)
+    menu                          # Menu-Orchestrierung
 
   commands/
     check/
@@ -108,14 +108,14 @@ server_manager/
 |---|---|---|---|
 | `jobs/server` | Prozesssteuerung Server | supervisor/start/stop/status, guard | Backup-/Update-/Profile-Fachlogik |
 | `jobs/bootstrap` | Initiale Reihenfolge | bestehende Commands in fester Reihenfolge aufrufen | Eigene doppelte `bootstrap-*` Fachlogik |
-| `jobs/crond` | Cron-Orchestrierung | start/stop/restart im Job, Check via `check-cron` | Eigene Cron-Businesslogik doppeln |
+| `jobs/cron` | Cron-Orchestrierung | start/stop/restart im Job, Check via `check-cron` | Eigene Cron-Businesslogik doppeln |
 | `jobs/rsyslogd` | Logging-Prozess | rsyslogd start/health | Fachlogik |
 | `jobs/restart` | Restart-Flow Dispatch | config lesen + `check/force/manual/scheduled` aufrufen | Restart-Implementierung im Job |
 | `jobs/update` | Update-Flow Dispatch | config lesen + `check/force/manual/scheduled` aufrufen | Update-Implementierung im Job |
 | `jobs/backup` | Backup/Restore Dispatch | config lesen + eindeutigen Command-Pfad aufrufen | Zip/restore Details im Job |
 | `jobs/profile` | Profil-Dispatch | apply/reset/check-password Commands aufrufen (text view only) | Profil-Merge-Details im Job |
 | `jobs/env` | ENV-Dispatch | `check-env`, `check-all-env`, `env-init-runtime` | Vollstaendige Validator-Engine im Job |
-| `jobs/menu` | Menu-Orchestrierung (`run`) | `profiles/menu/menu.json` lesen, `ui/*` nutzen, Commands aufrufen | Fachlogik von backup/update/profile im Job |
+| `jobs/menu` | Menu-Orchestrierung | `profiles/menu/menu.json` lesen, `ui/*` nutzen, Commands aufrufen | Fachlogik von backup/update/profile im Job |
 
 ### Commands (Fachlogik)
 
@@ -191,7 +191,7 @@ Beispiel `jobs/restart`:
 
 ## Mapping Alt -> Neu
 
-| Aktuell | Neu aufgeteilt nach Commands |
+| Legacy (Ist-Code) | Neu aufgeteilt nach Commands |
 |---|---|
 | `jobs/restart` | `check-player`, `restart`, `force-restart`, `scheduled-restart` |
 | `jobs/updater` | `check-update`, `update`, `force-update`, `scheduled-update` |
@@ -199,7 +199,7 @@ Beispiel `jobs/restart`:
 | `jobs/profile` | `apply-profile-manager`, `apply-profile-enshrouded`, `reset-profile-*`, `check-password*` |
 | `jobs/env-validation` | `check-env`, `check-all-env`, `env-init-runtime` |
 | `jobs/cron` | `check-cron` + start/stop/restart im Job + Trigger auf `scheduled-*` |
-| `jobs/menu` | `run` liest `profiles/menu/menu.json`, nutzt `ui/*` und ruft Commands auf |
+| `jobs/menu` | liest `profiles/menu/menu.json`, nutzt `ui/*` und ruft Commands auf |
 
 ## Migrationsphasen mit Prompt-Vorlagen
 
@@ -211,9 +211,10 @@ Beispiel `jobs/restart`:
 | 4 | Aktions-Commands extrahieren | `Extrahiere die Aktionslogik in commands/manual/*, commands/force/*, commands/scheduled/* und commands/restore/*. Jeder Command ist direkt aufrufbar und hat genau eine Verantwortung.` | Actions laufen ohne alte Job-Internlogik. |
 | 5 | Jobs auf Wrapper reduzieren | `Reduziere jobs/* auf Orchestrierung: JSON lesen, Check optional ausfuehren, genau einen Command-Pfad starten, Exit-Code durchreichen. Entferne Args-Multiplexing. Fuer bootstrap: nur bestehende Commands aufrufen, keine doppelte bootstrap-Fachlogik.` | Jobs enthalten keine Fachlogik mehr. |
 | 6 | Supervisor/Docker an neue Pfade binden | `Passe Supervisor-Programme und Docker-Symlinks/Entry-Aufrufe auf die neue Struktur an. Keine Legacy-Aliase behalten.` | Runtime nutzt nur neue Namen/Pfade. |
-| 7 | Menu + UI modularisieren | `Stelle jobs/menu auf run-Orchestrierung um: Menuestruktur aus profiles/menu/menu.json lesen, UI aus ui/menu_ui und ui/startup_banner nutzen, Actions direkt auf neue Commands mappen. Entferne doppelte Fachlogik aus dem Menu-Code.` | Menu ist nur Orchestrierung + UI-Dispatch. |
+| 7 | Menu + UI modularisieren | `Stelle jobs/menu auf Menu-Orchestrierung um: Menuestruktur aus profiles/menu/menu.json lesen, UI aus ui/menu_ui und ui/startup_banner nutzen, Actions direkt auf neue Commands mappen. Entferne doppelte Fachlogik aus dem Menu-Code.` | Menu ist nur Orchestrierung + UI-Dispatch. |
 | 8 | Legacy entfernen (Breaking Change) | `Entferne alte Skripte, alte Namen, alte CSV-Parser und alle Abwaertskompatibilitaets-Wrapper vollstaendig.` | Kein verwaister Legacy-Code mehr vorhanden. |
 | 9 | Abschluss-Validierung | `Fuehre Smoke-Tests fuer alle Jobs/Commands aus und dokumentiere Ergebnis + offene Punkte in migration.md.` | Alle Kernpfade getestet, Ergebnis dokumentiert. |
+| 10 | Sprach- und Naming-Standardisierung | `Pruefe alle Code-Dateien auf englische Code-Sprache (Funktionsnamen, Variablennamen, Kommentare, Log-Meldungen im Code) und vereinheitliche die Funktionsnamen nach einem koharenten Schema. Verwende durchgaengig snake_case; fuer wiederkehrende Aufgaben funktionsuebergreifend gleiche Verb-Praefixe wie check_, apply_, reset_, restore_, start_, stop_; und pro Datei entweder Dateiname-gebundenes Prefix oder klares Domain-Prefix (z. B. backup_*, profile_*, env_*).` | Code ist sprachlich einheitlich (Englisch) und Funktionsnamen sind ueber Dateien hinweg konsistent nachvollziehbar. |
 
 ## Definition of Done
 
@@ -225,6 +226,7 @@ Beispiel `jobs/restart`:
 6. `logs/log` wird von Jobs/Commands konsistent benutzt.
 7. Keine Abwaertskompatibilitaets-Schicht fuer alte Befehle/Pfade vorhanden.
 8. `jobs/bootstrap` enthaelt keine doppelte Fachlogik; nur Orchestrierung vorhandener Commands.
+9. Code ist in Englisch verfasst und Funktionsnamen folgen einem einheitlichen, datei- oder domainbasierten Namensschema.
 
 ## Risikoabsicherung
 
