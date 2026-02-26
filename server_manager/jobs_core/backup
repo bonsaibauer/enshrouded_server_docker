@@ -1,0 +1,854 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs_core/profile
+. "${SCRIPT_DIR}/profile"
+
+enshrouded_config_file="${install_path}/enshrouded_server.json"
+enshrouded_backup_pidfile="${ENSHROUDED_BACKUP_PIDFILE:-/var/run/enshrouded/backup.pid}"
+
+pidfile="$enshrouded_backup_pidfile"
+
+mode="scheduled"
+inspect_format="human"
+include_savegame=""
+include_enshrouded_config=""
+include_manager_config=""
+run_cleanup=""
+stage_dir=""
+work_dir=""
+backup_file=""
+
+zip_path=""
+restore_savegame="false"
+restore_enshrouded_config="false"
+restore_manager_config="false"
+create_safety_backup="false"
+
+enshrouded_get_text() {
+  local path
+  path="$1"
+  if [[ ! -f "$enshrouded_config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path | if . == null then empty else tostring end" "$enshrouded_config_file" 2>/dev/null || true
+}
+
+to_bool() {
+  case "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" in
+    "") echo "" ;;
+    true|false) echo "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" ;;
+    *) echo "" ;;
+  esac
+}
+
+normalize_bool_with_default() {
+  local value default normalized
+  value="${1-}"
+  default="${2-}"
+  normalized="$(to_bool "$value")"
+  if [[ -n "$normalized" ]]; then
+    echo "$normalized"
+  else
+    echo "$default"
+  fi
+}
+
+load_runtime_values() {
+  require_cmd jq
+  require_cmd zip
+  require_cmd tar
+  require_cmd python3
+
+  SAVEFILE_NAME="$(resolve_from_env_or_manager "SAVEFILE_NAME" ".savefileName" "savegame")"
+  BACKUP_DIR="$(resolve_from_env_or_manager "BACKUP_DIR" ".backupDir" "backups")"
+  BACKUP_MAX_COUNT="$(resolve_from_env_or_manager "BACKUP_MAX_COUNT" ".backupMaxCount" "0")"
+  BACKUP_PRE_HOOK="$(resolve_from_env_or_manager "BACKUP_PRE_HOOK" ".backupPreHook" "")"
+  BACKUP_POST_HOOK="$(resolve_from_env_or_manager "BACKUP_POST_HOOK" ".backupPostHook" "")"
+  BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG="$(resolve_from_env_or_manager "BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG" ".backupScheduledIncludeEnshroudedConfig" "true")"
+  BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG="$(resolve_from_env_or_manager "BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG" ".backupScheduledIncludeServerManagerConfig" "true")"
+  RESTORE_PRE_HOOK="$(resolve_from_env_or_manager "RESTORE_PRE_HOOK" ".restorePreHook" "")"
+  RESTORE_POST_HOOK="$(resolve_from_env_or_manager "RESTORE_POST_HOOK" ".restorePostHook" "")"
+
+  ENSHROUDED_SAVE_DIR="${ENSHROUDED_SAVE_DIR:-$(enshrouded_get_text ".saveDirectory")}"
+  if [[ -z "$ENSHROUDED_SAVE_DIR" ]]; then
+    ENSHROUDED_SAVE_DIR="./savegame"
+  fi
+
+  info "Loaded backup runtime values (save_dir=${ENSHROUDED_SAVE_DIR}, backup_dir=${BACKUP_DIR}, max_count=${BACKUP_MAX_COUNT})"
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  backup [manual|scheduled]
+         [--savegame true|false]
+         [--enshrouded-config true|false]
+         [--manager-config true|false]
+         [--cleanup true|false]
+
+  backup list
+  backup inspect <zip>
+  backup restore <zip> [savegame|enshrouded|manager|all]
+         [--safety-backup true|false]
+
+  backup [--mode scheduled|manual]
+         [--savegame true|false]
+         [--enshrouded-config true|false]
+         [--manager-config true|false]
+         [--cleanup true|false]
+
+  backup --mode list
+  backup --mode inspect --zip <path>
+  backup --mode restore --zip <path> --restore <savegame|enshrouded|manager|all> [--safety-backup true|false]
+EOF
+}
+
+apply_restore_selection() {
+  local selector token normalized
+  selector="$1"
+  restore_savegame="false"
+  restore_enshrouded_config="false"
+  restore_manager_config="false"
+
+  IFS=',' read -r -a _restore_tokens <<<"$selector"
+  for token in "${_restore_tokens[@]}"; do
+    normalized="$(echo "$token" | tr '[:upper:]' '[:lower:]' | xargs)"
+    case "$normalized" in
+      all)
+        restore_savegame="true"
+        restore_enshrouded_config="true"
+        restore_manager_config="true"
+        ;;
+      savegame)
+        restore_savegame="true"
+        ;;
+      enshrouded)
+        restore_enshrouded_config="true"
+        ;;
+      manager)
+        restore_manager_config="true"
+        ;;
+      "")
+        ;;
+      *)
+        fatal "Unsupported restore target: $token"
+        ;;
+    esac
+  done
+}
+
+parse_args() {
+  local parsed_bool restore_selector mode_lc
+  restore_selector=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      manual|scheduled|list)
+        mode="$1"
+        shift
+        ;;
+      inspect)
+        mode="inspect"
+        zip_path="${2-}"
+        [[ -n "$zip_path" ]] || fatal "Missing zip filename (usage: backup inspect <zip>)"
+        shift 2
+        ;;
+      restore)
+        mode="restore"
+        zip_path="${2-}"
+        [[ -n "$zip_path" ]] || fatal "Missing zip filename (usage: backup restore <zip> [savegame|enshrouded|manager|all])"
+        if [[ $# -ge 3 && "${3#-}" == "$3" ]]; then
+          restore_selector="$3"
+          shift 3
+        else
+          restore_selector="all"
+          shift 2
+        fi
+        ;;
+      help)
+        usage
+        exit 0
+        ;;
+      --mode)
+        mode="${2-}"
+        [[ -n "$mode" ]] || fatal "Missing value for --mode"
+        shift 2
+        ;;
+      --savegame)
+        parsed_bool="$(to_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --savegame (expected true|false)"
+        include_savegame="$parsed_bool"
+        shift 2
+        ;;
+      --enshrouded-config)
+        parsed_bool="$(to_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --enshrouded-config (expected true|false)"
+        include_enshrouded_config="$parsed_bool"
+        shift 2
+        ;;
+      --manager-config)
+        parsed_bool="$(to_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --manager-config (expected true|false)"
+        include_manager_config="$parsed_bool"
+        shift 2
+        ;;
+      --cleanup)
+        parsed_bool="$(to_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --cleanup (expected true|false)"
+        run_cleanup="$parsed_bool"
+        shift 2
+        ;;
+      --zip)
+        zip_path="${2-}"
+        [[ -n "$zip_path" ]] || fatal "Missing value for --zip"
+        shift 2
+        ;;
+      --restore)
+        restore_selector="${2-}"
+        [[ -n "$restore_selector" ]] || fatal "Missing value for --restore"
+        shift 2
+        ;;
+      --safety-backup)
+        parsed_bool="$(to_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || fatal "Invalid value for --safety-backup (expected true|false)"
+        create_safety_backup="$parsed_bool"
+        shift 2
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+
+  mode_lc="$(echo "$mode" | tr '[:upper:]' '[:lower:]' | xargs)"
+  mode="$mode_lc"
+  inspect_format="$(echo "${BACKUP_INSPECT_FORMAT:-human}" | tr '[:upper:]' '[:lower:]' | xargs)"
+  case "$inspect_format" in
+    human|raw|json)
+      ;;
+    *)
+      inspect_format="human"
+      ;;
+  esac
+
+  case "$mode_lc" in
+    scheduled|manual)
+      [[ -z "$zip_path" ]] || fatal "--zip is only valid with --mode inspect|restore"
+      [[ -z "$restore_selector" ]] || fatal "--restore is only valid with --mode restore"
+      [[ "$create_safety_backup" == "false" ]] || fatal "--safety-backup is only valid with --mode restore"
+      ;;
+    list)
+      [[ -z "$zip_path" ]] || fatal "--zip is not valid with --mode list"
+      [[ -z "$restore_selector" ]] || fatal "--restore is not valid with --mode list"
+      [[ "$create_safety_backup" == "false" ]] || fatal "--safety-backup is only valid with --mode restore"
+      [[ -z "$include_savegame" ]] || fatal "--savegame is only valid with --mode scheduled|manual"
+      [[ -z "$include_enshrouded_config" ]] || fatal "--enshrouded-config is only valid with --mode scheduled|manual"
+      [[ -z "$include_manager_config" ]] || fatal "--manager-config is only valid with --mode scheduled|manual"
+      [[ -z "$run_cleanup" ]] || fatal "--cleanup is only valid with --mode scheduled|manual"
+      ;;
+    inspect)
+      [[ -n "$zip_path" ]] || fatal "Missing --zip for --inspect"
+      [[ -z "$restore_selector" ]] || fatal "--restore is not valid with --mode inspect"
+      [[ "$create_safety_backup" == "false" ]] || fatal "--safety-backup is only valid with --mode restore"
+      [[ -z "$include_savegame" ]] || fatal "--savegame is only valid with --mode scheduled|manual"
+      [[ -z "$include_enshrouded_config" ]] || fatal "--enshrouded-config is only valid with --mode scheduled|manual"
+      [[ -z "$include_manager_config" ]] || fatal "--manager-config is only valid with --mode scheduled|manual"
+      [[ -z "$run_cleanup" ]] || fatal "--cleanup is only valid with --mode scheduled|manual"
+      ;;
+    restore)
+      [[ -n "$zip_path" ]] || fatal "Missing --zip"
+      [[ -n "$restore_selector" ]] || fatal "Missing --restore target"
+      [[ -z "$include_savegame" ]] || fatal "--savegame is only valid with --mode scheduled|manual"
+      [[ -z "$include_enshrouded_config" ]] || fatal "--enshrouded-config is only valid with --mode scheduled|manual"
+      [[ -z "$include_manager_config" ]] || fatal "--manager-config is only valid with --mode scheduled|manual"
+      [[ -z "$run_cleanup" ]] || fatal "--cleanup is only valid with --mode scheduled|manual"
+      apply_restore_selection "$restore_selector"
+      if [[ "$restore_savegame" != "true" && "$restore_enshrouded_config" != "true" && "$restore_manager_config" != "true" ]]; then
+        fatal "Missing --restore target"
+      fi
+      ;;
+    *)
+      fatal "Unsupported backup mode: $mode"
+      ;;
+  esac
+}
+
+cleanup_on_exit() {
+  rm -f "$pidfile" 2>/dev/null || true
+  [[ -n "$stage_dir" ]] && rm -rf "$stage_dir" 2>/dev/null || true
+  [[ -n "$work_dir" ]] && rm -rf "$work_dir" 2>/dev/null || true
+}
+
+trap cleanup_on_exit EXIT
+trap 'exit 1' SIGINT SIGTERM
+
+acquire_lock() {
+  local old_pid
+  if [[ -f "$pidfile" ]]; then
+    old_pid="$(cat "$pidfile" 2>/dev/null || true)"
+    if [[ "$old_pid" =~ ^[0-9]+$ ]] && kill -0 "$old_pid" 2>/dev/null; then
+      fatal "Backup process already running with PID $old_pid"
+    fi
+    warn "Removing stale backup PID file: $pidfile"
+    rm -f "$pidfile" 2>/dev/null || true
+  fi
+  echo "$$" >"$pidfile" || fatal "Failed to create PID file: $pidfile"
+  info "Acquired backup lock: $pidfile (pid=$$)"
+}
+
+save_dir_resolve() {
+  local dir
+  dir="${ENSHROUDED_SAVE_DIR:-./savegame}"
+  if [[ "$dir" == /* ]]; then
+    printf "%s" "$dir"
+  else
+    printf "%s/%s" "$install_path" "$dir"
+  fi
+}
+
+resolve_zip_input() {
+  local input backup_root candidate manual_candidate scheduled_candidate root_candidate
+  local normalized normalized_with_ext match_count resolved
+
+  input="$1"
+  [[ -n "$input" ]] || fatal "Missing zip filename/path"
+
+  if [[ -f "$input" ]]; then
+    printf "%s" "$input"
+    return 0
+  fi
+
+  backup_root="$(backup_dir_resolve)"
+  normalized="${input#./}"
+  normalized_with_ext="$normalized"
+  if [[ "$normalized_with_ext" != *.zip ]]; then
+    normalized_with_ext="${normalized_with_ext}.zip"
+  fi
+
+  if [[ "$normalized" == */* ]]; then
+    candidate="${backup_root%/}/${normalized}"
+    if [[ -f "$candidate" ]]; then
+      printf "%s" "$candidate"
+      return 0
+    fi
+    candidate="${backup_root%/}/${normalized_with_ext}"
+    if [[ -f "$candidate" ]]; then
+      printf "%s" "$candidate"
+      return 0
+    fi
+    fatal "Backup source not found: $input"
+  fi
+
+  manual_candidate="${backup_root}/manual/${normalized}"
+  scheduled_candidate="${backup_root}/scheduled/${normalized}"
+  root_candidate="${backup_root}/${normalized}"
+  match_count=0
+  resolved=""
+  for candidate in "$manual_candidate" "$scheduled_candidate" "$root_candidate"; do
+    if [[ -f "$candidate" ]]; then
+      resolved="$candidate"
+      match_count=$((match_count + 1))
+    fi
+  done
+  if [[ "$match_count" -eq 1 ]]; then
+    printf "%s" "$resolved"
+    return 0
+  fi
+
+  manual_candidate="${backup_root}/manual/${normalized_with_ext}"
+  scheduled_candidate="${backup_root}/scheduled/${normalized_with_ext}"
+  root_candidate="${backup_root}/${normalized_with_ext}"
+  match_count=0
+  resolved=""
+  for candidate in "$manual_candidate" "$scheduled_candidate" "$root_candidate"; do
+    if [[ -f "$candidate" ]]; then
+      resolved="$candidate"
+      match_count=$((match_count + 1))
+    fi
+  done
+  if [[ "$match_count" -eq 1 ]]; then
+    printf "%s" "$resolved"
+    return 0
+  fi
+  if [[ "$match_count" -gt 1 ]]; then
+    fatal "Ambiguous zip filename '$input' (found in multiple backup locations). Use a path like 'manual/<file>.zip' or 'scheduled/<file>.zip'."
+  fi
+
+  fatal "Backup source not found: $input (searched in ${backup_root}/manual and ${backup_root}/scheduled)"
+}
+
+copy_tree() {
+  local src dst
+  src="$1"
+  dst="$2"
+  mkdir -p "$dst" 2>/dev/null || true
+  (cd "$src" && tar -cf - .) | (cd "$dst" && tar -xf -)
+}
+
+write_manifest() {
+  local manifest_file manifest_mode manifest_save_dir include_save include_ens include_mgr
+  manifest_file="$1"
+  manifest_mode="$2"
+  manifest_save_dir="$3"
+  include_save="$4"
+  include_ens="$5"
+  include_mgr="$6"
+
+  jq -n \
+    --arg mode "$manifest_mode" \
+    --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg saveDirectory "$manifest_save_dir" \
+    --arg savefileName "$SAVEFILE_NAME" \
+    --argjson includeSavegame "$include_save" \
+    --argjson includeEnshroudedConfig "$include_ens" \
+    --argjson includeServerManagerConfig "$include_mgr" \
+    '{
+      version: 1,
+      mode: $mode,
+      createdAt: $createdAt,
+      saveDirectory: $saveDirectory,
+      savefileName: $savefileName,
+      includes: {
+        savegame: $includeSavegame,
+        enshroudedConfig: $includeEnshroudedConfig,
+        serverManagerConfig: $includeServerManagerConfig
+      }
+    }' >"$manifest_file" || fatal "Failed to write manifest.json"
+}
+
+resolve_mode_defaults() {
+  local mode_lc
+  mode_lc="$(echo "$mode" | tr '[:upper:]' '[:lower:]' | xargs)"
+  case "$mode_lc" in
+    scheduled)
+      mode="scheduled"
+      include_savegame="${include_savegame:-true}"
+      include_enshrouded_config="${include_enshrouded_config:-${BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG:-true}}"
+      include_manager_config="${include_manager_config:-${BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG:-true}}"
+      run_cleanup="${run_cleanup:-true}"
+      ;;
+    manual)
+      mode="manual"
+      include_savegame="${include_savegame:-true}"
+      include_enshrouded_config="${include_enshrouded_config:-true}"
+      include_manager_config="${include_manager_config:-true}"
+      run_cleanup="${run_cleanup:-false}"
+      ;;
+    *)
+      fatal "Unsupported backup mode: $mode"
+      ;;
+  esac
+
+  include_savegame="$(normalize_bool_with_default "$include_savegame" "false")"
+  include_enshrouded_config="$(normalize_bool_with_default "$include_enshrouded_config" "false")"
+  include_manager_config="$(normalize_bool_with_default "$include_manager_config" "false")"
+  run_cleanup="$(normalize_bool_with_default "$run_cleanup" "false")"
+}
+
+prepare_stage_content() {
+  local save_dir config_dir ens_config manager_config
+  local added_savegame added_enshrouded added_manager
+
+  save_dir="$(save_dir_resolve)"
+  ens_config="${install_path}/enshrouded_server.json"
+  manager_config="$(manager_config_path)"
+  config_dir="${stage_dir}/config"
+  added_savegame="false"
+  added_enshrouded="false"
+  added_manager="false"
+
+  if [[ "$include_savegame" == "true" ]]; then
+    if [[ -d "$save_dir" ]]; then
+      info "Including savegame directory: $save_dir"
+      copy_tree "$save_dir" "${stage_dir}/savegame"
+      added_savegame="true"
+    else
+      warn "Savegame directory not found, skipping: $save_dir"
+    fi
+  fi
+
+  if [[ "$include_enshrouded_config" == "true" ]]; then
+    if [[ -f "$ens_config" ]]; then
+      mkdir -p "$config_dir" 2>/dev/null || true
+      cp "$ens_config" "${config_dir}/enshrouded_server.json"
+      added_enshrouded="true"
+    else
+      warn "Enshrouded config not found, skipping: $ens_config"
+    fi
+  fi
+
+  if [[ "$include_manager_config" == "true" ]]; then
+    if [[ -f "$manager_config" ]]; then
+      mkdir -p "$config_dir" 2>/dev/null || true
+      cp "$manager_config" "${config_dir}/server_manager.json"
+      added_manager="true"
+    else
+      warn "Server Manager config not found, skipping: $manager_config"
+    fi
+  fi
+
+  if [[ "$added_savegame" != "true" && "$added_enshrouded" != "true" && "$added_manager" != "true" ]]; then
+    fatal "Nothing to backup (all selected sources missing)"
+  fi
+
+  write_manifest "${stage_dir}/manifest.json" "$mode" "$save_dir" "$added_savegame" "$added_enshrouded" "$added_manager"
+}
+
+create_zip_from_stage() {
+  local backup_root target_dir ts n
+  backup_root="$(backup_dir_resolve)"
+  target_dir="${backup_root}/${mode}"
+
+  mkdir -p "$target_dir" 2>/dev/null || true
+  chmod 700 "$backup_root" "$target_dir" 2>/dev/null || true
+  chown enshrouded:enshrouded "$backup_root" "$target_dir" 2>/dev/null || true
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  backup_file="${target_dir}/${ts}-${mode}-backup.zip"
+  if [[ -e "$backup_file" ]]; then
+    n=1
+    while [[ -e "${target_dir}/${ts}-${mode}-backup-${n}.zip" ]]; do
+      n=$((n + 1))
+    done
+    backup_file="${target_dir}/${ts}-${mode}-backup-${n}.zip"
+  fi
+
+  info "Creating backup zip: $backup_file"
+  (cd "$stage_dir" && zip -qr "$backup_file" .) || fatal "Failed to create zip archive"
+  chmod 600 "$backup_file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$backup_file" 2>/dev/null || true
+}
+
+cleanup_old_scheduled_backups() {
+  local keep target_dir to_delete
+  if [[ "$mode" != "scheduled" || "$run_cleanup" != "true" ]]; then
+    return 0
+  fi
+
+  keep="${BACKUP_MAX_COUNT:-0}"
+  if ! [[ "$keep" =~ ^[0-9]+$ ]]; then
+    warn "Invalid BACKUP_MAX_COUNT value: $keep (skipping cleanup)"
+    return 0
+  fi
+  if [[ "$keep" -eq 0 ]]; then
+    info "Skipping cleanup (BACKUP_MAX_COUNT=0)"
+    return 0
+  fi
+
+  target_dir="$(backup_dir_resolve)/scheduled"
+  to_delete="$(find "$target_dir" -maxdepth 1 -type f -name "*.zip" -printf '%T@\t%p\n' 2>/dev/null \
+    | sort -n \
+    | head -n "-$keep" \
+    | cut -f2-)"
+
+  if [[ -n "$to_delete" ]]; then
+    info "Removing old scheduled backups (keep=$keep)"
+    echo "$to_delete" | xargs -r rm -f --
+  fi
+}
+
+run_backup_operation() {
+  export BACKUP_MODE="$mode"
+  info "Executing backup pre-hook"
+  "${SCRIPT_DIR}/server" hook-run "backup pre" "${BACKUP_PRE_HOOK:-}"
+
+  stage_dir="$(mktemp -d)"
+  info "Preparing backup stage directory: $stage_dir"
+  prepare_stage_content
+  create_zip_from_stage
+  cleanup_old_scheduled_backups
+
+  info "Executing backup post-hook"
+  "${SCRIPT_DIR}/server" hook-run "backup post" "${BACKUP_POST_HOOK:-}"
+  success "Backup job complete: $backup_file"
+}
+
+list_backup_zip_paths() {
+  local backup_root
+  backup_root="$(backup_dir_resolve)"
+  {
+    find "${backup_root}/manual" -maxdepth 1 -type f -name "*.zip" -printf '%T@\t%p\n' 2>/dev/null || true
+    find "${backup_root}/scheduled" -maxdepth 1 -type f -name "*.zip" -printf '%T@\t%p\n' 2>/dev/null || true
+  } | sort -rn | cut -f2-
+}
+
+inspect_backup_components_raw() {
+  local inspect_zip
+  inspect_zip="$1"
+  python3 - "$inspect_zip" <<'PY'
+import pathlib
+import sys
+import zipfile
+
+zip_path = pathlib.Path(sys.argv[1])
+has_savegame = False
+has_enshrouded = False
+has_manager = False
+
+try:
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for name in zf.namelist():
+            if name.startswith("savegame/"):
+                has_savegame = True
+            elif name == "config/enshrouded_server.json":
+                has_enshrouded = True
+            elif name == "config/server_manager.json":
+                has_manager = True
+except Exception:
+    pass
+
+print(
+    "true" if has_savegame else "false",
+    "true" if has_enshrouded else "false",
+    "true" if has_manager else "false",
+)
+PY
+}
+
+inspect_backup_components() {
+  local inspect_zip raw has_savegame has_enshrouded has_manager
+  inspect_zip="$1"
+  raw="$(inspect_backup_components_raw "$inspect_zip")"
+  read -r has_savegame has_enshrouded has_manager <<<"$raw"
+  [[ "$has_savegame" == "true" || "$has_savegame" == "false" ]] || has_savegame="false"
+  [[ "$has_enshrouded" == "true" || "$has_enshrouded" == "false" ]] || has_enshrouded="false"
+  [[ "$has_manager" == "true" || "$has_manager" == "false" ]] || has_manager="false"
+
+  case "$inspect_format" in
+    raw)
+      printf "%s %s %s\n" "$has_savegame" "$has_enshrouded" "$has_manager"
+      ;;
+    json)
+      jq -cn \
+        --arg zip "$inspect_zip" \
+        --arg has_savegame "$has_savegame" \
+        --arg has_enshrouded "$has_enshrouded" \
+        --arg has_manager "$has_manager" \
+        '{
+          zip: $zip,
+          savegame: ($has_savegame == "true"),
+          enshrouded_config: ($has_enshrouded == "true"),
+          manager_config: ($has_manager == "true")
+        }'
+      ;;
+    *)
+      printf "Backup inspect result:\n"
+      printf "ZIP: %s\n" "$inspect_zip"
+      printf "Savegame files: %s\n" "$( [[ "$has_savegame" == "true" ]] && echo "yes" || echo "no" )"
+      printf "Enshrouded config (enshrouded_server.json): %s\n" "$( [[ "$has_enshrouded" == "true" ]] && echo "yes" || echo "no" )"
+      printf "Manager config (server_manager.json): %s\n" "$( [[ "$has_manager" == "true" ]] && echo "yes" || echo "no" )"
+      ;;
+  esac
+}
+
+stop_server_now() {
+  "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 90 \
+    || fatal "Failed to stop server safely before restore"
+}
+
+create_safety_backup_archive() {
+  local safety_stage backup_root target_dir ts n safety_file save_dir ens_config manager_config
+  safety_stage="$(mktemp -d)"
+  backup_root="$(backup_dir_resolve)"
+  target_dir="${backup_root}/manual"
+  save_dir="$(save_dir_resolve)"
+  ens_config="${install_path}/enshrouded_server.json"
+  manager_config="$(manager_config_path)"
+
+  mkdir -p "$target_dir" 2>/dev/null || true
+  chmod 700 "$backup_root" "$target_dir" 2>/dev/null || true
+  chown enshrouded:enshrouded "$backup_root" "$target_dir" 2>/dev/null || true
+
+  if [[ -d "$save_dir" ]]; then
+    copy_tree "$save_dir" "${safety_stage}/savegame"
+  fi
+  if [[ -f "$ens_config" ]]; then
+    mkdir -p "${safety_stage}/config" 2>/dev/null || true
+    cp "$ens_config" "${safety_stage}/config/enshrouded_server.json"
+  fi
+  if [[ -f "$manager_config" ]]; then
+    mkdir -p "${safety_stage}/config" 2>/dev/null || true
+    cp "$manager_config" "${safety_stage}/config/server_manager.json"
+  fi
+
+  write_manifest "${safety_stage}/manifest.json" "manual" "$save_dir" "true" "true" "true"
+
+  ts="$(date +%Y-%m-%d_%H-%M-%S)"
+  safety_file="${target_dir}/${ts}-manual-safety-backup.zip"
+  if [[ -e "$safety_file" ]]; then
+    n=1
+    while [[ -e "${target_dir}/${ts}-manual-safety-backup-${n}.zip" ]]; do
+      n=$((n + 1))
+    done
+    safety_file="${target_dir}/${ts}-manual-safety-backup-${n}.zip"
+  fi
+
+  (cd "$safety_stage" && zip -qr "$safety_file" .) || {
+    rm -rf "$safety_stage" 2>/dev/null || true
+    fatal "Safety backup failed while creating zip archive"
+  }
+  chmod 600 "$safety_file" 2>/dev/null || true
+  chown enshrouded:enshrouded "$safety_file" 2>/dev/null || true
+  rm -rf "$safety_stage" 2>/dev/null || true
+  info "Safety backup created: $safety_file"
+}
+
+run_safety_backup_if_requested() {
+  if [[ "$create_safety_backup" != "true" ]]; then
+    return 0
+  fi
+  info "Creating safety backup before restore"
+  create_safety_backup_archive
+}
+
+extract_zip() {
+  work_dir="$(mktemp -d)"
+  info "Extracting backup archive: $zip_path -> $work_dir"
+  python3 - "$zip_path" "$work_dir" <<'PY'
+import pathlib
+import sys
+import zipfile
+
+zip_path = pathlib.Path(sys.argv[1])
+dest = pathlib.Path(sys.argv[2])
+dest.mkdir(parents=True, exist_ok=True)
+
+with zipfile.ZipFile(zip_path, "r") as zf:
+    for member in zf.infolist():
+        target = pathlib.Path(member.filename)
+        if target.is_absolute() or ".." in target.parts:
+            continue
+        zf.extract(member, dest)
+PY
+}
+
+restore_savegame_from_zip() {
+  local save_dir
+  save_dir="$(save_dir_resolve)"
+  [[ -n "$save_dir" && "$save_dir" != "/" ]] || fatal "Refusing to restore into unsafe save directory: $save_dir"
+
+  if [[ ! -d "${work_dir}/savegame" ]]; then
+    fatal "Selected backup does not contain savegame data"
+  fi
+
+  mkdir -p "$save_dir" 2>/dev/null || true
+  find "$save_dir" -mindepth 1 -delete 2>/dev/null || true
+  copy_tree "${work_dir}/savegame" "$save_dir"
+
+  find "$save_dir" -type f -exec chmod 600 {} + 2>/dev/null || true
+  chown -R enshrouded:enshrouded "$save_dir" 2>/dev/null || true
+  info "Savegame restored: $save_dir"
+}
+
+restore_json_config() {
+  local src target ensure_bans tmp target_dir
+  src="$1"
+  target="$2"
+  ensure_bans="${3:-false}"
+
+  if [[ ! -f "$src" ]]; then
+    fatal "Config source file not found in backup: $src"
+  fi
+  if ! jq -e 'type == "object"' "$src" >/dev/null 2>&1; then
+    fatal "Invalid JSON in backup config: $src"
+  fi
+
+  target_dir="$(dirname "$target")"
+  mkdir -p "$target_dir" 2>/dev/null || true
+  tmp="$(mktemp "${target_dir}/.restore.XXXXXX")"
+  if [[ "$ensure_bans" == "true" ]]; then
+    jq '
+      if has("bans") then . else . + {bans: []} end
+      | if has("bannedAccounts") then . else . + {bannedAccounts: []} end
+    ' "$src" >"$tmp" || {
+      rm -f "$tmp" 2>/dev/null || true
+      fatal "Failed to restore config (jq error): $target"
+    }
+  else
+    cp "$src" "$tmp" || {
+      rm -f "$tmp" 2>/dev/null || true
+      fatal "Failed to stage config restore: $target"
+    }
+  fi
+
+  mv -f "$tmp" "$target"
+  chmod 600 "$target" 2>/dev/null || true
+  chown enshrouded:enshrouded "$target" 2>/dev/null || true
+}
+
+restore_enshrouded_config_from_zip() {
+  local src
+  src="${work_dir}/config/enshrouded_server.json"
+  restore_json_config "$src" "${install_path}/enshrouded_server.json" "true"
+  info "Enshrouded config restored"
+}
+
+restore_manager_config_from_zip() {
+  local src target
+  src="${work_dir}/config/server_manager.json"
+  target="$(manager_config_path)"
+  restore_json_config "$src" "$target" "false"
+  profiles_ensure_schema || true
+  info "Server Manager config restored"
+}
+
+run_restore_operation() {
+  info "Executing restore pre-hook"
+  "${SCRIPT_DIR}/server" hook-run "restore pre" "${RESTORE_PRE_HOOK:-}"
+  info "Stopping server before restore"
+  stop_server_now
+  run_safety_backup_if_requested
+
+  extract_zip
+  [[ "$restore_savegame" == "true" ]] && restore_savegame_from_zip
+  [[ "$restore_enshrouded_config" == "true" ]] && restore_enshrouded_config_from_zip
+  [[ "$restore_manager_config" == "true" ]] && restore_manager_config_from_zip
+
+  info "Executing restore post-hook"
+  "${SCRIPT_DIR}/server" hook-run "restore post" "${RESTORE_POST_HOOK:-}"
+  success "Restore operation complete: $zip_path"
+}
+
+main() {
+  parse_args "$@"
+  load_runtime_values
+
+  case "$mode" in
+    list)
+      info "Running backup job operation: list"
+      list_backup_zip_paths
+      return 0
+      ;;
+    inspect)
+      zip_path="$(resolve_zip_input "$zip_path")"
+      info "Running backup job operation: inspect (zip=${zip_path})"
+      inspect_backup_components "$zip_path"
+      return 0
+      ;;
+    restore)
+      zip_path="$(resolve_zip_input "$zip_path")"
+      info "Running backup job operation: restore (zip=${zip_path}, savegame=${restore_savegame}, enshrouded_config=${restore_enshrouded_config}, manager_config=${restore_manager_config}, safety_backup=${create_safety_backup})"
+      acquire_lock
+      run_restore_operation
+      return 0
+      ;;
+    scheduled|manual)
+      resolve_mode_defaults
+      info "Running backup job operation: backup (mode=${mode}, savegame=${include_savegame}, enshrouded_config=${include_enshrouded_config}, manager_config=${include_manager_config}, cleanup=${run_cleanup})"
+      acquire_lock
+      run_backup_operation
+      return 0
+      ;;
+    *)
+      fatal "Unsupported backup mode: $mode"
+      ;;
+  esac
+}
+
+main "$@"

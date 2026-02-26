@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs_core/profile
+. "${SCRIPT_DIR}/../../jobs_core/profile"
+
+CHECK_OUTPUT_FORMAT="human"
+VERSION_FILE_PATH="${VERSION_FILE_PATH:-/home/enshrouded/current_version}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  check-update [--format human|json]
+
+Exit codes:
+  0  No update required
+  10 Update available
+  20 Version state indeterminate
+EOF
+}
+
+check_update__is_unknown_version() {
+  local value
+  value="$1"
+  [[ -z "$value" || "$value" == "null" || "$value" == "-1" ]]
+}
+
+check_update__resolve_latest_version() {
+  local app_id branch
+  app_id="$1"
+  branch="$2"
+  curl -fsSL "https://api.steamcmd.net/v1/info/${app_id}" 2>/dev/null \
+    | jq -r --arg app_id "$app_id" --arg branch "$branch" '.data[$app_id].depots.branches[$branch].buildid // empty' 2>/dev/null \
+    || true
+}
+
+check_update__print_result() {
+  local app_id branch current latest reason update_required format
+  app_id="$1"
+  branch="$2"
+  current="$3"
+  latest="$4"
+  reason="$5"
+  update_required="$6"
+  format="$7"
+
+  if [[ "$format" == "json" ]]; then
+    jq -cn \
+      --arg app_id "$app_id" \
+      --arg branch "$branch" \
+      --arg current "$current" \
+      --arg latest "$latest" \
+      --arg reason "$reason" \
+      --arg update_required "$update_required" \
+      '{
+        steam_app_id: $app_id,
+        game_branch: $branch,
+        current_version: $current,
+        latest_version: (if $latest == "" then null else $latest end),
+        update_available: ($update_required == "true"),
+        reason: $reason
+      }'
+    return 0
+  fi
+
+  echo "Steam App ID: ${app_id}"
+  echo "Game Branch: ${branch}"
+  echo "Current Version: ${current}"
+  echo "Latest Version: ${latest:-<unknown>}"
+  echo "Update Available: ${update_required}"
+  echo "Reason: ${reason}"
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --format)
+        CHECK_OUTPUT_FORMAT="${2-}"
+        [[ -n "$CHECK_OUTPUT_FORMAT" ]] || fatal "Missing value for --format"
+        shift 2
+        ;;
+      --json)
+        CHECK_OUTPUT_FORMAT="json"
+        shift
+        ;;
+      --help|-h|help)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+
+  case "$CHECK_OUTPUT_FORMAT" in
+    human|json) ;;
+    *)
+      fatal "Invalid output format: $CHECK_OUTPUT_FORMAT (expected: human|json)"
+      ;;
+  esac
+}
+
+main() {
+  local steam_app_id game_branch current_version latest_version compat_dir
+  local update_required reason
+
+  parse_args "$@"
+  require_cmd curl
+  require_cmd jq
+
+  steam_app_id="${STEAM_APP_ID:-$(resolve_from_env_or_manager "STEAM_APP_ID" ".steamAppId" "2278520")}"
+  game_branch="${GAME_BRANCH:-$(resolve_from_env_or_manager "GAME_BRANCH" ".gameBranch" "public")}"
+  [[ "$steam_app_id" =~ ^[0-9]+$ ]] || fatal "Invalid STEAM_APP_ID: ${steam_app_id:-<empty>}"
+  [[ -n "$game_branch" ]] || fatal "Missing GAME_BRANCH"
+
+  current_version="0"
+  if [[ -f "$VERSION_FILE_PATH" ]]; then
+    current_version="$(cat "$VERSION_FILE_PATH" 2>/dev/null || echo "0")"
+    [[ -n "$current_version" ]] || current_version="0"
+  fi
+
+  latest_version="$(check_update__resolve_latest_version "$steam_app_id" "$game_branch")"
+  compat_dir="${install_path}/steamapps/compatdata/${steam_app_id}"
+
+  update_required="false"
+  reason="up_to_date"
+
+  if [[ ! -d "$compat_dir" ]]; then
+    update_required="true"
+    reason="proton_files_missing"
+  elif check_update__is_unknown_version "$latest_version"; then
+    if [[ "$current_version" == "0" ]]; then
+      update_required="true"
+      reason="latest_unknown_no_local_version"
+    else
+      reason="latest_unknown"
+    fi
+  elif [[ "$current_version" != "$latest_version" ]]; then
+    update_required="true"
+    reason="version_mismatch"
+  fi
+
+  check_update__print_result \
+    "$steam_app_id" \
+    "$game_branch" \
+    "$current_version" \
+    "$latest_version" \
+    "$reason" \
+    "$update_required" \
+    "$CHECK_OUTPUT_FORMAT"
+
+  if [[ "$update_required" == "true" ]]; then
+    exit 10
+  fi
+  if [[ "$reason" == "latest_unknown" ]]; then
+    exit 20
+  fi
+  exit 0
+}
+
+main "$@"
+
+

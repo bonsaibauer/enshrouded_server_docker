@@ -1,158 +1,140 @@
 #!/usr/bin/env bash
 
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-# shellcheck source=server_manager/jobs/profile
-. "${SCRIPT_DIR}/profile"
+# shellcheck source=server_manager/lib/log
+. "${SCRIPT_DIR}/../lib/log"
+# shellcheck source=server_manager/jobs_core/profile
+. "${SCRIPT_DIR}/../jobs_core/profile"
 
-enshrouded_config_file="${install_path}/enshrouded_server.json"
+COMMAND_ROOT="${COMMAND_ROOT:-${SCRIPT_DIR}/../commands}"
+RESTART_EXEC_MODE="${RESTART_EXEC_MODE:-manual}"
 
-RESTART_FORCE="false"
-RESTART_CHECK_PLAYERS_OVERRIDE=""
-RESTART_DOWNTIME_SECONDS=""
-
-debug() { [[ "$log_level" -ge 50 ]] && log_line stderr "${C_MAGENTA:-}" DEBUG "$*" || true; }
-
-enshrouded_get_text() {
-  local path
-  path="$1"
-  if [[ ! -f "$enshrouded_config_file" ]]; then
-    echo ""
-    return 0
-  fi
-  jq -r "$path | if . == null then empty else tostring end" "$enshrouded_config_file" 2>/dev/null || true
-}
-
-load_runtime_values() {
-  require_cmd jq
-
-  RESTART_CHECK_PLAYERS="${RESTART_CHECK_PLAYERS:-$(manager_get_text ".restartCheckPlayers")}"
-  [[ -n "$RESTART_CHECK_PLAYERS" ]] || RESTART_CHECK_PLAYERS="true"
-
-  RESTART_DOWNTIME_SECONDS="${RESTART_DOWNTIME_SECONDS:-$(manager_get_text ".restartDowntimeSeconds")}"
-  [[ -n "$RESTART_DOWNTIME_SECONDS" ]] || RESTART_DOWNTIME_SECONDS="3"
-  if [[ ! "$RESTART_DOWNTIME_SECONDS" =~ ^[0-9]+$ ]]; then
-    fatal "Invalid RESTART_DOWNTIME_SECONDS: ${RESTART_DOWNTIME_SECONDS} (expected integer >= 0)"
-  fi
-
-  RESTART_PRE_HOOK="${RESTART_PRE_HOOK:-$(manager_get_text ".restartPreHook")}"
-  RESTART_POST_HOOK="${RESTART_POST_HOOK:-$(manager_get_text ".restartPostHook")}"
-
-  ENSHROUDED_QUERY_PORT="${ENSHROUDED_QUERY_PORT:-$(enshrouded_get_text ".queryPort")}"
-  [[ -n "$ENSHROUDED_QUERY_PORT" ]] || ENSHROUDED_QUERY_PORT="15637"
-}
-
-run_restart() {
-  local players_check_rc players_check_arg server_was_running
-  info "Executing restart pre-hook"
-  "${SCRIPT_DIR}/server" hook-run "restart pre" "${RESTART_PRE_HOOK:-}"
-
-  if [[ "$RESTART_FORCE" != "true" ]]; then
-    players_check_arg="--player-check"
-    if [[ "$RESTART_CHECK_PLAYERS" != "true" ]]; then
-      players_check_arg="--no-player-check"
-    fi
-    "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --players-check "$players_check_arg" --query-port "$ENSHROUDED_QUERY_PORT"
-    players_check_rc=$?
-    case "$players_check_rc" in
-      0)
-        ;;
-      10)
-        warn "Enshrouded server is not empty - restart will not be performed"
-        return
-        ;;
-      *)
-        fatal "players-check failed (rc=$players_check_rc)"
-        ;;
-    esac
-  else
-    info "Skipping players-check because force restart is enabled"
-  fi
-
-  info "Restarting Enshrouded server (downtime=${RESTART_DOWNTIME_SECONDS}s)"
-  server_was_running="false"
-  if is_supervisor_running "server"; then
-    server_was_running="true"
-    info "Stopping Enshrouded server"
-    if ! "${SCRIPT_DIR}/server" guard-run core_ready -- supervisorctl stop server >/dev/null 2>&1; then
-      fatal "Failed to stop Enshrouded server via supervisor"
-    fi
-  else
-    success "Enshrouded server is already stopped - proceeding to start phase"
-  fi
-
-  if [[ "$server_was_running" == "true" && "$RESTART_DOWNTIME_SECONDS" -gt 0 ]]; then
-    info "Waiting ${RESTART_DOWNTIME_SECONDS}s before starting Enshrouded server"
-    sleep "$RESTART_DOWNTIME_SECONDS"
-  fi
-
-  info "Starting Enshrouded server"
-  if ! "${SCRIPT_DIR}/server" guard-run core_ready -- supervisorctl start server >/dev/null 2>&1; then
-    fatal "Failed to start Enshrouded server via supervisor"
-  fi
-
-  info "Executing restart post-hook"
-  "${SCRIPT_DIR}/server" hook-run "restart post" "${RESTART_POST_HOOK:-}"
-}
+CHECK_PLAYER_CMD="${COMMAND_ROOT}/check/check-player"
+MANUAL_RESTART_CMD="${COMMAND_ROOT}/manual/restart"
+FORCE_RESTART_CMD="${COMMAND_ROOT}/force/force-restart"
+SCHEDULED_RESTART_CMD="${COMMAND_ROOT}/scheduled/scheduled-restart"
 
 usage() {
   cat <<'EOF'
 Usage:
-  restart [force|player-check|no-player-check]
-  restart [--player-check|--no-player-check] [--force]
+  restart
+
+Configuration via ENV:
+  RESTART_EXEC_MODE=manual|force|scheduled
 EOF
 }
 
-parse_args() {
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      force)
-        RESTART_FORCE="true"
-        shift
-        ;;
-      player-check)
-        RESTART_CHECK_PLAYERS_OVERRIDE="true"
-        shift
-        ;;
-      no-player-check)
-        RESTART_CHECK_PLAYERS_OVERRIDE="false"
-        shift
-        ;;
-      help)
-        usage
-        exit 0
-        ;;
-      --player-check)
-        RESTART_CHECK_PLAYERS_OVERRIDE="true"
-        shift
-        ;;
-      --no-player-check)
-        RESTART_CHECK_PLAYERS_OVERRIDE="false"
-        shift
-        ;;
-      --force)
-        RESTART_FORCE="true"
-        shift
-        ;;
-      --help|-h)
-        usage
-        exit 0
-        ;;
-      *)
-        fatal "Unknown argument: $1"
-        ;;
-    esac
-  done
+require_executable() {
+  local file
+  file="$1"
+  [[ -x "$file" ]] || fatal "Command is not executable: $file"
+}
+
+restart_read_check_players() {
+  local value
+  value="$(resolve_from_env_or_manager "RESTART_CHECK_PLAYERS" ".restartCheckPlayers" "true")"
+  case "$(echo "$value" | tr '[:upper:]' '[:lower:]' | xargs)" in
+    true|false) echo "$(echo "$value" | tr '[:upper:]' '[:lower:]' | xargs)" ;;
+    *)
+      warn "Invalid restartCheckPlayers value: ${value:-<empty>} (fallback=true)"
+      echo "true"
+      ;;
+  esac
+}
+
+restart_read_query_port() {
+  local cfg_file port
+  port="${ENSHROUDED_QUERY_PORT:-}"
+  if [[ -z "$port" ]]; then
+    cfg_file="${install_path}/enshrouded_server.json"
+    if command -v jq >/dev/null 2>&1 && [[ -f "$cfg_file" ]]; then
+      port="$(jq -r '.queryPort | if . == null then empty else tostring end' "$cfg_file" 2>/dev/null || true)"
+    fi
+  fi
+  [[ -n "$port" ]] || port="15637"
+  echo "$port"
+}
+
+run_optional_player_check() {
+  local check_players query_port check_rc
+  check_players="$1"
+  query_port="$2"
+
+  if [[ "$RESTART_EXEC_MODE" == "force" ]]; then
+    info "Skipping player check because RESTART_EXEC_MODE=force"
+    return 0
+  fi
+  if [[ "$check_players" != "true" ]]; then
+    info "Skipping player check because restartCheckPlayers=false"
+    return 0
+  fi
+
+  require_executable "$CHECK_PLAYER_CMD"
+  "$CHECK_PLAYER_CMD" --player-check --query-port "$query_port"
+  check_rc=$?
+  case "$check_rc" in
+    0)
+      info "Player check passed (no active players)"
+      return 0
+      ;;
+    10)
+      warn "Player check detected active players - restart skipped"
+      return 10
+      ;;
+    *)
+      fatal "Player check failed (rc=$check_rc)"
+      ;;
+  esac
+}
+
+dispatch_restart_command() {
+  case "$RESTART_EXEC_MODE" in
+    force)
+      require_executable "$FORCE_RESTART_CMD"
+      "$FORCE_RESTART_CMD"
+      ;;
+    scheduled)
+      require_executable "$SCHEDULED_RESTART_CMD"
+      "$SCHEDULED_RESTART_CMD"
+      ;;
+    manual|"")
+      require_executable "$MANUAL_RESTART_CMD"
+      "$MANUAL_RESTART_CMD"
+      ;;
+    *)
+      fatal "Invalid RESTART_EXEC_MODE: $RESTART_EXEC_MODE (expected: manual|force|scheduled)"
+      ;;
+  esac
 }
 
 main() {
-  parse_args "$@"
-  load_runtime_values
-  if [[ -n "$RESTART_CHECK_PLAYERS_OVERRIDE" ]]; then
-    RESTART_CHECK_PLAYERS="$RESTART_CHECK_PLAYERS_OVERRIDE"
+  local check_players query_port
+
+  case "${1-}" in
+    --help|-h|help)
+      usage
+      exit 0
+      ;;
+    "")
+      ;;
+    *)
+      fatal "restart job does not accept arguments"
+      ;;
+  esac
+
+  check_players="$(restart_read_check_players)"
+  query_port="$(restart_read_query_port)"
+
+  info "Running restart job dispatcher (mode=${RESTART_EXEC_MODE}, check_players=${check_players}, query_port=${query_port})"
+
+  if run_optional_player_check "$check_players" "$query_port"; then
+    dispatch_restart_command
+    exit $?
   fi
-  info "Running restart job (force=${RESTART_FORCE}, check_players=${RESTART_CHECK_PLAYERS}, query_port=${ENSHROUDED_QUERY_PORT}, downtime_seconds=${RESTART_DOWNTIME_SECONDS})"
-  run_restart
-  success "Restart job complete"
+
+  # run_optional_player_check returns 10 when players are active.
+  success "Restart job complete (no action required)"
+  exit 0
 }
 
 main "$@"

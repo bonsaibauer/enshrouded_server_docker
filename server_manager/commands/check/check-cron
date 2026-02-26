@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs_core/profile
+. "${SCRIPT_DIR}/../../jobs_core/profile"
+
+CHECK_OUTPUT_FORMAT="human"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  check-cron [--format human|json]
+
+Exit codes:
+  0  All configured cron expressions are valid
+  10 At least one configured cron expression is invalid
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --format)
+        CHECK_OUTPUT_FORMAT="${2-}"
+        [[ -n "$CHECK_OUTPUT_FORMAT" ]] || fatal "Missing value for --format"
+        shift 2
+        ;;
+      --json)
+        CHECK_OUTPUT_FORMAT="json"
+        shift
+        ;;
+      --help|-h|help)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+
+  case "$CHECK_OUTPUT_FORMAT" in
+    human|json) ;;
+    *)
+      fatal "Invalid output format: $CHECK_OUTPUT_FORMAT (expected: human|json)"
+      ;;
+  esac
+}
+
+check_cron__is_valid_expr() {
+  local expr field_count
+  expr="$1"
+
+  [[ -n "$expr" ]] || return 0
+
+  field_count="$(awk '{print NF}' <<<"$expr")"
+  [[ "$field_count" == "5" ]] || return 1
+
+  # Basic cron field validation: token chars allowed in classic crontab fields.
+  while IFS= read -r token; do
+    [[ "$token" =~ ^[A-Za-z0-9*\/,\-]+$ ]] || return 1
+  done < <(awk '{for(i=1;i<=NF;i++) print $i}' <<<"$expr")
+
+  return 0
+}
+
+main() {
+  local update_cron backup_cron restart_cron
+  local update_valid backup_valid restart_valid invalid_count
+  local result_json
+
+  parse_args "$@"
+  require_cmd jq
+
+  update_cron="$(resolve_from_env_or_manager "UPDATE_CRON" ".updateCron" "")"
+  backup_cron="$(resolve_from_env_or_manager "BACKUP_CRON" ".backupCron" "")"
+  restart_cron="$(resolve_from_env_or_manager "RESTART_CRON" ".restartCron" "")"
+
+  check_cron__is_valid_expr "$update_cron" && update_valid="true" || update_valid="false"
+  check_cron__is_valid_expr "$backup_cron" && backup_valid="true" || backup_valid="false"
+  check_cron__is_valid_expr "$restart_cron" && restart_valid="true" || restart_valid="false"
+
+  result_json="$(
+    jq -cn \
+      --arg update_cron "$update_cron" \
+      --arg backup_cron "$backup_cron" \
+      --arg restart_cron "$restart_cron" \
+      --arg update_valid "$update_valid" \
+      --arg backup_valid "$backup_valid" \
+      --arg restart_valid "$restart_valid" \
+      '{
+        update: { expression: (if $update_cron == "" then null else $update_cron end), valid: ($update_valid == "true") },
+        backup: { expression: (if $backup_cron == "" then null else $backup_cron end), valid: ($backup_valid == "true") },
+        restart: { expression: (if $restart_cron == "" then null else $restart_cron end), valid: ($restart_valid == "true") }
+      }'
+  )"
+
+  invalid_count="$(jq -r '[.update, .backup, .restart] | map(select(.expression != null and .valid == false)) | length' <<<"$result_json")"
+
+  if [[ "$CHECK_OUTPUT_FORMAT" == "json" ]]; then
+    printf "%s\n" "$result_json"
+  else
+    echo "Cron Check"
+    echo "  update:  ${update_cron:-<disabled>} (valid=${update_valid})"
+    echo "  backup:  ${backup_cron:-<disabled>} (valid=${backup_valid})"
+    echo "  restart: ${restart_cron:-<disabled>} (valid=${restart_valid})"
+  fi
+
+  if [[ "$invalid_count" -gt 0 ]]; then
+    exit 10
+  fi
+  exit 0
+}
+
+main "$@"
+
+

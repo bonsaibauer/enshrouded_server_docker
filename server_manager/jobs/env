@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/lib/log
+. "${SCRIPT_DIR}/../lib/log"
+
+COMMAND_ROOT="${COMMAND_ROOT:-${SCRIPT_DIR}/../commands}"
+ENV_EXEC_ACTION="${ENV_EXEC_ACTION:-check-all}"
+
+CHECK_ENV_CMD="${COMMAND_ROOT}/check/check-env"
+CHECK_ALL_ENV_CMD="${COMMAND_ROOT}/check/check-all-env"
+INIT_RUNTIME_CMD="${COMMAND_ROOT}/manual/env-init-runtime"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  env
+
+Configuration via ENV:
+  ENV_EXEC_ACTION=check|check-all|init-runtime
+  ENV_NAME=<VAR_NAME>            (required for ENV_EXEC_ACTION=check)
+  ENV_VALUE=<VALUE>              (optional for ENV_EXEC_ACTION=check)
+EOF
+}
+
+require_executable() {
+  local file
+  file="$1"
+  [[ -x "$file" ]] || fatal "Command is not executable: $file"
+}
+
+main() {
+  local env_name env_value
+  env_name="${ENV_NAME:-}"
+  env_value="${ENV_VALUE-}"
+
+  case "${1-}" in
+    --help|-h|help)
+      usage
+      exit 0
+      ;;
+    "")
+      ;;
+    *)
+      fatal "env job does not accept arguments"
+      ;;
+  esac
+
+  info "Running env job dispatcher (action=${ENV_EXEC_ACTION})"
+
+  case "$ENV_EXEC_ACTION" in
+    check)
+      [[ -n "$env_name" ]] || fatal "ENV_NAME is required when ENV_EXEC_ACTION=check"
+      require_executable "$CHECK_ENV_CMD"
+      if [[ -n "${ENV_VALUE+x}" ]]; then
+        "$CHECK_ENV_CMD" --name "$env_name" --value "$env_value"
+      else
+        "$CHECK_ENV_CMD" --name "$env_name"
+      fi
+      ;;
+    check-all|"")
+      require_executable "$CHECK_ALL_ENV_CMD"
+      "$CHECK_ALL_ENV_CMD"
+      ;;
+    init-runtime)
+      require_executable "$INIT_RUNTIME_CMD"
+      "$INIT_RUNTIME_CMD"
+      ;;
+    *)
+      fatal "Invalid ENV_EXEC_ACTION: $ENV_EXEC_ACTION (expected: check|check-all|init-runtime)"
+      ;;
+  esac
+}
+
+main "$@"

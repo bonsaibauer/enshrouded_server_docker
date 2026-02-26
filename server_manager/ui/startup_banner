@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+banner_title="${MENU_BANNER_TITLE:-Enshrouded Server Manager}"
+banner_subtitle="${MENU_BANNER_SUBTITLE:-Interactive command menu}"
+
+printf "========================================\n"
+printf "%s\n" "$banner_title"
+printf "========================================\n"
+if [[ -n "$banner_subtitle" ]]; then
+  printf "%s\n" "$banner_subtitle"
+fi
+printf "\n"

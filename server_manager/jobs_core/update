@@ -1,7 +1,7 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-# shellcheck source=server_manager/jobs/env-validation
-. "${SCRIPT_DIR}/env-validation"
+# shellcheck source=server_manager/jobs/env
+. "${SCRIPT_DIR}/env"
 
 pidfile="$enshrouded_updater_pidfile"
 latest_version="-1"
@@ -11,21 +11,21 @@ NO_PLAYER_CHECK="false"
 PLAYER_CHECK_FORCE=""
 runtime_ready="false"
 
-debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && log_line stderr "$C_MAGENTA" DEBUG "$*" || true; }
+update_debug() { [[ "${LOG_LEVEL:-40}" -ge 50 ]] && log_line stderr "$C_MAGENTA" DEBUG "$*" || true; }
 
-is_unknown_version() {
+update_is_unknown_version() {
   local value
   value="$1"
   [[ -z "$value" || "$value" == "null" || "$value" == "-1" ]]
 }
 
-resolve_latest_version() {
+update_resolve_latest_version() {
   info "Resolving latest build version from Steam API (app_id=${steam_app_id}, branch=${GAME_BRANCH})"
   curl -sX GET "https://api.steamcmd.net/v1/info/$steam_app_id" \
     | jq -r ".data.\"$steam_app_id\".depots.branches.$GAME_BRANCH.buildid"
 }
 
-remove_steamapps_tree() {
+update_remove_steamapps_tree() {
   local target
   case "${steamapp_path:-}" in
     ""|"/"|"."|"./")
@@ -36,15 +36,15 @@ remove_steamapps_tree() {
   if [[ "$target" == "$install_path" ]]; then
     fatal "Refusing to remove install_path directly: $target"
   fi
-  debug "Removing $target"
+  update_debug "Removing $target"
   rm -rf "$target"
 }
 
-checkRunning() {
+update_check_running() {
   is_supervisor_running "$1"
 }
 
-checkLock() {
+update_check_lock() {
   local lock_file pid
   lock_file="$1"
   [[ -n "$lock_file" ]] || return 0
@@ -53,12 +53,12 @@ checkLock() {
   if [[ -n "$pid" ]] && [[ "$pid" =~ ^[0-9]+$ ]] && [[ -d "/proc/$pid" ]]; then
     fatal "Lock active: $lock_file (pid=$pid)"
   fi
-  warn "Removing stale updater lock: $lock_file"
+  warn "Removing stale update lock: $lock_file"
   rm -f "$lock_file" 2>/dev/null || true
   return 0
 }
 
-clearLock() {
+update_clear_lock() {
   local lock_file
   lock_file="$1"
   [[ -n "$lock_file" ]] || return 0
@@ -69,12 +69,12 @@ clearLock() {
 usage() {
   cat <<'EOF'
 Usage:
-  updater [force|check|player-check|no-player-check]
-  updater [--force] [--check-only] [--runtime-ready] [--player-check|--no-player-check]
+  update [force|check|player-check|no-player-check]
+  update [--force] [--check-only] [--runtime-ready] [--player-check|--no-player-check]
 EOF
 }
 
-parse_args() {
+update_parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       force)
@@ -130,18 +130,18 @@ parse_args() {
   done
 }
 
-update() {
+update_run() {
   local players_check_rc players_check_arg updater_rc
   if [[ -f "$pidfile" ]]; then
     info "Found existing PID file - checking process"
-    checkLock "$pidfile"
+    update_check_lock "$pidfile"
   fi
 
-  trap shutdown SIGINT SIGTERM
+  trap update_shutdown SIGINT SIGTERM
 
-  if ! check_for_updates; then
+  if ! update_check_for_updates; then
     info "No update required"
-    if ! checkRunning "server"; then
+    if ! update_check_running "server"; then
       info "Enshrouded server is not running - starting"
       "${SCRIPT_DIR}/server" start
     fi
@@ -167,69 +167,69 @@ update() {
       ;;
   esac
 
-  run_update_flow &
+  update_run_flow &
   enshrouded_updater_pid=$!
-  info "Acquired updater lock: $pidfile (pid=$enshrouded_updater_pid)"
+  info "Acquired update lock: $pidfile (pid=$enshrouded_updater_pid)"
   echo "$enshrouded_updater_pid" >"$pidfile"
   wait "$enshrouded_updater_pid"
   updater_rc=$?
   if [[ "$updater_rc" -ne 0 ]]; then
-    warn "Updater flow finished with non-zero exit code: $updater_rc"
+    warn "Update flow finished with non-zero exit code: $updater_rc"
     return "$updater_rc"
   fi
   success "Updater flow finished successfully"
 }
 
-run_update_flow() {
+update_run_flow() {
   info "Executing update pre-hook"
   "${SCRIPT_DIR}/server" hook-run "update pre" "${UPDATE_PRE_HOOK:-}"
-  if checkRunning "server"; then
+  if update_check_running "server"; then
     info "Stopping server before update"
     "${SCRIPT_DIR}/server" stop
   fi
 
-  verify_cpu_mhz
+  update_verify_cpu_mhz
   info "Downloading Enshrouded server via steamcmd"
-  if ! download_enshrouded; then
+  if ! update_download_enshrouded; then
     if [[ "${UPDATER_BOOTSTRAP_MODE:-false}" == "true" ]]; then
       info "Download of Enshrouded server failed during bootstrap - retry"
     else
       warn "Download of Enshrouded server failed - retry"
     fi
-    remove_steamapps_tree
+    update_remove_steamapps_tree
 
-    if ! download_enshrouded; then
+    if ! update_download_enshrouded; then
       warn "Download of Enshrouded server failed - aborting update"
       "${SCRIPT_DIR}/server" start
-      clearLock "$pidfile"
+      update_clear_lock "$pidfile"
       return 1
     fi
   fi
 
-  set_current_version
+  update_set_current_version
   info "Starting server after update"
   "${SCRIPT_DIR}/server" start
   info "Executing update post-hook"
   "${SCRIPT_DIR}/server" hook-run "update post" "${UPDATE_POST_HOOK:-}"
-  clearLock "$pidfile"
+  update_clear_lock "$pidfile"
 }
 
 # This works around the `Unable to determine CPU Frequency. Try defining CPU_MHZ.` steamcmd issue.
-verify_cpu_mhz() {
+update_verify_cpu_mhz() {
   local float_regex cpu_mhz
   float_regex="^([0-9]+\\.?[0-9]*)\$"
   cpu_mhz="$(grep "^cpu MHz" /proc/cpuinfo | head -1 | cut -d : -f 2 | xargs)"
   if [[ -n "$cpu_mhz" && "$cpu_mhz" =~ $float_regex && "${cpu_mhz%.*}" -gt 0 ]]; then
-    debug "Found CPU with $cpu_mhz MHz"
+    update_debug "Found CPU with $cpu_mhz MHz"
     unset CPU_MHZ
   else
-    debug "Unable to determine CPU Frequency - setting a default of 1.5 GHz so steamcmd won't complain"
+    update_debug "Unable to determine CPU Frequency - setting a default of 1.5 GHz so steamcmd won't complain"
     export CPU_MHZ="1500.000"
   fi
 }
 
-set_current_version() {
-  if is_unknown_version "$latest_version"; then
+update_set_current_version() {
+  if update_is_unknown_version "$latest_version"; then
     if [[ "${UPDATER_BOOTSTRAP_MODE:-false}" == "true" ]]; then
       info "Unable to set current version during bootstrap - latest version is unknown"
       info "Next update check will restart the server until version can be determined"
@@ -239,18 +239,18 @@ set_current_version() {
     fi
     return 1
   fi
-  debug "[set_current_version]: $latest_version"
+  update_debug "[update_set_current_version]: $latest_version"
   echo "$latest_version" >"$version_file_path"
 }
 
-shutdown() {
-  debug "Received signal to shut down updater"
-  clearLock "$pidfile"
+update_shutdown() {
+  update_debug "Received signal to shut down update"
+  update_clear_lock "$pidfile"
 }
 
-download_enshrouded() {
+update_download_enshrouded() {
   local steamcmd_rc
-  debug "Downloading Enshrouded server"
+  update_debug "Downloading Enshrouded server"
   mkdir -p "$install_path/steamapps/compatdata/$steam_app_id"
   export WINETRICKS="/usr/local/bin/winetricks"
   export STEAM_COMPAT_CLIENT_INSTALL_PATH="/home/enshrouded/.steam/steam"
@@ -264,18 +264,18 @@ download_enshrouded() {
   return "$steamcmd_rc"
 }
 
-check_for_updates() {
+update_check_for_updates() {
   local current_version
 
   if [[ "$FORCE_UPDATE" == "true" ]]; then
     info "Force update requested"
     rm -f "$version_file_path"
-    remove_steamapps_tree
-    latest_version="$(resolve_latest_version)"
+    update_remove_steamapps_tree
+    latest_version="$(update_resolve_latest_version)"
     return 0
   fi
 
-  if check_proton_files_available; then
+  if update_check_proton_files_available; then
     return 0
   fi
 
@@ -285,9 +285,9 @@ check_for_updates() {
     current_version="0"
   fi
 
-  latest_version="$(resolve_latest_version)"
+  latest_version="$(update_resolve_latest_version)"
   info "Version check: current=${current_version}, latest=${latest_version:-unknown}"
-  if is_unknown_version "$latest_version"; then
+  if update_is_unknown_version "$latest_version"; then
     if [[ "$current_version" == "0" ]]; then
       if [[ "${UPDATER_BOOTSTRAP_MODE:-false}" == "true" ]]; then
         info "Unable to determine latest version of enshrouded server! No version currently installed, update server anyways"
@@ -309,17 +309,17 @@ check_for_updates() {
   return 1
 }
 
-check_proton_files_available() {
+update_check_proton_files_available() {
   if [[ ! -d "$install_path/steamapps/compatdata/$steam_app_id" ]]; then
     info "Proton files are not available. Performing Enshrouded update to generate proton files"
     return 0
   fi
-  debug "Proton files are available: $install_path/steamapps/compatdata/$steam_app_id"
+  update_debug "Proton files are available: $install_path/steamapps/compatdata/$steam_app_id"
   return 1
 }
 
 main() {
-  parse_args "$@"
+  update_parse_args "$@"
   if [[ "$runtime_ready" == "true" ]]; then
     info "Skipping runtime initialization (--runtime-ready)"
   else
@@ -333,19 +333,19 @@ main() {
   fi
 
   if [[ "$CHECK_ONLY" == "true" ]]; then
-    info "Running updater in check-only mode (force=${FORCE_UPDATE}, check_players=${UPDATE_CHECK_PLAYERS:-true})"
-    if check_for_updates; then
+    info "Running update in check-only mode (force=${FORCE_UPDATE}, check_players=${UPDATE_CHECK_PLAYERS:-true})"
+    if update_check_for_updates; then
       info "Update check: update available"
     else
       info "Update check: no update required"
     fi
-    success "Updater check-only mode complete"
+    success "Update check-only mode complete"
     return 0
   fi
 
-  info "Running updater (force=${FORCE_UPDATE}, check_players=${UPDATE_CHECK_PLAYERS:-true})"
-  update
-  success "Updater complete"
+  info "Running update (force=${FORCE_UPDATE}, check_players=${UPDATE_CHECK_PLAYERS:-true})"
+  update_run
+  success "Update complete"
 }
 
 main "$@"

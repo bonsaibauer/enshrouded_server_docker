@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+
+UI_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/lib/log
+. "${UI_DIR}/../lib/log"
+
+MENU_UI_LOG_FILE="${MENU_UI_LOG_FILE:-${UI_DIR}/../logs/log}"
+
+menu_ui_append_log() {
+  local level message timestamp log_dir
+  level="$1"
+  shift
+  message="$*"
+
+  log_dir="$(dirname "$MENU_UI_LOG_FILE")"
+  mkdir -p "$log_dir" 2>/dev/null || true
+  touch "$MENU_UI_LOG_FILE" 2>/dev/null || true
+
+  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown-time")"
+  printf "%s [%s] %s\n" "$timestamp" "$level" "$message" >>"$MENU_UI_LOG_FILE" 2>/dev/null || true
+}
+
+ui_info() {
+  menu_ui_append_log "INFO" "$*"
+  info "$@"
+}
+
+ui_warn() {
+  menu_ui_append_log "WARN" "$*"
+  warn "$@"
+}
+
+ui_error() {
+  menu_ui_append_log "ERROR" "$*"
+  error "$@"
+}
+
+ui_clear_screen() {
+  if [[ "${MENU_NO_CLEAR:-false}" == "true" ]]; then
+    return 0
+  fi
+  if [[ -t 1 ]]; then
+    clear
+  fi
+}
+
+ui_print_title() {
+  local title
+  title="$1"
+  printf "%s\n" "$title"
+  printf "%s\n" "$(printf '%*s' "${#title}" '' | tr ' ' '=')"
+}
+
+ui_print_subtitle() {
+  printf "%s\n\n" "$1"
+}
+
+ui_print_option() {
+  local option_key option_label
+  option_key="$1"
+  option_label="$2"
+  printf "  [%s] %s\n" "$option_key" "$option_label"
+}
+
+ui_prompt_input() {
+  local var_name prompt_text default_value response
+  var_name="$1"
+  prompt_text="$2"
+  default_value="${3-}"
+
+  if [[ -t 0 ]]; then
+    if [[ -n "$default_value" ]]; then
+      read -r -p "${prompt_text} [${default_value}]: " response
+    else
+      read -r -p "${prompt_text}: " response
+    fi
+  else
+    response=""
+  fi
+
+  if [[ -z "$response" ]]; then
+    response="$default_value"
+  fi
+
+  printf -v "$var_name" "%s" "$response"
+}
+
+ui_confirm() {
+  local prompt_text default_yes response normalized
+  prompt_text="$1"
+  default_yes="${2:-false}"
+
+  while true; do
+    if [[ -t 0 ]]; then
+      if [[ "$default_yes" == "true" ]]; then
+        read -r -p "${prompt_text} [Y/n]: " response
+      else
+        read -r -p "${prompt_text} [y/N]: " response
+      fi
+    else
+      response=""
+    fi
+
+    normalized="$(echo "${response}" | tr '[:upper:]' '[:lower:]' | xargs)"
+    if [[ -z "$normalized" ]]; then
+      [[ "$default_yes" == "true" ]] && return 0
+      return 1
+    fi
+
+    case "$normalized" in
+      y|yes) return 0 ;;
+      n|no) return 1 ;;
+      *) ui_warn "Please answer with yes or no." ;;
+    esac
+  done
+}
+
+ui_pause() {
+  local message
+  message="${1:-Press Enter to continue...}"
+  if [[ -t 0 ]]; then
+    read -r -p "$message" _
+  fi
+}

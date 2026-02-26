@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+CORE_PROFILE_JOB="${CORE_PROFILE_JOB:-${SCRIPT_DIR}/../../jobs_core/profile}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  reset-profile-manager [--create-backup true|false]
+EOF
+}
+
+parse_bool() {
+  case "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" in
+    true|false) echo "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" ;;
+    *) echo "" ;;
+  esac
+}
+
+main() {
+  local create_backup parsed_bool
+  create_backup=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --create-backup)
+        parsed_bool="$(parse_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || {
+          echo "Invalid value for --create-backup (expected true|false)" >&2
+          exit 1
+        }
+        create_backup="$parsed_bool"
+        shift 2
+        ;;
+      --help|-h|help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown argument: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  [[ -x "$CORE_PROFILE_JOB" ]] || {
+    echo "Profile job is not executable: $CORE_PROFILE_JOB" >&2
+    exit 1
+  }
+
+  if [[ -n "$create_backup" ]]; then
+    "$CORE_PROFILE_JOB" --target manager --action reset --create-backup "$create_backup"
+    exit $?
+  fi
+
+  "$CORE_PROFILE_JOB" --target manager --action reset
+}
+
+main "$@"
+
+

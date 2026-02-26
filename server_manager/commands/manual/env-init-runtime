@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+ENV_VALIDATION_JOB="${ENV_VALIDATION_JOB:-${SCRIPT_DIR}/../../jobs_core/env}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  env-init-runtime
+EOF
+}
+
+main() {
+  case "${1-}" in
+    --help|-h|help)
+      usage
+      exit 0
+      ;;
+    "")
+      ;;
+    *)
+      echo "env-init-runtime does not accept arguments" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+
+  [[ -x "$ENV_VALIDATION_JOB" ]] || {
+    echo "ENV validation job is not executable: $ENV_VALIDATION_JOB" >&2
+    exit 1
+  }
+
+  "$ENV_VALIDATION_JOB" init-runtime
+}
+
+main "$@"
+
+

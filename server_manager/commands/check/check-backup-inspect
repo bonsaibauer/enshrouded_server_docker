@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs_core/profile
+. "${SCRIPT_DIR}/../../jobs_core/profile"
+
+CHECK_OUTPUT_FORMAT="human"
+ZIP_INPUT=""
+
+usage() {
+  cat <<'EOF'
+Usage:
+  check-backup-inspect --zip <zip_path_or_name> [--format human|json|raw]
+
+Exit codes:
+  0  ZIP is readable and contains known backup components
+  10 ZIP is readable but does not contain known backup components
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --zip)
+        ZIP_INPUT="${2-}"
+        [[ -n "$ZIP_INPUT" ]] || fatal "Missing value for --zip"
+        shift 2
+        ;;
+      --format)
+        CHECK_OUTPUT_FORMAT="${2-}"
+        [[ -n "$CHECK_OUTPUT_FORMAT" ]] || fatal "Missing value for --format"
+        shift 2
+        ;;
+      --json)
+        CHECK_OUTPUT_FORMAT="json"
+        shift
+        ;;
+      --raw)
+        CHECK_OUTPUT_FORMAT="raw"
+        shift
+        ;;
+      --help|-h|help)
+        usage
+        exit 0
+        ;;
+      *)
+        if [[ -z "$ZIP_INPUT" ]]; then
+          ZIP_INPUT="$1"
+          shift
+        else
+          fatal "Unknown argument: $1"
+        fi
+        ;;
+    esac
+  done
+
+  [[ -n "$ZIP_INPUT" ]] || fatal "Missing --zip"
+  case "$CHECK_OUTPUT_FORMAT" in
+    human|json|raw) ;;
+    *)
+      fatal "Invalid output format: $CHECK_OUTPUT_FORMAT (expected: human|json|raw)"
+      ;;
+  esac
+}
+
+check_backup_inspect__resolve_zip_input() {
+  local input backup_root normalized normalized_with_ext
+  local -a candidates
+  local candidate
+  declare -A seen
+
+  input="$1"
+  [[ -n "$input" ]] || fatal "Missing zip filename/path"
+
+  if [[ "$input" == /* ]]; then
+    [[ -f "$input" ]] || fatal "Backup source not found: $input"
+    printf "%s" "$input"
+    return 0
+  fi
+
+  BACKUP_DIR="$(resolve_from_env_or_manager "BACKUP_DIR" ".backupDir" "backups")"
+  backup_root="$(backup_dir_resolve)"
+
+  normalized="${input#./}"
+  normalized_with_ext="$normalized"
+  if [[ "$normalized_with_ext" != *.zip ]]; then
+    normalized_with_ext="${normalized_with_ext}.zip"
+  fi
+
+  for candidate in \
+    "${backup_root}/${normalized}" \
+    "${backup_root}/${normalized_with_ext}" \
+    "${backup_root}/manual/${normalized}" \
+    "${backup_root}/manual/${normalized_with_ext}" \
+    "${backup_root}/scheduled/${normalized}" \
+    "${backup_root}/scheduled/${normalized_with_ext}"; do
+    if [[ -f "$candidate" && -z "${seen[$candidate]:-}" ]]; then
+      candidates+=("$candidate")
+      seen["$candidate"]="1"
+    fi
+  done
+
+  if [[ "${#candidates[@]}" -eq 0 ]]; then
+    fatal "Backup source not found: $input (searched in ${backup_root}/manual and ${backup_root}/scheduled)"
+  fi
+  if [[ "${#candidates[@]}" -gt 1 ]]; then
+    fatal "Ambiguous zip filename '$input' (matches multiple files). Use --zip with an absolute path."
+  fi
+
+  printf "%s" "${candidates[0]}"
+}
+
+main() {
+  local zip_path
+
+  parse_args "$@"
+  require_cmd python3
+
+  zip_path="$(check_backup_inspect__resolve_zip_input "$ZIP_INPUT")"
+
+  python3 - "$zip_path" "$CHECK_OUTPUT_FORMAT" <<'PY'
+import json
+import pathlib
+import sys
+import zipfile
+
+zip_path = pathlib.Path(sys.argv[1])
+output_format = sys.argv[2]
+
+if not zip_path.exists():
+    print(f"Backup source not found: {zip_path}", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        names = zf.namelist()
+except Exception as exc:  # pragma: no cover - runtime safety path
+    print(f"Failed to read backup ZIP: {zip_path} ({exc})", file=sys.stderr)
+    sys.exit(1)
+
+has_savegame = any(name.startswith("savegame/") for name in names)
+has_enshrouded = any(name == "config/enshrouded_server.json" for name in names)
+has_manager = any(name == "config/server_manager.json" for name in names)
+has_any = has_savegame or has_enshrouded or has_manager
+
+payload = {
+    "zip": str(zip_path),
+    "savegame": has_savegame,
+    "enshrouded_config": has_enshrouded,
+    "manager_config": has_manager,
+}
+
+if output_format == "json":
+    print(json.dumps(payload))
+elif output_format == "raw":
+    print(
+        " ".join(
+            "true" if flag else "false"
+            for flag in (has_savegame, has_enshrouded, has_manager)
+        )
+    )
+else:
+    print("Backup inspect result:")
+    print(f"ZIP: {payload['zip']}")
+    print(f"Savegame files: {'yes' if payload['savegame'] else 'no'}")
+    print(
+        "Enshrouded config (enshrouded_server.json): "
+        + ("yes" if payload["enshrouded_config"] else "no")
+    )
+    print(
+        "Manager config (server_manager.json): "
+        + ("yes" if payload["manager_config"] else "no")
+    )
+
+sys.exit(0 if has_any else 10)
+PY
+}
+
+main "$@"
+
+

@@ -6,7 +6,7 @@ _validation_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 . "${_validation_dir}/../lib/log"
 
 # Shared profile/path helpers are centralized in `profile`.
-# shellcheck source=server_manager/jobs/profile
+# shellcheck source=server_manager/jobs_core/profile
 . "${_validation_dir}/profile"
 
 savefile_name=""
@@ -20,18 +20,13 @@ enshrouded_backup_pidfile="${ENSHROUDED_BACKUP_PIDFILE:-/var/run/enshrouded/back
 
 # --- inlined standalone support: validation engine ---
 # Validation engine driven by:
-# - server_manager/env/env_server_manager.csv
-# - server_manager/env/env_enshrouded_server.csv
-# - server_manager/env/menu.csv (path/order mappings)
+# - server_manager/profiles/env/env.json
 # Usage:
 #   validation_check <VAR_NAME> <VALUE>
 #   if validation_check ...; then ... else echo "$VALIDATION_LAST_ERROR"; fi
 
 VALIDATION_LAST_ERROR=""
-ENV_SPEC_DIR="${ENV_SPEC_DIR:-${_validation_dir}/../env}"
-VALIDATION_SERVER_MANAGER_SPEC_FILE="${VALIDATION_SERVER_MANAGER_SPEC_FILE:-${ENV_SPEC_DIR}/env_server_manager.csv}"
-VALIDATION_ENSHROUDED_SPEC_FILE="${VALIDATION_ENSHROUDED_SPEC_FILE:-${ENV_SPEC_DIR}/env_enshrouded_server.csv}"
-VALIDATION_MENU_SPEC_FILE="${VALIDATION_MENU_SPEC_FILE:-${ENV_SPEC_DIR}/menu.csv}"
+VALIDATION_SPEC_FILE="${VALIDATION_SPEC_FILE:-${_validation_dir}/../profiles/env/env.json}"
 
 validation__set_error() {
   VALIDATION_LAST_ERROR="$1"
@@ -45,34 +40,8 @@ validation__has_jq() {
   command -v jq >/dev/null 2>&1
 }
 
-validation__has_python3() {
-  command -v python3 >/dev/null 2>&1
-}
-
-validation__csv_rows() {
-  local file
-  file="$1"
-  [[ -f "$file" ]] || return 0
-  validation__has_python3 || return 1
-  python3 - "$file" <<'PY'
-import csv
-import sys
-
-path = sys.argv[1]
-with open(path, newline="", encoding="utf-8") as f:
-    for row in csv.reader(f):
-        out = []
-        for cell in row:
-            if cell is None or cell == "null":
-                cell = ""
-            cell = cell.replace("\t", " ").replace("\r", " ").replace("\n", " ")
-            out.append(cell)
-        print("\t".join(out))
-PY
-}
-
-validation__csv_data_rows() {
-  validation__csv_rows "$1" | awk 'NR > 1'
+validation__has_spec_files() {
+  [[ -f "$VALIDATION_SPEC_FILE" ]] && jq -e 'type == "object"' "$VALIDATION_SPEC_FILE" >/dev/null 2>&1
 }
 
 validation__is_bool() {
@@ -104,156 +73,21 @@ validation__split_csv() {
   IFS=',' read -r -a _validation_split_csv_out <<<"$value"
 }
 
-validation__enum_to_json() {
-  local enum_spec
-  enum_spec="$1"
-  if [[ -z "$enum_spec" ]]; then
-    echo "null"
-    return 0
-  fi
-  jq -cn --arg enum_spec "$enum_spec" '$enum_spec | split("|")'
-}
-
-validation__list_to_json() {
-  local list_spec sep trim no_empty item_regex part key value
-  list_spec="$1"
-
-  if [[ -z "$list_spec" ]]; then
-    echo "null"
-    return 0
-  fi
-
-  sep=","
-  trim="false"
-  no_empty="false"
-  item_regex=""
-
-  IFS=';' read -r -a _validation_list_parts <<<"$list_spec"
-  for part in "${_validation_list_parts[@]}"; do
-    [[ -z "$part" ]] && continue
-    key="${part%%=*}"
-    value="${part#*=}"
-    case "$key" in
-      separator) sep="$value" ;;
-      trim) trim="$value" ;;
-      itemNoEmpty) no_empty="$value" ;;
-      itemRegex) item_regex="$value" ;;
-    esac
-  done
-
-  jq -cn \
-    --arg sep "$sep" \
-    --arg trim "$trim" \
-    --arg no_empty "$no_empty" \
-    --arg item_regex "$item_regex" \
-    '{
-      separator: $sep,
-      trim: ($trim == "true"),
-      itemNoEmpty: ($no_empty == "true")
-    } + (if $item_regex == "" then {} else { itemRegex: $item_regex } end)'
-}
-
-validation__build_rule_json() {
-  local env_mode val_type val_min val_max val_regex val_enum_spec val_list_spec meta_description meta_allowed
-  local enum_json list_json
-
-  env_mode="$1"
-  val_type="$2"
-  val_min="$3"
-  val_max="$4"
-  val_regex="$5"
-  val_enum_spec="$6"
-  val_list_spec="$7"
-  meta_description="$8"
-  meta_allowed="$9"
-
-  enum_json="$(validation__enum_to_json "$val_enum_spec")"
-  list_json="$(validation__list_to_json "$val_list_spec")"
-
-  jq -cn \
-    --arg env_mode "$env_mode" \
-    --arg type "$val_type" \
-    --arg min "$val_min" \
-    --arg max "$val_max" \
-    --arg regex "$val_regex" \
-    --arg description "$meta_description" \
-    --arg allowed "$meta_allowed" \
-    --argjson enum_json "$enum_json" \
-    --argjson list_json "$list_json" \
-    '{
-      env_mode: (if ($env_mode == "" or $env_mode == "null") then "soft" else $env_mode end),
-      val_type: (if $type == "" then "string" else $type end),
-      val_min: (if $min == "" then null else ($min | tonumber) end),
-      val_max: (if $max == "" then null else ($max | tonumber) end),
-      val_regex: (if $regex == "" then null else $regex end),
-      val_enum: $enum_json,
-      val_list: $list_json,
-      meta_description: (if $description == "" then "" else $description end),
-      meta_allowed: (if $allowed == "" then "" else $allowed end)
-    }'
-}
-
-validation__rule_from_env_row() {
-  local row env_name env_mode val_type val_min val_max val_regex val_enum_spec val_list_spec meta_description meta_allowed
-  row="$1"
-  local -a cols
-  mapfile -t cols < <(printf '%s\n' "$row" | awk -F'\t' '{ for (i = 1; i <= 10; i++) print $i }')
-  env_name="${cols[0]-}"
-  env_mode="${cols[1]-}"
-  val_type="${cols[2]-}"
-  val_min="${cols[3]-}"
-  val_max="${cols[4]-}"
-  val_regex="${cols[5]-}"
-  val_enum_spec="${cols[6]-}"
-  val_list_spec="${cols[7]-}"
-  meta_description="${cols[8]-}"
-  meta_allowed="${cols[9]-}"
-  validation__build_rule_json \
-    "$env_mode" "$val_type" "$val_min" "$val_max" "$val_regex" \
-    "$val_enum_spec" "$val_list_spec" "$meta_description" "$meta_allowed"
-}
-
-validation__has_spec_files() {
-  [[ -f "$VALIDATION_SERVER_MANAGER_SPEC_FILE" && -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]]
-}
-
-validation__rule_for_var_from_specs() {
-  local var row file
+validation__rule_for_var_from_spec() {
+  local var
   var="$1"
-
-  if [[ "$var" == ENSHROUDED_* ]]; then
-    file="$VALIDATION_ENSHROUDED_SPEC_FILE"
-  else
-    file="$VALIDATION_SERVER_MANAGER_SPEC_FILE"
-  fi
-
   validation__has_jq || return 1
-  validation__has_python3 || return 1
-  [[ -f "$file" ]] || return 1
-  row="$(validation__csv_data_rows "$file" | awk -F'\t' -v var="$var" '$1 == var { print; exit }')"
-  if [[ -n "$row" ]]; then
-    validation__rule_from_env_row "$row"
-    return 0
-  fi
-
-  return 1
+  validation__has_spec_files || return 1
+  jq -c --arg var "$var" '.variables[$var] // empty' "$VALIDATION_SPEC_FILE" 2>/dev/null
 }
 
-validation__template_field_rule_from_specs() {
-  local template field row
+validation__template_field_rule_from_spec() {
+  local template field
   template="$1"
   field="$2"
-
   validation__has_jq || return 1
-  validation__has_python3 || return 1
-  [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 1
-  row="$(validation__csv_data_rows "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk -F'\t' -v key="${template}__${field}" '$1 == key { print; exit }')"
-  if [[ -n "$row" ]]; then
-    validation__rule_from_env_row "$row"
-    return 0
-  fi
-
-  return 1
+  validation__has_spec_files || return 1
+  jq -c --arg template "$template" --arg field "$field" '.templates[$template].fields[$field] // empty' "$VALIDATION_SPEC_FILE" 2>/dev/null
 }
 
 validation_rule_json() {
@@ -265,7 +99,7 @@ validation_rule_json() {
   validation__clear_error
 
   if ! validation__has_spec_files; then
-    validation__set_error "Validation spec not found (expected: $VALIDATION_SERVER_MANAGER_SPEC_FILE, $VALIDATION_ENSHROUDED_SPEC_FILE)"
+    validation__set_error "Validation spec not found (expected: $VALIDATION_SPEC_FILE)"
     return 2
   fi
   if ! validation__has_jq; then
@@ -273,7 +107,7 @@ validation_rule_json() {
     return 2
   fi
 
-  rule="$(validation__rule_for_var_from_specs "$var" 2>/dev/null || true)"
+  rule="$(validation__rule_for_var_from_spec "$var" 2>/dev/null || true)"
   if [[ -n "$rule" && "$rule" != "null" ]]; then
     printf "%s" "$rule"
     return 0
@@ -284,7 +118,7 @@ validation_rule_json() {
   if [[ "$var" =~ ^([A-Z0-9_]+)_[0-9]+_(.+)$ ]]; then
     template="${BASH_REMATCH[1]}"
     field="${BASH_REMATCH[2]}"
-    rule="$(validation__template_field_rule_from_specs "$template" "$field" 2>/dev/null || true)"
+    rule="$(validation__template_field_rule_from_spec "$template" "$field" 2>/dev/null || true)"
     if [[ -n "$rule" && "$rule" != "null" ]]; then
       printf "%s" "$rule"
       return 0
@@ -318,56 +152,62 @@ validation_rule_json_read() {
 }
 
 validation_list_envs() {
-  # Prints all known environment names from CSV env specs.
-  validation__has_python3 || return 0
-  {
-    [[ -f "$VALIDATION_SERVER_MANAGER_SPEC_FILE" ]] && validation__csv_data_rows "$VALIDATION_SERVER_MANAGER_SPEC_FILE" | awk -F'\t' '$1 != "" { print $1 }'
-    [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] && validation__csv_data_rows "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk -F'\t' '$1 != "" && $1 !~ /__/ { print $1 }'
-  } | awk 'NF > 0' | sort -u || true
+  # Prints all known environment names from spec.
+  validation__has_jq || return 0
+  validation__has_spec_files || return 0
+  jq -r '.variables | keys[]?' "$VALIDATION_SPEC_FILE" 2>/dev/null | awk 'NF > 0' | sort -u || true
 }
 
 validation_list_templates() {
   # Prints all known template names.
-  validation__has_python3 || return 0
-  if [[ -f "$VALIDATION_MENU_SPEC_FILE" ]]; then
-    validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" | awk -F'\t' '$1 == "editor_template" && $3 != "" { print $3 }' | awk 'NF > 0' | sort -u || true
-    return 0
-  fi
-  [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 0
-  validation__csv_data_rows "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk -F'\t' '$1 ~ /__/ { split($1, p, "__"); if (p[1] != "") print p[1] }' | awk 'NF > 0' | sort -u || true
+  validation__has_jq || return 0
+  validation__has_spec_files || return 0
+  jq -r '.templates | keys[]?' "$VALIDATION_SPEC_FILE" 2>/dev/null | awk 'NF > 0' | sort -u || true
 }
 
 validation_list_envs_by_meta_field() {
-  # Prints variable names based on menu editor mapping (menu.csv).
+  # Prints variable names based on JSON path mappings from env spec.
   local field
   field="$1"
-  validation__has_python3 || return 0
-  [[ -f "$VALIDATION_MENU_SPEC_FILE" ]] || return 0
+  validation__has_jq || return 0
+  validation__has_spec_files || return 0
 
-  validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" \
-    | awk -F'\t' -v mf="$field" '$1 == "editor_env" && $3 == mf && $20 != "" { o=$21; if (o == "") o="999999999"; print o "\t" $17 }' \
-    | sort -n -k1,1 -k2,2 \
-    | cut -f2 \
-    | awk 'NF > 0 && !seen[$0]++' || true
+  jq -r --arg field "$field" '
+    (.mappings[$field] // [])
+    | map(select((.env // "") != "" and (.json_path // "") != ""))
+    | sort_by((.order // 999999999), (.env // ""))
+    | .[].env
+  ' "$VALIDATION_SPEC_FILE" 2>/dev/null | awk 'NF > 0 && !seen[$0]++' || true
 }
 
 validation_env_meta_field() {
   # Usage: validation_env_meta_field <VAR_NAME> <field>
-  # Fields are resolved from menu.csv editor rows.
+  # Fields are resolved from env.json mappings.
   local var field value
   var="$1"
   field="$2"
-  validation__has_python3 || return 0
-  [[ -f "$VALIDATION_MENU_SPEC_FILE" ]] || return 0
+  validation__has_jq || return 0
+  validation__has_spec_files || return 0
 
   case "$field" in
     managerJsonPath|enshroudedJsonPath|enshroudedMenuJsonPath)
-      value="$(validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" | awk -F'\t' -v mf="$field" -v env="$var" '$1 == "editor_env" && $3 == mf && $17 == env { print $20; exit }')"
+      value="$(jq -r --arg field "$field" --arg env "$var" '
+        [(.mappings[$field] // [])[] | select((.env // "") == $env and (.json_path // "") != "") | .json_path][0] // empty
+      ' "$VALIDATION_SPEC_FILE" 2>/dev/null || true)"
       printf "%s" "$value"
       return 0
       ;;
     menuOrder)
-      value="$(validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" | awk -F'\t' -v env="$var" '$1 == "editor_env" && $17 == env && $21 != "" { print $21; exit }')"
+      value="$(jq -r --arg env "$var" '
+        [
+          ((.mappings.managerJsonPath // [])[]),
+          ((.mappings.enshroudedJsonPath // [])[]),
+          ((.mappings.enshroudedMenuJsonPath // [])[])
+        ]
+        | map(select((.env // "") == $env and .order != null))
+        | sort_by(.order, (.json_path // ""))
+        | (.[0].order // empty)
+      ' "$VALIDATION_SPEC_FILE" 2>/dev/null || true)"
       printf "%s" "$value"
       return 0
       ;;
@@ -382,19 +222,22 @@ validation_list_template_fields() {
   # Usage: validation_list_template_fields <template_name>.
   local template
   template="$1"
+  validation__has_jq || return 0
+  validation__has_spec_files || return 0
 
-  validation__has_python3 || return 0
-  if [[ -f "$VALIDATION_MENU_SPEC_FILE" ]]; then
-    validation__csv_data_rows "$VALIDATION_MENU_SPEC_FILE" \
-      | awk -F'\t' -v t="$template" '$1 == "editor_template" && $3 == t && $19 != "" { o=$21; if (o == "") o="999999999"; print o "\t" $19 }' \
-      | sort -n -k1,1 -k2,2 \
-      | cut -f2 \
-      | awk 'NF > 0 && !seen[$0]++' || true
-    return 0
-  fi
-
-  [[ -f "$VALIDATION_ENSHROUDED_SPEC_FILE" ]] || return 0
-  validation__csv_data_rows "$VALIDATION_ENSHROUDED_SPEC_FILE" | awk -F'\t' -v t="$template" '$1 ~ /__/ { split($1, p, "__"); if (p[1] == t && p[2] != "") print p[2] }' | awk 'NF > 0 && !seen[$0]++' || true
+  jq -r --arg template "$template" '
+    .templates[$template] as $template_data
+    | if ($template_data | type) != "object" then []
+      elif (($template_data.field_order // []) | length) > 0 then
+        ($template_data.field_order
+          | map(select((.field // "") != ""))
+          | sort_by((.order // 999999999), (.field // ""))
+          | map(.field))
+      else
+        (($template_data.fields // {}) | keys)
+      end
+    | .[]
+  ' "$VALIDATION_SPEC_FILE" 2>/dev/null | awk 'NF > 0 && !seen[$0]++' || true
 }
 
 validation_env_type() {
@@ -458,7 +301,7 @@ validation_check() {
   mode="$(jq -r '.env_mode // "soft"' <<<"$rule" 2>/dev/null || echo "soft")"
   [[ "$mode" == "null" || -z "$mode" ]] && mode="soft"
   if [[ "$mode" != "hard" && "$mode" != "soft" && "$mode" != "deferred" ]]; then
-    validation__set_error "$var has invalid env_mode in CSV: $mode (expected: hard|soft|deferred)"
+    validation__set_error "$var has invalid env_mode in env spec: $mode (expected: hard|soft|deferred)"
     return 2
   fi
 
@@ -545,7 +388,7 @@ validation_check() {
     fi
   fi
 
-  # CSV/list constraint (after base type validation).
+  # List constraint (after base type validation).
   if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
     local sep trim no_empty item_regex item item_trimmed
     sep="$(jq -r '.val_list.separator // \",\"' <<<"$rule" 2>/dev/null || echo ",")"
@@ -588,10 +431,9 @@ validation_check() {
 
 
 #
-# Spec-driven helpers powered by server_manager/env/*.csv.
+# Spec-driven helpers powered by server_manager/profiles/env/env.json.
 #
-# Validation comes from env_server_manager.csv / env_enshrouded_server.csv.
-# JSON path mappings and ordering come from menu.csv editor rows.
+# Validation rules and JSON path mappings are resolved from env.json.
 
 spec_apply__jq_set() {
   # Apply a jq transform to $file atomically (tmp+mv).
@@ -702,7 +544,7 @@ apply_env_to_json() {
       continue
     fi
 
-    # List env values (CSV) -> JSON array.
+    # List env values from env spec -> JSON array.
     if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
       # Keep behavior predictable in bash: only comma separated lists are supported.
       # Spec currently only uses this for ENSHROUDED_TAGS.
@@ -927,7 +769,7 @@ apply_env_template_to_json_array() {
       continue
     fi
 
-    # List env values (CSV) -> JSON array.
+    # List env values from env spec -> JSON array.
     if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
       if ! spec_apply__jq_set "$file" --argjson idx "$idx" --arg val "$value" "$json_path = (\$val | split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\")) | map(select(length>0)))"; then
         any_fail="true"
@@ -1492,7 +1334,7 @@ validate_unknown_managed_env_values() {
     done
     [[ "$is_managed" == "true" ]] || continue
 
-    fatal "Unknown ENV not allowed: $var_name (must be defined in env_server_manager.csv or env_enshrouded_server.csv)"
+    fatal "Unknown ENV not allowed: $var_name (must be defined in profiles/env/env.json)"
   done
 }
 
@@ -1539,9 +1381,9 @@ verify_variables() {
 usage() {
   cat <<'EOF'
 Usage:
-  env-validation [verify]
-  env-validation init-runtime
-  env-validation check <name> <value>
+  env [verify]
+  env init-runtime
+  env check <name> <value>
 EOF
 }
 
@@ -1549,7 +1391,7 @@ main() {
   local command var_name var_value
   command="${1:-verify}"
   shift || true
-  info "Running env-validation command: ${command}"
+  info "Running env command: ${command}"
 
   case "$command" in
     --help|-h|help)
@@ -1569,7 +1411,7 @@ main() {
     check)
       var_name="${1-}"
       var_value="${2-}"
-      [[ "$#" -ge 2 ]] || fatal "Usage: env-validation check <name> <value>"
+      [[ "$#" -ge 2 ]] || fatal "Usage: env check <name> <value>"
       if validation_check "$var_name" "$var_value"; then
         info "$var_name is valid"
       else

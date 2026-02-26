@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+usage() {
+  cat <<'EOF'
+Usage:
+  rsyslogd
+
+Configuration via ENV:
+  RSYSLOGD_EXEC_ACTION=start|health
+EOF
+}
+
+main() {
+  local action
+  action="${RSYSLOGD_EXEC_ACTION:-start}"
+
+  case "${1-}" in
+    --help|-h|help)
+      usage
+      exit 0
+      ;;
+    "")
+      ;;
+    *)
+      echo "rsyslogd job does not accept arguments" >&2
+      exit 1
+      ;;
+  esac
+
+  case "$action" in
+    start|"")
+      exec /usr/sbin/rsyslogd -n
+      ;;
+    health)
+      pgrep -x rsyslogd >/dev/null 2>&1
+      ;;
+    *)
+      echo "Invalid RSYSLOGD_EXEC_ACTION: $action (expected: start|health)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs_core/profile
+. "${SCRIPT_DIR}/profile"
+
+enshrouded_config_file="${install_path}/enshrouded_server.json"
+
+RESTART_FORCE="false"
+RESTART_CHECK_PLAYERS_OVERRIDE=""
+RESTART_DOWNTIME_SECONDS=""
+
+debug() { [[ "$log_level" -ge 50 ]] && log_line stderr "${C_MAGENTA:-}" DEBUG "$*" || true; }
+
+enshrouded_get_text() {
+  local path
+  path="$1"
+  if [[ ! -f "$enshrouded_config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  jq -r "$path | if . == null then empty else tostring end" "$enshrouded_config_file" 2>/dev/null || true
+}
+
+load_runtime_values() {
+  require_cmd jq
+
+  RESTART_CHECK_PLAYERS="${RESTART_CHECK_PLAYERS:-$(manager_get_text ".restartCheckPlayers")}"
+  [[ -n "$RESTART_CHECK_PLAYERS" ]] || RESTART_CHECK_PLAYERS="true"
+
+  RESTART_DOWNTIME_SECONDS="${RESTART_DOWNTIME_SECONDS:-$(manager_get_text ".restartDowntimeSeconds")}"
+  [[ -n "$RESTART_DOWNTIME_SECONDS" ]] || RESTART_DOWNTIME_SECONDS="3"
+  if [[ ! "$RESTART_DOWNTIME_SECONDS" =~ ^[0-9]+$ ]]; then
+    fatal "Invalid RESTART_DOWNTIME_SECONDS: ${RESTART_DOWNTIME_SECONDS} (expected integer >= 0)"
+  fi
+
+  RESTART_PRE_HOOK="${RESTART_PRE_HOOK:-$(manager_get_text ".restartPreHook")}"
+  RESTART_POST_HOOK="${RESTART_POST_HOOK:-$(manager_get_text ".restartPostHook")}"
+
+  ENSHROUDED_QUERY_PORT="${ENSHROUDED_QUERY_PORT:-$(enshrouded_get_text ".queryPort")}"
+  [[ -n "$ENSHROUDED_QUERY_PORT" ]] || ENSHROUDED_QUERY_PORT="15637"
+}
+
+run_restart() {
+  local players_check_rc players_check_arg server_was_running
+  info "Executing restart pre-hook"
+  "${SCRIPT_DIR}/server" hook-run "restart pre" "${RESTART_PRE_HOOK:-}"
+
+  if [[ "$RESTART_FORCE" != "true" ]]; then
+    players_check_arg="--player-check"
+    if [[ "$RESTART_CHECK_PLAYERS" != "true" ]]; then
+      players_check_arg="--no-player-check"
+    fi
+    "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --players-check "$players_check_arg" --query-port "$ENSHROUDED_QUERY_PORT"
+    players_check_rc=$?
+    case "$players_check_rc" in
+      0)
+        ;;
+      10)
+        warn "Enshrouded server is not empty - restart will not be performed"
+        return
+        ;;
+      *)
+        fatal "players-check failed (rc=$players_check_rc)"
+        ;;
+    esac
+  else
+    info "Skipping players-check because force restart is enabled"
+  fi
+
+  info "Restarting Enshrouded server (downtime=${RESTART_DOWNTIME_SECONDS}s)"
+  server_was_running="false"
+  if is_supervisor_running "server"; then
+    server_was_running="true"
+    info "Stopping Enshrouded server"
+    if ! "${SCRIPT_DIR}/server" guard-run core_ready -- supervisorctl stop server >/dev/null 2>&1; then
+      fatal "Failed to stop Enshrouded server via supervisor"
+    fi
+  else
+    success "Enshrouded server is already stopped - proceeding to start phase"
+  fi
+
+  if [[ "$server_was_running" == "true" && "$RESTART_DOWNTIME_SECONDS" -gt 0 ]]; then
+    info "Waiting ${RESTART_DOWNTIME_SECONDS}s before starting Enshrouded server"
+    sleep "$RESTART_DOWNTIME_SECONDS"
+  fi
+
+  info "Starting Enshrouded server"
+  if ! "${SCRIPT_DIR}/server" guard-run core_ready -- supervisorctl start server >/dev/null 2>&1; then
+    fatal "Failed to start Enshrouded server via supervisor"
+  fi
+
+  info "Executing restart post-hook"
+  "${SCRIPT_DIR}/server" hook-run "restart post" "${RESTART_POST_HOOK:-}"
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  restart [force|player-check|no-player-check]
+  restart [--player-check|--no-player-check] [--force]
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      force)
+        RESTART_FORCE="true"
+        shift
+        ;;
+      player-check)
+        RESTART_CHECK_PLAYERS_OVERRIDE="true"
+        shift
+        ;;
+      no-player-check)
+        RESTART_CHECK_PLAYERS_OVERRIDE="false"
+        shift
+        ;;
+      help)
+        usage
+        exit 0
+        ;;
+      --player-check)
+        RESTART_CHECK_PLAYERS_OVERRIDE="true"
+        shift
+        ;;
+      --no-player-check)
+        RESTART_CHECK_PLAYERS_OVERRIDE="false"
+        shift
+        ;;
+      --force)
+        RESTART_FORCE="true"
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+}
+
+main() {
+  parse_args "$@"
+  load_runtime_values
+  if [[ -n "$RESTART_CHECK_PLAYERS_OVERRIDE" ]]; then
+    RESTART_CHECK_PLAYERS="$RESTART_CHECK_PLAYERS_OVERRIDE"
+  fi
+  info "Running restart job (force=${RESTART_FORCE}, check_players=${RESTART_CHECK_PLAYERS}, query_port=${ENSHROUDED_QUERY_PORT}, downtime_seconds=${RESTART_DOWNTIME_SECONDS})"
+  run_restart
+  success "Restart job complete"
+}
+
+main "$@"

@@ -1,0 +1,400 @@
+{
+  "start_screen": "main",
+  "menus": [
+    {
+      "id": "main",
+      "title": "Main Menu",
+      "subtitle": "Dispatch actions to jobs/commands without embedding business logic in the menu.",
+      "prompt": "Select option",
+      "options": [
+        {
+          "key": "1",
+          "label": "Show supervisor status",
+          "type": "action",
+          "action": "show_status"
+        },
+        {
+          "key": "2",
+          "label": "Start server",
+          "type": "action",
+          "action": "start_server"
+        },
+        {
+          "key": "3",
+          "label": "Stop server",
+          "type": "action",
+          "action": "stop_server"
+        },
+        {
+          "key": "4",
+          "label": "Restart menu",
+          "type": "screen",
+          "next": "restart"
+        },
+        {
+          "key": "5",
+          "label": "Update menu",
+          "type": "screen",
+          "next": "update"
+        },
+        {
+          "key": "6",
+          "label": "Backup menu",
+          "type": "screen",
+          "next": "backup"
+        },
+        {
+          "key": "7",
+          "label": "Profile menu",
+          "type": "screen",
+          "next": "profile"
+        },
+        {
+          "key": "8",
+          "label": "Environment menu",
+          "type": "screen",
+          "next": "env"
+        },
+        {
+          "key": "9",
+          "label": "Cron menu",
+          "type": "screen",
+          "next": "cron"
+        },
+        {
+          "key": "b",
+          "label": "Run bootstrap",
+          "type": "action",
+          "action": "run_bootstrap"
+        },
+        {
+          "key": "q",
+          "label": "Quit",
+          "type": "exit"
+        }
+      ]
+    },
+    {
+      "id": "restart",
+      "title": "Restart Menu",
+      "prompt": "Select option",
+      "options": [
+        {
+          "key": "1",
+          "label": "Manual restart",
+          "type": "action",
+          "action": "restart_manual"
+        },
+        {
+          "key": "2",
+          "label": "Force restart",
+          "type": "action",
+          "action": "restart_force"
+        },
+        {
+          "key": "3",
+          "label": "Scheduled restart flow",
+          "type": "action",
+          "action": "restart_scheduled"
+        },
+        {
+          "key": "m",
+          "label": "Back to main menu",
+          "type": "screen",
+          "next": "main"
+        },
+        {
+          "key": "q",
+          "label": "Quit",
+          "type": "exit"
+        }
+      ]
+    },
+    {
+      "id": "update",
+      "title": "Update Menu",
+      "prompt": "Select option",
+      "options": [
+        {
+          "key": "1",
+          "label": "Manual update",
+          "type": "action",
+          "action": "update_manual"
+        },
+        {
+          "key": "2",
+          "label": "Force update",
+          "type": "action",
+          "action": "update_force"
+        },
+        {
+          "key": "3",
+          "label": "Scheduled update flow",
+          "type": "action",
+          "action": "update_scheduled"
+        },
+        {
+          "key": "m",
+          "label": "Back to main menu",
+          "type": "screen",
+          "next": "main"
+        },
+        {
+          "key": "q",
+          "label": "Quit",
+          "type": "exit"
+        }
+      ]
+    },
+    {
+      "id": "backup",
+      "title": "Backup Menu",
+      "prompt": "Select option",
+      "options": [
+        {
+          "key": "1",
+          "label": "Manual backup (savegame)",
+          "type": "action",
+          "action": "backup_manual"
+        },
+        {
+          "key": "2",
+          "label": "Manual backup (all)",
+          "type": "action",
+          "action": "backup_manual_all"
+        },
+        {
+          "key": "3",
+          "label": "Manual backup (config)",
+          "type": "action",
+          "action": "backup_manual_config"
+        },
+        {
+          "key": "4",
+          "label": "Scheduled backup flow",
+          "type": "action",
+          "action": "backup_scheduled"
+        },
+        {
+          "key": "5",
+          "label": "Scheduled backup flow (all)",
+          "type": "action",
+          "action": "backup_scheduled_all"
+        },
+        {
+          "key": "6",
+          "label": "Scheduled backup flow (config)",
+          "type": "action",
+          "action": "backup_scheduled_config"
+        },
+        {
+          "key": "7",
+          "label": "List backup archives",
+          "type": "action",
+          "action": "backup_list"
+        },
+        {
+          "key": "m",
+          "label": "Back to main menu",
+          "type": "screen",
+          "next": "main"
+        },
+        {
+          "key": "q",
+          "label": "Quit",
+          "type": "exit"
+        }
+      ]
+    },
+    {
+      "id": "profile",
+      "title": "Profile Menu",
+      "prompt": "Select option",
+      "options": [
+        {
+          "key": "1",
+          "label": "Check password rights",
+          "type": "action",
+          "action": "profile_check_password"
+        },
+        {
+          "key": "m",
+          "label": "Back to main menu",
+          "type": "screen",
+          "next": "main"
+        },
+        {
+          "key": "q",
+          "label": "Quit",
+          "type": "exit"
+        }
+      ]
+    },
+    {
+      "id": "env",
+      "title": "Environment Menu",
+      "prompt": "Select option",
+      "options": [
+        {
+          "key": "1",
+          "label": "Check all ENV values",
+          "type": "action",
+          "action": "env_check_all"
+        },
+        {
+          "key": "2",
+          "label": "Initialize runtime from ENV",
+          "type": "action",
+          "action": "env_init_runtime"
+        },
+        {
+          "key": "m",
+          "label": "Back to main menu",
+          "type": "screen",
+          "next": "main"
+        },
+        {
+          "key": "q",
+          "label": "Quit",
+          "type": "exit"
+        }
+      ]
+    },
+    {
+      "id": "cron",
+      "title": "Cron Menu",
+      "prompt": "Select option",
+      "options": [
+        {
+          "key": "1",
+          "label": "Sync cron from config",
+          "type": "action",
+          "action": "cron_sync"
+        },
+        {
+          "key": "2",
+          "label": "Cron service status",
+          "type": "action",
+          "action": "cron_status"
+        },
+        {
+          "key": "3",
+          "label": "Restart cron service",
+          "type": "action",
+          "action": "cron_restart"
+        },
+        {
+          "key": "m",
+          "label": "Back to main menu",
+          "type": "screen",
+          "next": "main"
+        },
+        {
+          "key": "q",
+          "label": "Quit",
+          "type": "exit"
+        }
+      ]
+    }
+  ],
+  "actions": {
+    "show_status": {
+      "command": "jobs/server",
+      "args": [
+        "status"
+      ]
+    },
+    "start_server": {
+      "command": "jobs/server",
+      "args": [
+        "start"
+      ],
+      "confirm": "Start server now?"
+    },
+    "stop_server": {
+      "command": "jobs/server",
+      "args": [
+        "stop"
+      ],
+      "confirm": "Stop server now?"
+    },
+    "restart_manual": {
+      "command": "commands/manual/restart",
+      "confirm": "Run manual restart now?"
+    },
+    "restart_force": {
+      "command": "commands/force/force-restart",
+      "confirm": "Run force restart now?"
+    },
+    "restart_scheduled": {
+      "command": "commands/scheduled/scheduled-restart",
+      "confirm": "Run scheduled restart flow now?"
+    },
+    "update_manual": {
+      "command": "commands/manual/update",
+      "confirm": "Run manual update now?"
+    },
+    "update_force": {
+      "command": "commands/force/force-update",
+      "confirm": "Run force update now?"
+    },
+    "update_scheduled": {
+      "command": "commands/scheduled/scheduled-update",
+      "confirm": "Run scheduled update flow now?"
+    },
+    "backup_manual": {
+      "command": "commands/manual/backup"
+    },
+    "backup_manual_all": {
+      "command": "commands/manual/backup-all"
+    },
+    "backup_manual_config": {
+      "command": "commands/manual/backup-config"
+    },
+    "backup_scheduled": {
+      "command": "commands/scheduled/scheduled-backup"
+    },
+    "backup_scheduled_all": {
+      "command": "commands/scheduled/scheduled-backup-all"
+    },
+    "backup_scheduled_config": {
+      "command": "commands/scheduled/scheduled-backup-config"
+    },
+    "backup_list": {
+      "command": "commands/check/check-backup-list"
+    },
+    "profile_check_password": {
+      "command": "commands/check/check-password"
+    },
+    "env_check_all": {
+      "command": "commands/check/check-all-env"
+    },
+    "env_init_runtime": {
+      "command": "commands/manual/env-init-runtime",
+      "confirm": "Initialize runtime config files from ENV values?"
+    },
+    "cron_sync": {
+      "command": "jobs/cron",
+      "env": {
+        "CRON_EXEC_ACTION": "sync"
+      }
+    },
+    "cron_status": {
+      "command": "jobs/cron",
+      "env": {
+        "CRON_EXEC_ACTION": "status"
+      }
+    },
+    "cron_restart": {
+      "command": "jobs/cron",
+      "env": {
+        "CRON_EXEC_ACTION": "restart"
+      },
+      "confirm": "Restart cron service now?"
+    },
+    "run_bootstrap": {
+      "command": "jobs/bootstrap",
+      "confirm": "Run bootstrap sequence now?"
+    }
+  }
+}

@@ -246,3 +246,67 @@ Dieses Zielbild trennt strikt:
 - `logs` = zentrale Ausgabe
 
 Dadurch sinken Duplikate, Skripte werden kuerzer, und jede Datei hat eine klar definierte Verantwortung.
+
+## Phase 9 Abschluss-Validierung (2026-02-25)
+
+### Durchgefuehrte Smoke-Tests
+
+1. Syntax-Pruefung (`bash -n`) fuer alle aktiven Skripte:
+   - `server_manager/jobs/*` (10 Dateien)
+   - `server_manager/commands/**/*` (30 Dateien)
+   - `server_manager/jobs_core/*` (6 Dateien)
+2. Direktaufruf-Pruefung (`--help`) fuer alle oben genannten Skripte.
+3. Legacy-Entfernungspruefung auf nicht mehr erlaubte Pfade:
+   - `server_manager/jobs/updater`
+   - `server_manager/jobs/env-validation`
+   - `server_manager/env/menu.csv`
+   - `server_manager/env/env_server_manager.csv`
+   - `server_manager/env/env_enshrouded_server.csv`
+   - `server_manager/jobs_legacy`
+4. Breaking-Change-Check:
+   - `server_manager/jobs/server restart` muss fehlschlagen (Alias entfernt).
+
+### Ergebnis
+
+1. Gepruefte Skripte gesamt: `46`
+2. Syntax: `46/46` erfolgreich
+3. `--help`-Smoke: `46/46` erfolgreich
+4. Legacy-Pfade vorhanden: `0/6`
+5. Breaking-Change-Check: `server restart` liefert wie erwartet `FATAL: Unknown server command: restart` (Exit-Code `1`)
+
+### Offene Punkte
+
+1. Container-Runtime-Smokes (Supervisor/Docker-in-Container) konnten lokal nicht ausgefuehrt werden, da die Docker-Engine in der aktuellen Umgebung nicht verfuegbar war.
+2. Dokumentationsdateien (`README.md`, `docs/*`) enthalten noch alte Legacy-Begriffe/Befehle und muessen separat auf die neue Struktur aktualisiert werden.
+
+## Phase 10 Sprach- und Naming-Standardisierung (2026-02-25)
+
+### Durchgefuehrte Anpassungen
+
+1. Funktionsnamen in `server_manager/jobs_core/update` auf ein konsistentes Domain-Schema umgestellt:
+   - `update_debug`, `update_check_lock`, `update_check_running`, `update_clear_lock`
+   - `update_check_for_updates`, `update_download_enshrouded`, `update_run`, `update_run_flow`
+2. Funktionsnamen in `server_manager/jobs_core/server` fuer wiederkehrende Hilfsfunktionen vereinheitlicht:
+   - `server_debug`, `server_check_running`, `server_check_lock`, `server_clear_lock`, `server_shutdown`
+3. Veraltete `shellcheck source`-Kommentare auf die aktuelle Struktur korrigiert:
+   - von `server_manager/jobs/profile` auf `server_manager/jobs_core/profile`
+4. `--shutdown-timeout` CLI-Flag in `jobs_core/server` nach der Umbenennung explizit auf den stabilen Namen rueckgefuehrt.
+
+### Validierung
+
+1. Funktionsnamen-Audit (alle Skripte in `jobs`, `commands`, `jobs_core`, `ui`, `lib`):
+   - Gepruefte Skripte: `49`
+   - Nicht konforme Funktionsnamen (nicht `snake_case`): `0`
+2. Sprach-Audit auf deutsche Tokens in Code-Kommentaren/Strings:
+   - Treffer: `0`
+3. Smoke-Tests:
+   - `bash -n`: `46/46` erfolgreich
+   - `--help`: `46/46` erfolgreich
+4. Breaking-Change-Check:
+   - `server_manager/jobs/server restart` liefert weiterhin wie erwartet `FATAL: Unknown server command: restart` (Exit-Code `1`).
+
+### Ergebnis
+
+1. Code-Sprache in den geprueften Runtime-Skripten ist konsistent Englisch.
+2. Funktionsnamen sind durchgaengig in `snake_case` und fuer die geaenderten Kerndateien domain-praefixiert.
+3. Phase 10 ist fuer den Runtime-Code (`server_manager/*`) umgesetzt.

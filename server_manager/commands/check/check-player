@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+SERVER_JOB="${SERVER_JOB:-${SCRIPT_DIR}/../../jobs/server}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  check-player [--query-port <port>] [--player-check|--no-player-check]
+
+Exit codes:
+  0  No connected players (or player check disabled)
+  10 Connected players detected
+EOF
+}
+
+main() {
+  local args
+  args=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --query-port|--player-check|--no-player-check)
+        args+=("$1")
+        if [[ "$1" == "--query-port" ]]; then
+          [[ $# -ge 2 ]] || {
+            echo "Missing value for --query-port" >&2
+            exit 1
+          }
+          args+=("$2")
+          shift
+        fi
+        shift
+        ;;
+      --help|-h|help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown argument: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  [[ -x "$SERVER_JOB" ]] || {
+    echo "Server job is not executable: $SERVER_JOB" >&2
+    exit 1
+  }
+
+  "$SERVER_JOB" --players-check "${args[@]}"
+}
+
+main "$@"

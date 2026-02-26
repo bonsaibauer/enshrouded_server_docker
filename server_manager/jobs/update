@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/lib/log
+. "${SCRIPT_DIR}/../lib/log"
+
+COMMAND_ROOT="${COMMAND_ROOT:-${SCRIPT_DIR}/../commands}"
+UPDATE_EXEC_MODE="${UPDATE_EXEC_MODE:-manual}"
+UPDATE_CHECK_CMD="${COMMAND_ROOT}/check/check-update"
+UPDATE_MANUAL_CMD="${COMMAND_ROOT}/manual/update"
+UPDATE_FORCE_CMD="${COMMAND_ROOT}/force/force-update"
+UPDATE_SCHEDULED_CMD="${COMMAND_ROOT}/scheduled/scheduled-update"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  update
+
+Configuration via ENV:
+  UPDATE_EXEC_MODE=manual|force|scheduled
+EOF
+}
+
+require_executable() {
+  local file
+  file="$1"
+  [[ -x "$file" ]] || fatal "Command is not executable: $file"
+}
+
+dispatch_update_command() {
+  case "$UPDATE_EXEC_MODE" in
+    force)
+      require_executable "$UPDATE_FORCE_CMD"
+      "$UPDATE_FORCE_CMD"
+      ;;
+    scheduled)
+      require_executable "$UPDATE_SCHEDULED_CMD"
+      "$UPDATE_SCHEDULED_CMD"
+      ;;
+    manual|"")
+      require_executable "$UPDATE_MANUAL_CMD"
+      "$UPDATE_MANUAL_CMD"
+      ;;
+    *)
+      fatal "Invalid UPDATE_EXEC_MODE: $UPDATE_EXEC_MODE (expected: manual|force|scheduled)"
+      ;;
+  esac
+}
+
+run_update_check_if_needed() {
+  local check_rc
+
+  if [[ "$UPDATE_EXEC_MODE" == "force" ]]; then
+    info "Skipping update check because UPDATE_EXEC_MODE=force"
+    return 0
+  fi
+
+  require_executable "$UPDATE_CHECK_CMD"
+  "$UPDATE_CHECK_CMD" --format json >/dev/null
+  check_rc=$?
+  case "$check_rc" in
+    0)
+      info "No update required"
+      return 10
+      ;;
+    10)
+      info "Update check indicates update available"
+      return 0
+      ;;
+    20)
+      warn "Update check indeterminate (latest version unknown) - skipping update run"
+      return 10
+      ;;
+    *)
+      fatal "Update check failed (rc=$check_rc)"
+      ;;
+  esac
+}
+
+main() {
+  case "${1-}" in
+    --help|-h|help)
+      usage
+      exit 0
+      ;;
+    "")
+      ;;
+    *)
+      fatal "update job does not accept arguments"
+      ;;
+  esac
+
+  info "Running update job dispatcher (mode=${UPDATE_EXEC_MODE})"
+
+  if run_update_check_if_needed; then
+    dispatch_update_command
+    exit $?
+  fi
+
+  # run_update_check_if_needed returns 10 when no action is required.
+  success "Update job complete (no action required)"
+  exit 0
+}
+
+main "$@"

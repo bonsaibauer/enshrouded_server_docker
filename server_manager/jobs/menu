@@ -1,2815 +1,311 @@
-#!/bin/bash
-SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-# shellcheck source=server_manager/jobs/env-validation
-. "${SCRIPT_DIR}/env-validation"
+#!/usr/bin/env bash
 
-MENU_SPEC_CSV_FILE="${MENU_SPEC_CSV_FILE:-${SCRIPT_DIR}/../env/menu.csv}"
-MENU_SPEC_FILE="${MENU_SPEC_FILE:-}"
-MENU_SPEC_TMP_FILE=""
-MENU_START_SCREEN="main"
-MENU_ONCE="false"
-MENU_NO_CLEAR="false"
-SERVER_JOB_BIN="${SERVER_JOB_BIN:-/usr/local/etc/enshrouded/jobs/server}"
-declare -A MENU_EXTERNAL_ENV
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+MANAGER_ROOT="$(cd -P "${SCRIPT_DIR}/.." >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/lib/log
+. "${SCRIPT_DIR}/../lib/log"
+
+MENU_CONFIG_FILE="${MENU_CONFIG_FILE:-${MANAGER_ROOT}/profiles/menu/menu.json}"
+MENU_UI_SCRIPT="${MENU_UI_SCRIPT:-${MANAGER_ROOT}/ui/menu_ui}"
+STARTUP_BANNER_SCRIPT="${STARTUP_BANNER_SCRIPT:-${MANAGER_ROOT}/ui/startup_banner}"
+
+MENU_START_SCREEN="${MENU_START_SCREEN:-}"
+MENU_ONCE="${MENU_ONCE:-false}"
+MENU_NO_CLEAR="${MENU_NO_CLEAR:-false}"
 
 usage() {
   cat <<'EOF'
 Usage:
-  menu [--screen <id>] [--once] [--no-clear]
+  menu
+
+Configuration via ENV:
+  MENU_CONFIG_FILE=<path_to_menu.json>
+  MENU_START_SCREEN=<screen_id>
+  MENU_ONCE=true|false
+  MENU_NO_CLEAR=true|false
 EOF
 }
 
-parse_args() {
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --screen)
-        MENU_START_SCREEN="${2-}"
-        [[ -n "$MENU_START_SCREEN" ]] || fatal "Missing value for --screen"
-        shift 2
-        ;;
-      --once)
-        MENU_ONCE="true"
-        shift
-        ;;
-      --no-clear)
-        MENU_NO_CLEAR="true"
-        shift
-        ;;
-      --help|-h)
-        usage
-        exit 0
-        ;;
-      *)
-        fatal "Unknown argument: $1"
-        ;;
-    esac
-  done
+require_file() {
+  local file
+  file="$1"
+  [[ -f "$file" ]] || fatal "Required file not found: $file"
 }
 
-server_run() {
-  "$SERVER_JOB_BIN" "$@"
+require_executable() {
+  local file
+  file="$1"
+  [[ -x "$file" ]] || fatal "Command is not executable: $file"
 }
 
-menu_list_known_env_vars() {
-  local var
-  local -a vars
-  vars=()
+require_command() {
+  local command_name
+  command_name="$1"
+  command -v "$command_name" >/dev/null 2>&1 || fatal "Required command not found: $command_name"
+}
 
-  mapfile -t vars < <(
-    {
-      validation_list_envs 2>/dev/null || true
-      validation_list_envs_by_meta_field "managerJsonPath" 2>/dev/null || true
-      validation_list_envs_by_meta_field "enshroudedMenuJsonPath" 2>/dev/null || true
-      validation_list_envs_by_meta_field "enshroudedJsonPath" 2>/dev/null || true
-      compgen -A variable "ENSHROUDED_ROLE_" 2>/dev/null || true
-    } | awk 'NF {print}' | sort -u
+menu_config_query() {
+  jq "$@" "$MENU_CONFIG_FILE"
+}
+
+menu_screen_exists() {
+  local screen_id
+  screen_id="$1"
+  menu_config_query -e --arg screen "$screen_id" '.menus[] | select(.id == $screen)' >/dev/null
+}
+
+menu_lookup_option() {
+  local screen_id option_key
+  screen_id="$1"
+  option_key="$2"
+
+  menu_config_query -c --arg screen "$screen_id" --arg option "$option_key" \
+    '[(.menus[] | select(.id == $screen) | .options[] | select(.key == $option))][0] // empty'
+}
+
+menu_validate_config() {
+  local duplicate_screens missing_action_refs missing_screen_refs
+
+  menu_config_query -e '
+    type == "object"
+    and (.menus | type == "array")
+    and (.menus | length > 0)
+    and (.actions | type == "object")
+  ' >/dev/null || fatal "Invalid menu configuration schema: $MENU_CONFIG_FILE"
+
+  duplicate_screens="$(menu_config_query -r '[.menus[].id] | group_by(.)[] | select(length > 1) | .[0]')"
+  if [[ -n "$duplicate_screens" ]]; then
+    fatal "Duplicate menu screen ids in menu config: ${duplicate_screens}"
+  fi
+
+  missing_action_refs="$(menu_config_query -r '
+    . as $root
+    | [
+        .menus[] as $menu
+        | $menu.options[]
+        | select((.type // "action") == "action")
+        | select(((.action // "") | length) == 0 or ($root.actions[.action] // null) == null)
+        | "\($menu.id):\(.key)"
+      ]
+    | .[]?
+  ')"
+  if [[ -n "$missing_action_refs" ]]; then
+    fatal "Menu option(s) reference missing actions: ${missing_action_refs}"
+  fi
+
+  missing_screen_refs="$(menu_config_query -r '
+    . as $root
+    | [
+        .menus[] as $menu
+        | $menu.options[]
+        | select((.type // "action") == "screen")
+        | .next as $next
+        | select(($next | type) != "string" or ($next | length) == 0 or ([ $root.menus[].id ] | index($next)) == null)
+        | "\($menu.id):\(.key)"
+      ]
+    | .[]?
+  ')"
+  if [[ -n "$missing_screen_refs" ]]; then
+    fatal "Menu option(s) reference missing target screens: ${missing_screen_refs}"
+  fi
+}
+
+menu_read_start_screen() {
+  local screen_id
+  if [[ -n "$MENU_START_SCREEN" ]]; then
+    screen_id="$MENU_START_SCREEN"
+  else
+    screen_id="$(menu_config_query -r '.start_screen // .menus[0].id')"
+  fi
+
+  [[ -n "$screen_id" ]] || fatal "Unable to resolve menu start screen"
+  menu_screen_exists "$screen_id" || fatal "Menu start screen not found: $screen_id"
+  printf "%s" "$screen_id"
+}
+
+menu_render_screen() {
+  local screen_id title subtitle
+  screen_id="$1"
+  title="$(menu_config_query -r --arg screen "$screen_id" '.menus[] | select(.id == $screen) | (.title // .id)')"
+  subtitle="$(menu_config_query -r --arg screen "$screen_id" '.menus[] | select(.id == $screen) | (.subtitle // empty)')"
+
+  ui_clear_screen
+  bash "$STARTUP_BANNER_SCRIPT"
+  ui_print_title "$title"
+  if [[ -n "$subtitle" ]]; then
+    ui_print_subtitle "$subtitle"
+  else
+    printf "\n"
+  fi
+
+  while IFS=$'\t' read -r option_key option_label; do
+    [[ -n "$option_key" ]] || continue
+    ui_print_option "$option_key" "$option_label"
+  done < <(
+    menu_config_query -r --arg screen "$screen_id" \
+      '.menus[] | select(.id == $screen) | .options[] | [ .key, (.label // .key) ] | @tsv'
   )
-
-  for var in "${vars[@]}"; do
-    [[ -n "$var" ]] && printf "%s\n" "$var"
-  done
+  printf "\n"
 }
 
-menu_capture_external_env_overrides() {
-  local var value mode
-  MENU_EXTERNAL_ENV=()
+menu_read_prompt() {
+  local screen_id
+  screen_id="$1"
+  menu_config_query -r --arg screen "$screen_id" \
+    '.menus[] | select(.id == $screen) | (.prompt // "Select option")'
+}
 
-  while IFS= read -r var; do
-    [[ -z "$var" ]] && continue
-    if [[ -n "${!var+x}" ]]; then
-      value="${!var}"
-      mode="$(validation_env_mode "$var" 2>/dev/null || echo "soft")"
-      if [[ -z "$value" && "$mode" != "hard" && "$mode" != "deferred" ]]; then
+menu_run_action() {
+  local action_id action_json confirm_text command_path resolved_command rc
+  local -a command_args action_env
+  action_id="$1"
+
+  action_json="$(menu_config_query -c --arg action "$action_id" '.actions[$action] // empty')"
+  [[ -n "$action_json" ]] || fatal "Menu action is not configured: $action_id"
+
+  confirm_text="$(jq -r '.confirm // empty' <<<"$action_json")"
+  if [[ -n "$confirm_text" ]] && ! ui_confirm "$confirm_text" "false"; then
+    ui_warn "Action cancelled: ${action_id}"
+    return 0
+  fi
+
+  command_path="$(jq -r '.command // empty' <<<"$action_json")"
+  [[ -n "$command_path" ]] || fatal "Menu action has no command: $action_id"
+
+  if [[ "$command_path" = /* ]]; then
+    resolved_command="$command_path"
+  else
+    resolved_command="${MANAGER_ROOT}/${command_path}"
+  fi
+  require_executable "$resolved_command"
+
+  mapfile -t command_args < <(jq -r '.args[]? // empty' <<<"$action_json")
+  mapfile -t action_env < <(jq -r '.env // {} | to_entries[] | "\(.key)=\(.value | tostring)"' <<<"$action_json")
+
+  ui_info "Executing action: ${action_id}"
+  if [[ "${#action_env[@]}" -gt 0 ]]; then
+    env "${action_env[@]}" "$resolved_command" "${command_args[@]}"
+  else
+    "$resolved_command" "${command_args[@]}"
+  fi
+  rc=$?
+
+  if [[ "$rc" -eq 0 ]]; then
+    ui_info "Action completed: ${action_id}"
+  else
+    ui_error "Action failed: ${action_id} (rc=${rc})"
+  fi
+  return "$rc"
+}
+
+menu_loop() {
+  local current_screen option_key option_json option_type next_screen action_id prompt_text rc
+  current_screen="$(menu_read_start_screen)"
+
+  while true; do
+    menu_render_screen "$current_screen"
+    prompt_text="$(menu_read_prompt "$current_screen")"
+
+    ui_prompt_input option_key "$prompt_text" ""
+    option_key="$(echo "${option_key}" | tr -d '\r' | xargs)"
+    if [[ -z "$option_key" ]]; then
+      if [[ -t 0 ]]; then
+        ui_warn "No menu option selected."
+        ui_pause
         continue
       fi
-      MENU_EXTERNAL_ENV["$var"]="$value"
+      ui_error "No menu input available on stdin."
+      return 1
     fi
-  done < <(menu_list_known_env_vars)
-}
 
-menu_spec__append_action_row() {
-  local json_file id type command_name fn requires_running confirm args_json
-  local obj
+    option_json="$(menu_lookup_option "$current_screen" "$option_key")"
+    if [[ -z "$option_json" ]]; then
+      ui_warn "Unknown menu option: ${option_key}"
+      if [[ -t 0 ]]; then
+        ui_pause
+        continue
+      fi
+      return 1
+    fi
 
-  json_file="$1"
-  id="$2"
-  type="$3"
-  command_name="$4"
-  fn="$5"
-  requires_running="$6"
-  confirm="$7"
-  args_json="$8"
-
-  obj="$(jq -cn --arg type "$type" 'if $type == "" then {} else {type: $type} end')"
-  [[ -n "$command_name" ]] && obj="$(jq -c --arg v "$command_name" '. + {command: $v}' <<<"$obj")"
-  [[ -n "$fn" ]] && obj="$(jq -c --arg v "$fn" '. + {fn: $v}' <<<"$obj")"
-
-  if [[ -n "$requires_running" ]]; then
-    obj="$(jq -c --arg v "$requires_running" '. + {requiresRunning: (($v | ascii_downcase) == "true")}' <<<"$obj")"
-  fi
-
-  if [[ -n "$confirm" ]]; then
-    case "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" in
-      true|false)
-        obj="$(jq -c --arg v "$confirm" '. + {confirm: (($v | ascii_downcase) == "true")}' <<<"$obj")"
-        ;;
-      *)
-        obj="$(jq -c --arg v "$confirm" '. + {confirm: $v}' <<<"$obj")"
-        ;;
-    esac
-  fi
-
-  if [[ -n "$args_json" ]]; then
-    obj="$(jq -c --arg args "$args_json" '. + {args: ($args | fromjson)}' <<<"$obj" 2>/dev/null || echo "$obj")"
-  fi
-
-  jq --arg id "$id" --argjson obj "$obj" '.actions[$id] = $obj' "$json_file" >"${json_file}.tmp" && mv "${json_file}.tmp" "$json_file"
-}
-
-menu_spec__append_screen_row() {
-  local json_file screen key title action
-  json_file="$1"
-  screen="$2"
-  key="$3"
-  title="$4"
-  action="$5"
-
-  jq --arg screen "$screen" --arg key "$key" --arg title "$title" --arg action "$action" \
-    '.screens[$screen] = ((.screens[$screen] // []) + [{key: $key, title: $title, action: $action}])' \
-    "$json_file" >"${json_file}.tmp" && mv "${json_file}.tmp" "$json_file"
-}
-
-menu_spec__append_editor_env_row() {
-  local json_file meta_field env_name group json_path order
-  local obj
-  json_file="$1"
-  meta_field="$2"
-  env_name="$3"
-  group="$4"
-  json_path="$5"
-  order="$6"
-
-  obj="$(jq -cn --arg env "$env_name" --arg group "$group" --arg json_path "$json_path" --arg order "$order" '
-    {
-      env: $env,
-      group: $group
-    }
-    + (if $json_path == "" then {} else {jsonPath: $json_path} end)
-    + (if $order == "" then {} else {order: ($order | tonumber)} end)
-  ')"
-
-  jq --arg mf "$meta_field" --argjson obj "$obj" '
-    .editors[$mf] = (.editors[$mf] // {fields: []})
-    | .editors[$mf].fields = ((.editors[$mf].fields // []) + [$obj])
-  ' "$json_file" >"${json_file}.tmp" && mv "${json_file}.tmp" "$json_file"
-}
-
-menu_spec__append_editor_template_row() {
-  local json_file template field group order
-  local obj
-  json_file="$1"
-  template="$2"
-  field="$3"
-  group="$4"
-  order="$5"
-
-  obj="$(jq -cn --arg field "$field" --arg group "$group" --arg order "$order" '
-    {
-      field: $field,
-      group: $group
-    }
-    + (if $order == "" then {} else {order: ($order | tonumber)} end)
-  ')"
-
-  jq --arg t "$template" --argjson obj "$obj" '
-    .editors.templates = (.editors.templates // {})
-    | .editors.templates[$t] = (.editors.templates[$t] // {fields: []})
-    | .editors.templates[$t].fields = ((.editors.templates[$t].fields // []) + [$obj])
-  ' "$json_file" >"${json_file}.tmp" && mv "${json_file}.tmp" "$json_file"
-}
-
-menu_csv_data_rows() {
-  local csv_file
-  csv_file="$1"
-  [[ -f "$csv_file" ]] || return 0
-  command -v python3 >/dev/null 2>&1 || return 1
-  python3 - "$csv_file" <<'PY'
-import csv
-import sys
-
-path = sys.argv[1]
-with open(path, newline="", encoding="utf-8") as f:
-    reader = csv.reader(f)
-    for idx, row in enumerate(reader):
-        if idx == 0:
-            continue
-        out = []
-        for cell in row:
-            if cell is None or cell == "null":
-                cell = ""
-            cell = cell.replace("\t", " ").replace("\r", " ").replace("\n", " ")
-            out.append(cell)
-        print("\t".join(out))
-PY
-}
-
-menu_spec_build_json_from_csv() {
-  local csv_file out_file
-  local row section id parent key title action type command_name fn requires_running confirm _program _request_file _timeout_sec _payload_json args_json env_name group field json_path order
-  local -a cols
-
-  csv_file="$1"
-  out_file="$2"
-
-  jq -n '{actions: {}, screens: {}, editors: {templates: {}}}' >"$out_file" || return 1
-
-  while IFS= read -r row; do
-    mapfile -t cols < <(printf '%s\n' "$row" | awk -F'\t' '{ for (i = 1; i <= 21; i++) print $i }')
-    section="${cols[0]-}"
-    id="${cols[1]-}"
-    parent="${cols[2]-}"
-    key="${cols[3]-}"
-    title="${cols[4]-}"
-    action="${cols[5]-}"
-    type="${cols[6]-}"
-    command_name="${cols[7]-}"
-    fn="${cols[8]-}"
-    requires_running="${cols[9]-}"
-    confirm="${cols[10]-}"
-    _program="${cols[11]-}"
-    _request_file="${cols[12]-}"
-    _timeout_sec="${cols[13]-}"
-    _payload_json="${cols[14]-}"
-    args_json="${cols[15]-}"
-    env_name="${cols[16]-}"
-    group="${cols[17]-}"
-    field="${cols[18]-}"
-    json_path="${cols[19]-}"
-    order="${cols[20]-}"
-
-    [[ -z "$section" ]] && continue
-    case "$section" in
+    option_type="$(jq -r '.type // "action"' <<<"$option_json")"
+    case "$option_type" in
       action)
-        [[ -z "$id" ]] && continue
-        menu_spec__append_action_row "$out_file" "$id" "$type" "$command_name" "$fn" "$requires_running" "$confirm" "$args_json"
+        action_id="$(jq -r '.action // empty' <<<"$option_json")"
+        if [[ -z "$action_id" ]]; then
+          ui_error "Menu action option has no action id (screen=${current_screen}, option=${option_key})"
+          rc=1
+        else
+          menu_run_action "$action_id"
+          rc=$?
+        fi
+        if [[ "$MENU_ONCE" == "true" ]]; then
+          return "$rc"
+        fi
+        ui_pause
         ;;
       screen)
-        [[ -z "$parent" || -z "$key" || -z "$action" ]] && continue
-        menu_spec__append_screen_row "$out_file" "$parent" "$key" "$title" "$action"
-        ;;
-      editor_env)
-        [[ -z "$parent" || -z "$env_name" ]] && continue
-        menu_spec__append_editor_env_row "$out_file" "$parent" "$env_name" "$group" "$json_path" "$order"
-        ;;
-      editor_template)
-        [[ -z "$parent" || -z "$field" ]] && continue
-        menu_spec__append_editor_template_row "$out_file" "$parent" "$field" "$group" "$order"
-        ;;
-    esac
-  done < <(menu_csv_data_rows "$csv_file")
-}
-
-menu_spec_init() {
-  if [[ -n "${MENU_SPEC_FILE:-}" && -f "$MENU_SPEC_FILE" ]]; then
-    info "Using menu specification file: $MENU_SPEC_FILE"
-    return 0
-  fi
-  if [[ ! -f "$MENU_SPEC_CSV_FILE" ]]; then
-    warn "Menu CSV specification not found: $MENU_SPEC_CSV_FILE"
-    return 1
-  fi
-  if ! command -v jq >/dev/null 2>&1; then
-    warn "jq not found - cannot build menu specification"
-    return 1
-  fi
-
-  MENU_SPEC_TMP_FILE="$(mktemp)"
-  if ! menu_spec_build_json_from_csv "$MENU_SPEC_CSV_FILE" "$MENU_SPEC_TMP_FILE"; then
-    rm -f "$MENU_SPEC_TMP_FILE" 2>/dev/null || true
-    MENU_SPEC_TMP_FILE=""
-    return 1
-  fi
-  MENU_SPEC_FILE="$MENU_SPEC_TMP_FILE"
-  info "Built menu specification from CSV: $MENU_SPEC_CSV_FILE"
-  return 0
-}
-
-
-# --- inlined menu module: ui ---
-# UI helpers for the interactive shell menu.
-# Expected to be sourced after the menu runtime bootstrap so log helpers and colors exist.
-
-ui_has_tty() {
-  [[ -t 0 && -t 1 ]]
-}
-
-ui_clear() {
-  if [[ "$MENU_NO_CLEAR" == "true" ]]; then
-    return 0
-  fi
-  if command -v clear >/dev/null 2>&1; then
-    clear
-  else
-    printf "\n\n\n\n\n\n\n"
-  fi
-}
-
-ui_hr() {
-  printf "%s\n" "--------------------------------------------------------------------------------"
-}
-
-ui_banner() {
-  "$SERVER_JOB_BIN" guard-run core_ready -- "${SCRIPT_DIR}/server" --render-banner
-}
-
-ui_kv() {
-  local k v
-  k="$1"
-  v="$2"
-  printf "%s: %s\n" "${C_DIM}${k}${C_RESET}" "$v"
-}
-
-ui_info() {
-  ui_emit "info" "${C_DIM}" "stdout" "$*"
-}
-
-ui_warn() {
-  ui_emit "warn" "${C_YELLOW}" "stdout" "$*"
-}
-
-ui_error() {
-  ui_emit "error" "${C_RED}" "stderr" "$*"
-}
-
-ui_success() {
-  ui_emit "success" "${C_GREEN}" "stdout" "$*"
-}
-
-ui_fatal() {
-  fatal "$*"
-}
-
-menu_log_ui() {
-  # Reuse shared job logging without duplicating lines in interactive TTY output.
-  local level message
-  level="$1"
-  shift || true
-  message="$*"
-
-  case "$level" in
-    info) (info "$message") >/dev/null 2>&1 || true ;;
-    warn) (warn "$message") >/dev/null 2>&1 || true ;;
-    error) (error "$message") >/dev/null 2>&1 || true ;;
-    success) (success "$message") >/dev/null 2>&1 || true ;;
-    *) ;;
-  esac
-}
-
-ui_emit() {
-  local level color stream text
-  level="$1"
-  color="$2"
-  stream="$3"
-  shift 3 || true
-  text="$*"
-
-  if [[ "$stream" == "stderr" ]]; then
-    printf "%s%s%s\n" "$color" "$text" "${C_RESET}" >&2
-  else
-    printf "%s%s%s\n" "$color" "$text" "${C_RESET}"
-  fi
-
-  menu_log_ui "$level" "$text"
-}
-
-ui_opt() {
-  # Print a menu option with a colored key.
-  # Usage: ui_opt 1 "Edit current settings"
-  local key text
-  key="$1"
-  shift || true
-  text="$*"
-  printf "%s[%s]%s %s\n" "${C_MAGENTA}" "$key" "${C_RESET}" "$text"
-}
-
-ui_read() {
-  local prompt value
-  prompt="$1"
-  if [[ -r /dev/tty ]]; then
-    read -r -p "$prompt" value </dev/tty || true
-  else
-    read -r -p "$prompt" value || true
-  fi
-  printf "%s" "$value"
-}
-
-ui_pause() {
-  local _unused
-  if [[ -r /dev/tty ]]; then
-    read -r -p "Press Enter to continue..." _unused </dev/tty || true
-  else
-    read -r -p "Press Enter to continue..." _unused || true
-  fi
-}
-
-ui_confirm_yes_no() {
-  local prompt ans normalized
-  prompt="$1"
-  while :; do
-    ans="$(ui_read "$prompt [yes/no]: ")"
-    normalized="$(echo "$ans" | tr '[:upper:]' '[:lower:]' | xargs)"
-    case "$normalized" in
-      y|yes|j|ja)
-        return 0
-        ;;
-      n|no|nein|"")
-        return 1
-        ;;
-      *)
-        ui_warn "Please answer yes or no."
-        ;;
-    esac
-  done
-}
-
-ui_prompt_choice() {
-  # Reads and normalizes a choice (trim + lower-case).
-  local prompt ans
-  prompt="$1"
-  ans="$(ui_read "$prompt: ")"
-  ans="$(echo "$ans" | tr '[:upper:]' '[:lower:]' | xargs)"
-  printf "%s" "$ans"
-}
-
-ui_actions_bar() {
-  # Nano-like action hint bar (simple, line-based).
-  # Usage: ui_actions_bar "b Back" "m Main" "x Exit"
-  local item
-  ui_hr
-  printf "%s" "${C_MAGENTA}"
-  printf "%s" "Actions:"
-  for item in "$@"; do
-    printf "  [%s]" "$item"
-  done
-  printf "%s\n" "${C_RESET}"
-}
-
-menu_nav_clear() { MENU_NAV=""; }
-menu_nav_set() { MENU_NAV="$1"; }
-menu_nav_is_set() { [[ -n "${MENU_NAV:-}" ]]; }
-menu_nav_value() { printf "%s" "${MENU_NAV:-}"; }
-
-menu_prompt_nav_choice() {
-  # Prompt and handle shared nav keys (b/m/x).
-  # Prints either the typed choice or a nav token:
-  #   __nav_back__, __nav_main__, __nav_exit__
-  local prompt main_screen choice
-  prompt="${1:-Choice}"
-  main_screen="${2:-false}"
-
-  choice="$(ui_prompt_choice "$prompt")"
-  case "$choice" in
-    x)
-      [[ "$main_screen" == "true" ]] && ui_clear
-      menu_nav_set "exit"
-      printf "%s" "__nav_exit__"
-      return 0
-      ;;
-    b)
-      if [[ "$main_screen" == "true" ]]; then
-        ui_clear
-        menu_nav_set "exit"
-        printf "%s" "__nav_exit__"
-      else
-        printf "%s" "__nav_back__"
-      fi
-      return 0
-      ;;
-    m)
-      if [[ "$main_screen" != "true" ]]; then
-        menu_nav_set "main"
-        printf "%s" "__nav_main__"
-        return 0
-      fi
-      ;;
-  esac
-
-  printf "%s" "$choice"
-}
-
-menu_nav_choice_is_handled() {
-  case "$1" in
-    __nav_back__|__nav_main__|__nav_exit__) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-menu_choice_index() {
-  local choice max
-  choice="$1"
-  max="$2"
-  if ! [[ "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -lt 1 || "$choice" -gt "$max" ]]; then
-    return 1
-  fi
-  printf "%s" "$((choice - 1))"
-}
-
-menu_mountinfo_decode_path() {
-  # /proc/self/mountinfo uses octal escapes for spaces, tabs, etc (e.g. \040).
-  # Decode for display only.
-  local raw
-  raw="$1"
-  printf "%b" "$raw"
-}
-
-menu_container_to_host_path() {
-  # Best-effort conversion of a container path to the bind-mount source path as seen by the host.
-  #
-  # For bind mounts, /proc/self/mountinfo typically exposes the host path in the "root" field.
-  # For named volumes, the root may point into Docker's data directory.
-  local container_path line root_raw mp_raw root mp best_mp best_root rel
-  container_path="$1"
-
-  if [[ ! -r /proc/self/mountinfo ]]; then
-    return 1
-  fi
-
-  best_mp=""
-  best_root=""
-  while IFS= read -r line; do
-    # root and mount point are the 4th and 5th whitespace-separated fields.
-    set -- $line
-    root_raw="${4-}"
-    mp_raw="${5-}"
-    if [[ -z "$root_raw" || -z "$mp_raw" ]]; then
-      continue
-    fi
-
-    root="$(menu_mountinfo_decode_path "$root_raw")"
-    mp="$(menu_mountinfo_decode_path "$mp_raw")"
-
-    if [[ "$container_path" == "$mp" || "$container_path" == "$mp/"* ]]; then
-      if [[ ${#mp} -gt ${#best_mp} ]]; then
-        best_mp="$mp"
-        best_root="$root"
-      fi
-    fi
-  done </proc/self/mountinfo
-
-  # Avoid mapping to the container root filesystem (usually overlay).
-  if [[ -z "$best_mp" || "$best_mp" == "/" || -z "$best_root" ]]; then
-    return 1
-  fi
-
-  rel="${container_path#$best_mp}"
-  if [[ -n "$rel" && "${rel:0:1}" != "/" ]]; then
-    rel="/$rel"
-  fi
-
-  printf "%s%s" "${best_root%/}" "$rel"
-  return 0
-}
-
-menu_display_path() {
-  # Best-effort display of host path instead of container path.
-  # Priority:
-  # 1) HOST_INSTALL_PATH (explicit override)
-  # 2) /proc/self/mountinfo mapping (bind mounts)
-  local container_path host_path
-  container_path="$1"
-
-  if [[ -n "${HOST_INSTALL_PATH:-}" ]] && [[ "$container_path" == "$install_path"* ]]; then
-    printf "%s%s" "${HOST_INSTALL_PATH%/}" "${container_path#$install_path}"
-    return 0
-  fi
-
-  if host_path="$(menu_container_to_host_path "$container_path" 2>/dev/null)"; then
-    if [[ -n "$host_path" ]]; then
-      printf "%s" "$host_path"
-      return 0
-    fi
-  fi
-
-  printf "%s" "$container_path"
-}
-
-ui_header() {
-  local subtitle main_screen
-  subtitle="${1:-}"
-  main_screen="${2:-false}"
-
-  ui_clear
-  ui_banner
-  if [[ -n "$subtitle" ]]; then
-    printf "\n%s%s%s\n" "${C_DIM}" "$subtitle" "${C_RESET}"
-  fi
-
-  # Status block (non-fatal if supervisorctl fails)
-  local en_profile manager_profile server_status
-  en_profile="$(enshrouded_profile_resolve 2>/dev/null || echo "default")"
-  manager_profile="$(manager_profile_resolve 2>/dev/null || echo "default")"
-
-  if is_supervisor_running "server"; then
-    server_status="${C_GREEN}RUNNING${C_RESET}"
-  else
-    server_status="${C_RED}STOPPED${C_RESET}"
-  fi
-
-  ui_kv "Enshrouded Profile" "${C_GREEN}${en_profile}${C_RESET}"
-  ui_kv "Manager Profile" "${C_GREEN}${manager_profile}${C_RESET}"
-  ui_kv "Server" "$server_status"
-  ui_kv "Enshrouded Config" "$(menu_display_path "${install_path}/enshrouded_server.json")"
-  ui_kv "Manager Config" "$(menu_display_path "$(manager_config_path)")"
-  ui_hr
-
-  if ui_has_tty; then
-    if [[ "$main_screen" == "true" ]]; then
-      ui_info "Navigation: enter a number or x and press Enter."
-    else
-      ui_info "Navigation: enter a number or b/m/x and press Enter."
-    fi
-    ui_info "Exit behavior: if the server is STOPPED, you will be asked to run bootstrap + start before exit."
-  else
-    ui_warn "Hint: no TTY detected. Start with: docker exec -it CONTAINER_NAME server menu"
-  fi
-  echo
-}
-
-menu_stop_server_now() {
-  # Stop the Enshrouded server without asking (callers must confirm before invoking).
-  if ! is_supervisor_running "server"; then
-    return 0
-  fi
-
-  if ! "${SCRIPT_DIR}/server" guard-run core_ready -- "${SCRIPT_DIR}/server" --stop-safe --shutdown-timeout 90 >/dev/null 2>&1; then
-    ui_error "Timeout while stopping server."
-    return 1
-  fi
-
-  return 0
-}
-
-menu_stop_server_for_config_change() {
-  local reason
-  reason="$1"
-
-  if ! is_supervisor_running "server"; then
-    return 0
-  fi
-
-  ui_warn "The Enshrouded server is currently RUNNING."
-  ui_warn "To $reason, the server must be stopped first to avoid conflicts."
-  ui_warn "All players will be disconnected."
-  echo
-
-  if ! ui_confirm_yes_no "Stop server now?"; then
-    ui_info "Cancelled."
-    return 1
-  fi
-
-  if ! menu_stop_server_now; then
-    return 1
-  fi
-
-  ui_success "server stopped."
-  return 0
-}
-
-menu_start_server_via_bootstrap() {
-  ui_info "Starting server via bootstrap flow..."
-  if ! server_run bootstrap >/dev/null 2>&1; then
-    ui_warn "Bootstrap start request failed."
-    return 1
-  fi
-
-  if ! menu_wait_for_program_exit "bootstrap" 900; then
-    ui_warn "Bootstrap did not finish in time."
-    return 1
-  fi
-
-  if is_supervisor_running "server"; then
-    ui_success "Server started via bootstrap."
-    return 0
-  fi
-
-  ui_info "Bootstrap completed; requesting server start..."
-  server_run start >/dev/null 2>&1 || true
-  if is_supervisor_running "server"; then
-    ui_success "Server start requested."
-    return 0
-  fi
-
-  ui_warn "Server is still not running. Check logs/status."
-  return 1
-}
-
-menu_prompt_start_server() {
-  local prompt
-  prompt="${1:-Start server now?}"
-
-  if ui_confirm_yes_no "$prompt"; then
-    menu_start_server_via_bootstrap || true
-  else
-    ui_info "Server remains stopped."
-  fi
-}
-
-menu_wait_for_program_exit() {
-  local proc timeout deadline now
-  proc="$1"
-  timeout="${2:-600}"
-
-  if ! is_supervisor_running "$proc"; then
-    return 0
-  fi
-
-  ui_info "Waiting for $proc to finish..."
-  deadline=$(( $(date +%s) + timeout ))
-  while is_supervisor_running "$proc"; do
-    now="$(date +%s)"
-    if [[ "$now" -ge "$deadline" ]]; then
-      ui_warn "Timeout while waiting for $proc."
-      return 1
-    fi
-    sleep 1
-  done
-
-  return 0
-}
-
-menu_env_override_is_set() {
-  local name k mode value found
-  name="$1"
-  mode="$(validation_env_mode "$name" 2>/dev/null || echo "soft")"
-  found="false"
-  value=""
-
-  for k in "${!MENU_EXTERNAL_ENV[@]}"; do
-    if [[ "$k" == "$name" ]]; then
-      found="true"
-      value="${MENU_EXTERNAL_ENV[$k]}"
-      break
-    fi
-  done
-
-  if [[ "$found" == "true" ]]; then
-    # Soft ENV with empty value behaves like "not set" in runtime resolution.
-    if [[ -n "$value" ]]; then
-      return 0
-    fi
-    [[ "$mode" == "hard" || "$mode" == "deferred" ]]
-    return $?
-  fi
-
-  [[ "$mode" == "hard" || "$mode" == "deferred" ]]
-}
-
-menu_env_override_value() {
-  local name k
-  name="$1"
-  for k in "${!MENU_EXTERNAL_ENV[@]}"; do
-    if [[ "$k" == "$name" ]]; then
-      printf "%s" "${MENU_EXTERNAL_ENV[$k]}"
-      return 0
-    fi
-  done
-  return 0
-}
-
-menu_compact_env_label() {
-  local env_var
-  env_var="$1"
-  case "$env_var" in
-    BACKUP_SCHEDULED_INCLUDE_ENSHROUDED_CONFIG)
-      printf "%s" "BACKUP_SCHED_ENS_CFG"
-      ;;
-    BACKUP_SCHEDULED_INCLUDE_SERVER_MANAGER_CONFIG)
-      printf "%s" "BACKUP_SCHED_MGR_CFG"
-      ;;
-    *)
-      printf "%s" "$env_var"
-      ;;
-  esac
-}
-
-menu_env_lock_value_for_display() {
-  local file env_var json_path raw
-  file="$1"
-  env_var="$2"
-  json_path="$3"
-
-  raw="$(menu_env_override_value "$env_var")"
-  if [[ -n "$raw" ]]; then
-    printf "%s" "$raw"
-    return 0
-  fi
-
-  # For hard env fields (e.g. PUID/PGID), show current config value when ENV is not exported.
-  raw="$(menu_spec_editor__json_get_scalar "$file" "$json_path")"
-  printf "%s" "$raw"
-}
-
-menu_env_override_pretty_value() {
-  local name value max
-  name="$1"
-  value="$2"
-  max=80
-
-  if [[ "$name" == *_HOOK || "$name" == *HOOK* ]]; then
-    if [[ -n "$value" ]]; then
-      printf "%s" "<set>"
-    fi
-    return 0
-  fi
-
-  if [[ "${#value}" -gt "$max" ]]; then
-    printf "%s..." "${value:0:$max}"
-  else
-    printf "%s" "$value"
-  fi
-}
-
-menu_env_locked_badge() {
-  local env_var
-  env_var="$1"
-  if menu_env_override_is_set "$env_var"; then
-    printf " %s" "${C_RED}[ENV]${C_RESET}"
-  fi
-}
-
-menu_warn_env_overrides_before_profile_selection() {
-  local target label k value
-  local -a keys active
-  target="$1"
-  keys=()
-  active=()
-
-  case "$target" in
-    manager)
-      label="Server Manager"
-      mapfile -t keys < <(
-        {
-          validation_list_envs_by_meta_field "managerJsonPath" 2>/dev/null || true
-          printf "%s\n" "MANAGER_PROFILE"
-        } | awk 'NF' | sort -u
-      )
-      ;;
-    enshrouded)
-      label="Enshrouded"
-      mapfile -t keys < <(
-        {
-          printf "%s\n" "EN_PROFILE"
-          for k in "${!MENU_EXTERNAL_ENV[@]}"; do
-            case "$k" in
-              ENSHROUDED_*) printf "%s\n" "$k" ;;
-            esac
-          done
-        } | awk 'NF' | sort -u
-      )
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-
-  for k in "${keys[@]}"; do
-    [[ -z "$k" ]] && continue
-    if menu_env_override_is_set "$k"; then
-      active+=("$k")
-    fi
-  done
-
-  if [[ "${#active[@]}" -eq 0 ]]; then
-    return 0
-  fi
-
-  mapfile -t active < <(printf "%s\n" "${active[@]}" | sort)
-
-  ui_header "Environment Overrides Detected"
-  ui_warn "Some ${label} settings are controlled by environment variables."
-  ui_warn "They will overwrite profile/template values on bootstrap or next container start."
-  echo
-  ui_info "Active overrides:"
-  for k in "${active[@]}"; do
-    value="$(menu_env_override_value "$k")"
-    printf "%s=%s\n" "$k" "$(menu_env_override_pretty_value "$k" "$value")"
-  done
-  echo
-
-  if ! ui_confirm_yes_no "Continue anyway?"; then
-    ui_info "Cancelled."
-    ui_pause
-    return 1
-  fi
-
-  return 0
-}
-
-menu_run_backup_job() {
-  # Trigger unified backup job via args.
-  # Usage:
-  #   menu_run_backup_job <mode> <includeSavegame> <includeEnshroudedConfig> <includeManagerConfig> [cleanup]
-  local mode include_savegame include_ens include_mgr cleanup
-  local -a cmd_args
-  mode="${1:-manual}"
-  include_savegame="${2:-true}"
-  include_ens="${3:-true}"
-  include_mgr="${4:-true}"
-  cleanup="${5:-false}"
-
-  cmd_args=(
-    backup
-    "$mode"
-    --savegame "$include_savegame"
-    --enshrouded-config "$include_ens"
-    --manager-config "$include_mgr"
-    --cleanup "$cleanup"
-  )
-
-  if ! server_run "${cmd_args[@]}" >/dev/null 2>&1; then
-    ui_error "Backup command failed."
-    return 1
-  fi
-
-  return 0
-}
-
-menu_run_config_backup_job() {
-  # Selector wrapper used by editors for config-only backups.
-  # Config-only backups are written under BACKUP_DIR/manual (without savegame files).
-  case "${1:-manual:all}" in
-    manual:enshrouded)
-      menu_run_backup_job "manual" "false" "true" "false" "false"
-      ;;
-    manual:manager)
-      menu_run_backup_job "manual" "false" "false" "true" "false"
-      ;;
-    manual:all)
-      menu_run_backup_job "manual" "false" "true" "true" "false"
-      ;;
-    *)
-      ui_warn "Unknown config backup selector: ${1:-manual:all}"
-      return 1
-      ;;
-  esac
-}
-
-
-# --- inlined menu module: backups ---
-menu_save_dir_resolve() {
-  local dir
-  dir="${ENSHROUDED_SAVE_DIR:-./savegame}"
-  if [[ "$dir" == /* ]]; then
-    printf "%s" "$dir"
-  else
-    printf "%s/%s" "$install_path" "$dir"
-  fi
-}
-
-menu_run_savegame_backup() {
-  local backup_dir save_dir
-  backup_dir="$(backup_dir_resolve)"
-  save_dir="$(menu_save_dir_resolve)"
-
-  ui_header "Create Manual Backup"
-  ui_info "Manual backups are stored under BACKUP_DIR/manual and are never pruned by backupMaxCount."
-  echo
-  ui_kv "Save Directory" "$save_dir"
-  ui_kv "Backup Root" "$backup_dir"
-  ui_kv "Target Folder" "${backup_dir}/manual"
-  echo
-
-  if ! ui_confirm_yes_no "Create manual full backup now?"; then
-    ui_info "Cancelled."
-    ui_pause
-    return 0
-  fi
-
-  if menu_run_backup_job "manual" "true" "true" "true" "false"; then
-    ui_success "Manual backup created."
-  else
-    ui_warn "Backup failed or timed out."
-  fi
-
-  ui_pause
-  return 0
-}
-
-menu_run_config_backup_now() {
-  local choice selector
-
-  while :; do
-    ui_header "Create Config Backup"
-    ui_info "Creates a config-only ZIP under BACKUP_DIR/manual."
-    echo
-    ui_opt 1 "Enshrouded config only"
-    ui_opt 2 "Server Manager config only"
-    ui_opt 3 "Both config files"
-    echo
-    ui_actions_bar "b Back" "m Main" "x Exit"
-    echo
-
-    choice="$(menu_prompt_nav_choice "Choice")"
-    if menu_nav_choice_is_handled "$choice"; then
-      return 0
-    fi
-
-    case "$choice" in
-      1) selector="manual:enshrouded" ;;
-      2) selector="manual:manager" ;;
-      3) selector="manual:all" ;;
-      *)
-        ui_warn "Invalid selection."
-        ui_pause
-        continue
-        ;;
-    esac
-
-    if menu_run_config_backup_job "$selector"; then
-      ui_success "Config backup created."
-    else
-      ui_warn "Config backup failed or timed out."
-    fi
-    ui_pause
-    return 0
-  done
-}
-
-menu_restore_backup() {
-  local backup_root save_dir selected choice file
-  backup_root="$(backup_dir_resolve)"
-  save_dir="$(menu_save_dir_resolve)"
-
-  while :; do
-    local -a files lines
-    files=()
-    mapfile -t lines < <(server_run backup list 2>/dev/null || true)
-    for line in "${lines[@]}"; do
-      [[ -n "$line" ]] || continue
-      files+=("$line")
-    done
-
-    ui_header "Restore Backup"
-    ui_kv "Backup Root" "$backup_root"
-    ui_kv "Target Save Directory" "$save_dir"
-    ui_kv "Savefile Name" "$savefile_name"
-    echo
-
-    if [[ "${#files[@]}" -eq 0 ]]; then
-      ui_warn "No backup ZIP files found."
-      echo
-      if ui_confirm_yes_no "Create a manual backup now?"; then
-        menu_run_savegame_backup || true
-        continue
-      fi
-      return 0
-    fi
-
-    ui_info "Backups (newest first):"
-    echo
-    local idx base kind
-    idx=1
-    for file in "${files[@]}"; do
-      base="$(basename "$file")"
-      case "$file" in
-        */scheduled/*) kind="scheduled" ;;
-        *) kind="manual" ;;
-      esac
-      printf "%s[%s]%s %-11s %s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${kind}" "$base"
-      idx=$((idx + 1))
-    done
-    echo
-    ui_actions_bar "b Back" "m Main" "x Exit"
-    echo
-
-    choice="$(menu_prompt_nav_choice "Backup")"
-    if menu_nav_choice_is_handled "$choice"; then
-      return 0
-    fi
-
-    local selected_idx
-    selected_idx="$(menu_choice_index "$choice" "${#files[@]}" || true)"
-    if [[ -z "$selected_idx" ]]; then
-      ui_warn "Invalid selection."
-      ui_pause
-      continue
-    fi
-
-    selected="${files[$selected_idx]}"
-
-    local has_savegame has_enshrouded has_manager inspect_raw
-    inspect_raw="$(
-      BACKUP_INSPECT_FORMAT=raw server_run backup inspect "$selected" 2>/dev/null \
-        | awk '/^(true|false) (true|false) (true|false)$/{line=$0} END{print line}'
-    )"
-    read -r has_savegame has_enshrouded has_manager <<<"$inspect_raw"
-    [[ "$has_savegame" == "true" || "$has_savegame" == "false" ]] || has_savegame="false"
-    [[ "$has_enshrouded" == "true" || "$has_enshrouded" == "false" ]] || has_enshrouded="false"
-    [[ "$has_manager" == "true" || "$has_manager" == "false" ]] || has_manager="false"
-    if [[ "$has_savegame" != "true" && "$has_enshrouded" != "true" && "$has_manager" != "true" ]]; then
-      ui_warn "No restorable components detected in this backup."
-      ui_pause
-      continue
-    fi
-
-    ui_header "Restore Backup"
-    ui_warn "WARNING: Selected components will overwrite current data."
-    ui_warn "The server will be stopped and players disconnected."
-    echo
-    ui_kv "Selected Backup" "$(basename "$selected")"
-    ui_kv "Detected Components" "savegame=$has_savegame, enshrouded=$has_enshrouded, manager=$has_manager"
-    echo
-
-    if ! ui_confirm_yes_no "Continue to component selection?"; then
-      ui_info "Cancelled."
-      ui_pause
-      continue
-    fi
-
-    local restore_savegame restore_enshrouded restore_manager safety
-    restore_savegame="false"
-    restore_enshrouded="false"
-    restore_manager="false"
-    safety="false"
-
-    if [[ "$has_savegame" == "true" ]] && ui_confirm_yes_no "Restore savegame files?"; then
-      restore_savegame="true"
-    fi
-    if [[ "$has_enshrouded" == "true" ]] && ui_confirm_yes_no "Restore enshrouded_server.json?"; then
-      restore_enshrouded="true"
-    fi
-    if [[ "$has_manager" == "true" ]] && ui_confirm_yes_no "Restore server_manager.json?"; then
-      restore_manager="true"
-    fi
-
-    if [[ "$restore_savegame" != "true" && "$restore_enshrouded" != "true" && "$restore_manager" != "true" ]]; then
-      ui_warn "Nothing selected for restore."
-      ui_pause
-      continue
-    fi
-
-    if ui_confirm_yes_no "Create safety backup before restore?"; then
-      safety="true"
-    fi
-
-    local restore_selector
-    local -a restore_parts restore_cmd
-    restore_parts=()
-    [[ "$restore_savegame" == "true" ]] && restore_parts+=("savegame")
-    [[ "$restore_enshrouded" == "true" ]] && restore_parts+=("enshrouded")
-    [[ "$restore_manager" == "true" ]] && restore_parts+=("manager")
-    restore_selector="$(IFS=,; echo "${restore_parts[*]}")"
-
-    restore_cmd=(backup restore "$selected" "$restore_selector" --safety-backup "$safety")
-
-    if ! server_run "${restore_cmd[@]}" >/dev/null 2>&1; then
-      ui_error "Restore command failed."
-      ui_pause
-      continue
-    fi
-
-    ui_success "Restore finished."
-    echo
-    menu_prompt_start_server "Start server now?"
-    ui_pause
-    return 0
-  done
-}
-
-menu_spec_ready() {
-  [[ -f "$MENU_SPEC_FILE" ]] && command -v jq >/dev/null 2>&1
-}
-
-menu_spec_query() {
-  menu_spec_ready || return 1
-  jq -r "$@" "$MENU_SPEC_FILE" 2>/dev/null
-}
-
-menu_editor_envs_for_meta_field() {
-  local meta_field vars
-  meta_field="$1"
-  vars="$(menu_spec_query --arg key "$meta_field" '
-    (.editors[$key].fields // [])
-    | map(select((.env // "") != ""))
-    | .[].env
-  ' || true)"
-  [[ -n "$vars" ]] && printf "%s\n" "$vars"
-}
-
-menu_editor_group_for_env() {
-  local meta_field env_var group
-  meta_field="$1"
-  env_var="$2"
-  group="$(menu_spec_query --arg key "$meta_field" --arg env "$env_var" '
-    first((.editors[$key].fields // [])[] | select((.env // "") == $env) | (.group // empty)) // empty
-  ' || true)"
-  [[ -n "$group" && "$group" != "null" ]] && printf "%s" "$group"
-}
-
-menu_editor_template_fields() {
-  local template fields
-  template="$1"
-  fields="$(menu_spec_query --arg t "$template" '
-    (.editors.templates[$t].fields // [])
-    | map(select((.field // "") != ""))
-    | .[].field
-  ' || true)"
-  [[ -n "$fields" ]] && printf "%s\n" "$fields"
-}
-
-menu_editor_template_group_for_field() {
-  local template field group
-  template="$1"
-  field="$2"
-  group="$(menu_spec_query --arg t "$template" --arg field "$field" '
-    first((.editors.templates[$t].fields // [])[] | select((.field // "") == $field) | (.group // empty)) // empty
-  ' || true)"
-  [[ -n "$group" && "$group" != "null" ]] && printf "%s" "$group"
-}
-
-
-# --- inlined menu module: editor_spec_json ---
-# Generic, spec-driven JSON editor helpers for the interactive menu.
-# Validation/type hints come from `server_manager/env/env_server_manager.csv`
-# and `server_manager/env/env_enshrouded_server.csv`.
-# Menu actions/order/grouping/path mappings come from `server_manager/env/menu.csv`.
-
-menu_spec_editor__json_get_scalar() {
-  # Prints the scalar as a string, but keeps `false` and `0` visible.
-  local file path
-  file="$1"
-  path="$2"
-  jq -r "$path | if . == null then empty else tostring end" "$file" 2>/dev/null || echo ""
-}
-
-menu_spec_editor__json_get_csv_list() {
-  # Prints a CSV representation of a JSON array (used for list env values).
-  local file path
-  file="$1"
-  path="$2"
-  jq -r "$path // [] | if type == \"array\" then join(\",\") else empty end" "$file" 2>/dev/null || echo ""
-}
-
-menu_spec_editor__session_backup_if_needed() {
-  # Create exactly one config backup per edit session (first write wins).
-  # Uses dynamic scope: the calling editor sets `backed_up=false` locally.
-  local backup_job
-  backup_job="${1-}"
-
-  if [[ -z "$backup_job" ]]; then
-    return 0
-  fi
-  if [[ "${backed_up:-false}" == "true" ]]; then
-    return 0
-  fi
-  ui_info "Creating config backup (logged via Supervisor)..."
-  menu_run_config_backup_job "$backup_job" || true
-  backed_up="true"
-  return 0
-}
-
-menu_spec_editor__set_jq() {
-  # Apply a jq transform to $file atomically.
-  local file dir base tmp err_file err_last
-  file="$1"
-  shift
-
-  if [[ -z "$file" || ! -f "$file" ]]; then
-    ui_warn "Cannot save: config file missing: ${file:-<empty>}"
-    return 1
-  fi
-
-  dir="$(dirname "$file")"
-  base="$(basename "$file")"
-  if [[ ! -w "$dir" ]]; then
-    ui_warn "Cannot save: no write permission for directory: $dir"
-    return 1
-  fi
-
-  tmp="$(mktemp "${dir}/.${base}.menu.XXXXXX" 2>/dev/null || mktemp)"
-  err_file="$(mktemp)"
-
-  if jq "$@" "$file" >"$tmp" 2>"$err_file"; then
-    if mv -f "$tmp" "$file"; then
-      chmod 600 "$file" 2>/dev/null || true
-      chown enshrouded:enshrouded "$file" 2>/dev/null || true
-      rm -f "$err_file" 2>/dev/null || true
-      return 0
-    fi
-    ui_warn "Cannot save: failed to replace file: $file"
-  else
-    err_last="$(awk 'NF{last=$0} END{print last}' "$err_file" 2>/dev/null || true)"
-    [[ -z "$err_last" ]] && err_last="jq update failed"
-    ui_warn "Cannot save: $err_last"
-  fi
-  rm -f "$tmp" 2>/dev/null || true
-  rm -f "$err_file" 2>/dev/null || true
-  return 1
-}
-
-menu_spec_editor__json_path_to_array_json() {
-  # Converts a restricted jq-style path (e.g. .a.b[0].c) to JSON array form.
-  # Supported segments: .name and [<index>].
-  local raw path rest key idx out first
-  raw="$1"
-  path="$(printf "%s" "$raw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-  [[ -n "$path" ]] || return 1
-  [[ "$path" == .* || "$path" == \[* ]] || return 1
-
-  rest="$path"
-  out="["
-  first=1
-
-  while [[ -n "$rest" ]]; do
-    if [[ "$rest" == .* ]]; then
-      rest="${rest#.}"
-    fi
-
-    if [[ "$rest" =~ ^([A-Za-z_][A-Za-z0-9_]*)(.*)$ ]]; then
-      key="${BASH_REMATCH[1]}"
-      rest="${BASH_REMATCH[2]}"
-      if [[ "$first" -eq 0 ]]; then
-        out+=","
-      fi
-      out+="\"$key\""
-      first=0
-    fi
-
-    while [[ "$rest" =~ ^\[([0-9]+)\](.*)$ ]]; do
-      idx="${BASH_REMATCH[1]}"
-      rest="${BASH_REMATCH[2]}"
-      if [[ "$first" -eq 0 ]]; then
-        out+=","
-      fi
-      out+="$idx"
-      first=0
-    done
-
-    if [[ -z "$rest" ]]; then
-      break
-    fi
-    if [[ "$rest" == .* ]]; then
-      continue
-    fi
-    return 1
-  done
-
-  out+="]"
-  printf "%s" "$out"
-}
-
-menu_spec_editor__set_path_with_jq() {
-  # Safe setter that avoids injecting the raw path into jq program text.
-  local file json_path path_array_json
-  file="$1"
-  json_path="$2"
-  shift 2
-
-  path_array_json="$(menu_spec_editor__json_path_to_array_json "$json_path" 2>/dev/null || true)"
-  if [[ -z "$path_array_json" ]]; then
-    ui_warn "Cannot save: unsupported JSON path mapping: ${json_path:-<empty>}"
-    return 1
-  fi
-
-  menu_spec_editor__set_jq "$file" --argjson p "$path_array_json" "$@" 'setpath($p; $val)'
-}
-
-menu_spec_editor__block_if_env_locked() {
-  # Returns 0 if editable, 1 if locked by external env override.
-  local env_var env_value env_mode
-  env_var="$1"
-
-  if ! menu_env_override_is_set "$env_var"; then
-    return 0
-  fi
-
-  env_mode="$(validation_env_mode "$env_var" 2>/dev/null || echo "soft")"
-  env_value="$(menu_env_override_value "$env_var")"
-  if [[ "$env_mode" == "hard" || "$env_mode" == "deferred" ]]; then
-    ui_warn "This setting is hard ENV-managed and cannot be edited here."
-    if [[ -n "$env_value" ]]; then
-      ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
-    else
-      ui_kv "ENV" "$env_var=<required hard env>"
-    fi
-    ui_info "Set it via container environment (e.g. docker run/docker compose), then restart container."
-  else
-    ui_warn "This setting is controlled by an environment variable and cannot be edited here."
-    ui_kv "ENV" "$env_var=$(menu_env_override_pretty_value "$env_var" "$env_value")"
-    ui_info "Remove it from your docker-compose/container environment to edit this value."
-  fi
-  ui_pause
-  return 1
-}
-
-menu_spec_editor__display_value_for_var() {
-  local file env_var json_path empty_label rule
-  file="$1"
-  env_var="$2"
-  json_path="$3"
-  empty_label="${4:-<empty>}"
-
-  if menu_env_override_is_set "$env_var"; then
-    local raw
-    raw="$(menu_env_lock_value_for_display "$file" "$env_var" "$json_path")"
-    if [[ -z "$raw" ]]; then
-      printf "%s" "${C_DIM}${empty_label}${C_RESET}"
-    else
-      printf "%s%s%s" "${C_RED}" "$raw" "${C_RESET}"
-    fi
-    return 0
-  fi
-
-  rule="$(validation_rule_json "$env_var" 2>/dev/null || true)"
-  if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
-    local csv
-    csv="$(menu_spec_editor__json_get_csv_list "$file" "$json_path")"
-    if [[ -z "$csv" ]]; then
-      printf "%s" "${C_DIM}${empty_label}${C_RESET}"
-    else
-      printf "%s%s%s" "${C_GREEN}" "$csv" "${C_RESET}"
-    fi
-    return 0
-  fi
-
-  local raw
-  raw="$(menu_spec_editor__json_get_scalar "$file" "$json_path")"
-  if [[ -z "$raw" ]]; then
-    printf "%s" "${C_DIM}${empty_label}${C_RESET}"
-  else
-    printf "%s%s%s" "${C_GREEN}" "$raw" "${C_RESET}"
-  fi
-}
-
-menu_spec_editor__description_for_var() {
-  local env_var desc hint out
-  env_var="$1"
-
-  desc="$(validation_env_description "$env_var" 2>/dev/null || true)"
-  hint="$(validation_env_allowed_hint "$env_var" 2>/dev/null || true)"
-
-  out=""
-  if [[ -n "$desc" ]]; then
-    out="$desc"
-  fi
-  if [[ -n "$hint" ]]; then
-    if [[ -n "$out" ]]; then
-      out="${out} | ${hint}"
-    else
-      out="$hint"
-    fi
-  fi
-
-  if [[ -z "$out" ]]; then
-    out="-"
-  fi
-
-  printf "%s" "$out"
-}
-
-menu_spec_editor__prompt_value_from_options() {
-  # Prompt as numeric choice over a fixed set of values.
-  local prompt choice selected_idx i
-  prompt="${1:-New value}"
-  shift || true
-  local -a options
-  options=("$@")
-
-  if [[ "${#options[@]}" -le 0 ]]; then
-    printf ""
-    return 0
-  fi
-
-  while :; do
-    for i in "${!options[@]}"; do
-      ui_opt "$((i + 1))" "${options[$i]}"
-    done
-    choice="$(ui_prompt_choice "$prompt")"
-    if [[ -z "$choice" ]]; then
-      printf ""
-      return 0
-    fi
-
-    selected_idx="$(menu_choice_index "$choice" "${#options[@]}" || true)"
-    if [[ -n "$selected_idx" ]]; then
-      printf "%s" "${options[$selected_idx]}"
-      return 0
-    fi
-
-    ui_warn "Invalid selection. Enter a number between 1 and ${#options[@]}."
-  done
-}
-
-menu_spec_editor__prompt_value() {
-  # Prompts for a new value. Prints the raw input to stdout.
-  local env_var label current empty_action bool_toggle
-  env_var="$1"
-  label="$2"
-  current="$3"
-  empty_action="${4:-cancel}"   # cancel|null|clear_list
-  bool_toggle="${5:-false}"
-
-  local type env_mode rule enum_count
-  type="$(validation_env_type "$env_var" 2>/dev/null || true)"
-  [[ -z "$type" ]] && type="string"
-  rule="$(validation_rule_json "$env_var" 2>/dev/null || true)"
-  enum_count="$(jq -r 'if (.val_enum|type) == "array" then (.val_enum|length) else 0 end' <<<"$rule" 2>/dev/null || echo "0")"
-  if ! [[ "$enum_count" =~ ^[0-9]+$ ]]; then
-    enum_count=0
-  fi
-
-  echo
-  ui_kv "Field" "$label"
-  ui_kv "Current" "${current:-<empty>}"
-
-  env_mode="$(validation_env_mode "$env_var" 2>/dev/null || echo "soft")"
-  if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
-    ui_info "Enter = toggle"
-  else
-    if [[ "$env_mode" == "hard" || "$env_mode" == "deferred" ]]; then
-      ui_info "Empty is not allowed"
-    else
-      case "$empty_action" in
-        null)
-          ui_info "Empty = null"
-          ;;
-        clear_list)
-          ui_info "Empty = clear"
-          ;;
-        *)
-          ui_info "Empty = cancel"
-          ;;
-      esac
-    fi
-  fi
-  echo
-
-  local value v
-  if [[ "$type" == "bool" ]]; then
-    value="$(menu_spec_editor__prompt_value_from_options "New value (1-2)" "true" "false")"
-  elif [[ "$enum_count" -gt 0 ]]; then
-    local -a enum_values
-    enum_values=()
-    while IFS= read -r v; do
-      enum_values+=("$v")
-    done < <(jq -r '.val_enum[] | tostring' <<<"$rule" 2>/dev/null || true)
-
-    value="$(menu_spec_editor__prompt_value_from_options "New value (1-${#enum_values[@]})" "${enum_values[@]}")"
-  else
-    value="$(ui_read "New value: ")"
-    value="$(echo "$value" | xargs)"
-  fi
-
-  printf "%s" "$value"
-}
-
-menu_spec_editor__edit_var() {
-  # Edit a single variable using validation rules and either meta mapping or explicit JSON path.
-  local file meta_field env_var json_path label empty_action backup_job bool_toggle explicit_json_path
-  file="$1"
-  meta_field="$2"
-  env_var="$3"
-  label="$4"
-  empty_action="${5:-cancel}"
-  backup_job="${6-}"
-  bool_toggle="${7:-false}"
-  explicit_json_path="${8-}"
-
-  if ! menu_spec_editor__block_if_env_locked "$env_var"; then
-    return 0
-  fi
-
-  if [[ -n "$explicit_json_path" ]]; then
-    json_path="$explicit_json_path"
-  else
-    json_path="$(validation_env_meta_field "$env_var" "$meta_field" 2>/dev/null || true)"
-  fi
-  if [[ -z "$json_path" ]]; then
-    ui_warn "No config mapping for: $env_var"
-    ui_pause
-    return 0
-  fi
-
-  local rule type current v
-  rule="$(validation_rule_json "$env_var" 2>/dev/null || true)"
-  type="$(validation_env_type "$env_var" 2>/dev/null || echo "string")"
-  [[ -z "$type" ]] && type="string"
-
-  if jq -e '(.val_list|type) == "object"' <<<"$rule" >/dev/null 2>&1; then
-    current="$(menu_spec_editor__json_get_csv_list "$file" "$json_path")"
-    v="$(menu_spec_editor__prompt_value "$env_var" "$label" "$current" "clear_list" "false")"
-    if [[ -z "$v" ]]; then
-      if ! validation_check "$env_var" ""; then
-        ui_warn "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
-        ui_pause
-        return 0
-      fi
-      menu_spec_editor__session_backup_if_needed "$backup_job" || true
-      if ! menu_spec_editor__set_path_with_jq "$file" "$json_path" --argjson val "[]"; then
-        ui_pause
-      fi
-      return 0
-    fi
-    if ! validation_check "$env_var" "$v"; then
-      ui_warn "${VALIDATION_LAST_ERROR:-Invalid value}"
-      ui_pause
-      return 0
-    fi
-    local list_json
-    list_json="$(jq -cn --arg csv "$v" '$csv | split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0))' 2>/dev/null || true)"
-    if [[ -z "$list_json" ]]; then
-      ui_warn "Cannot save: failed to convert list input"
-      ui_pause
-      return 0
-    fi
-    menu_spec_editor__session_backup_if_needed "$backup_job" || true
-    if ! menu_spec_editor__set_path_with_jq "$file" "$json_path" --argjson val "$list_json"; then
-      ui_pause
-    fi
-    return 0
-  fi
-
-  current="$(menu_spec_editor__json_get_scalar "$file" "$json_path")"
-
-  if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
-    [[ -z "$current" ]] && current="false"
-  fi
-
-  v="$(menu_spec_editor__prompt_value "$env_var" "$label" "$current" "$empty_action" "$bool_toggle")"
-  if [[ -z "$v" ]]; then
-    if [[ "$type" == "bool" && "$bool_toggle" == "true" ]]; then
-      if [[ "$current" == "true" ]]; then
-        v="false"
-      else
-        v="true"
-      fi
-    else
-      if [[ "$empty_action" == "null" ]]; then
-        if ! validation_check "$env_var" ""; then
-          ui_warn "${VALIDATION_LAST_ERROR:-Empty is not allowed}"
-          ui_pause
-          return 0
-        fi
-        menu_spec_editor__session_backup_if_needed "$backup_job" || true
-        if ! menu_spec_editor__set_path_with_jq "$file" "$json_path" --argjson val "null"; then
-          ui_pause
-        fi
-      fi
-      return 0
-    fi
-  fi
-
-  if ! validation_check "$env_var" "$v"; then
-    ui_warn "${VALIDATION_LAST_ERROR:-Invalid value}"
-    ui_pause
-    return 0
-  fi
-
-  local jq_arg
-  case "$type" in
-    bool|int|number) jq_arg="--argjson" ;;
-    *) jq_arg="--arg" ;;
-  esac
-
-  menu_spec_editor__session_backup_if_needed "$backup_job" || true
-  if ! menu_spec_editor__set_path_with_jq "$file" "$json_path" "$jq_arg" val "$v"; then
-    ui_pause
-  fi
-}
-
-menu_spec_editor__user_groups_edit_group() {
-  local file g template env_prefix backup_job empty_label
-  file="$1"
-  g="$2"
-  template="${3:-ENSHROUDED_ROLE}"
-  env_prefix="${4:-ENSHROUDED_ROLE}"
-  backup_job="${5:-manual:enshrouded}"
-  empty_label="${6:-<empty>}"
-
-  local base
-  base=".userGroups[$g]"
-
-  while :; do
-    if menu_nav_is_set; then
-      return 0
-    fi
-
-    local current_name
-    current_name="$(jq -r "$base.name | if . == null or . == \"\" then \"Group $g\" else . end" "$file" 2>/dev/null || echo "Group $g")"
-
-    ui_header "User Group: $current_name"
-    ui_info "Changes are written immediately."
-    ui_info "[ENV] = controlled by container environment (locked)"
-    echo
-
-    local field_count last_group field env_var json_key json_path group label
-    local -a fields
-    fields=()
-    field_count=0
-    last_group=""
-
-    while IFS= read -r field; do
-      [[ -z "$field" ]] && continue
-
-      env_var="${env_prefix}_${g}_${field}"
-      json_key="$(validation_snake_to_lower_camel "$field")"
-      json_path="${base}.${json_key}"
-      label="$json_key"
-
-      group="$(menu_editor_template_group_for_field "$template" "$field" 2>/dev/null || true)"
-      if [[ "$group" != "$last_group" ]]; then
-        [[ -n "$last_group" ]] && echo
-        echo "${C_DIM}== ${group:-Settings} ==${C_RESET}"
-        last_group="$group"
-      fi
-
-      fields+=("$field")
-      field_count=$((field_count + 1))
-
-      printf "%s[%s]%s %-22s %s%s  %s%s%s\n" \
-        "${C_MAGENTA}" "$field_count" "${C_RESET}" "$label" \
-        "$(menu_spec_editor__display_value_for_var "$file" "$env_var" "$json_path" "$empty_label")" \
-        "$(menu_env_locked_badge "$env_var")" \
-        "${C_DIM}" "$(menu_spec_editor__description_for_var "$env_var")" "${C_RESET}"
-    done < <(menu_editor_template_fields "$template")
-
-    if [[ "$field_count" -le 0 ]]; then
-      ui_warn "No role fields found in validation spec."
-      ui_pause
-      return 0
-    fi
-
-    echo
-    ui_actions_bar "b Back" "m Main" "x Exit"
-    echo
-
-    local choice selected_idx
-    choice="$(menu_prompt_nav_choice "Field")"
-    if menu_nav_choice_is_handled "$choice"; then
-      return 0
-    fi
-
-    selected_idx="$(menu_choice_index "$choice" "$field_count" || true)"
-    if [[ -z "$selected_idx" ]]; then
-      ui_warn "Invalid selection."
-      ui_pause
-      continue
-    fi
-
-    field="${fields[$selected_idx]}"
-    env_var="${env_prefix}_${g}_${field}"
-    json_key="$(validation_snake_to_lower_camel "$field")"
-    json_path="${base}.${json_key}"
-    label="$json_key"
-
-    local type empty_action bool_toggle
-    type="$(validation_env_type "$env_var" 2>/dev/null || echo "string")"
-    empty_action="cancel"
-    bool_toggle="false"
-    if [[ "$type" == "bool" ]]; then
-      bool_toggle="true"
-    fi
-    if [[ "$field" == "PASSWORD" ]]; then
-      empty_action="null"
-      bool_toggle="false"
-    fi
-
-    menu_spec_editor__edit_var "$file" "" "$env_var" "$label" "$empty_action" "$backup_job" "$bool_toggle" "$json_path" || true
-  done
-}
-
-menu_edit_user_groups_from_spec() {
-  # Spec-driven editor for `.userGroups` driven by `templates.ENSHROUDED_ROLE`.
-  # Args: <file> [template] [env_prefix] [backup_job] [empty_label]
-  local file template env_prefix backup_job empty_label
-  file="${1-}"
-  template="${2:-ENSHROUDED_ROLE}"
-  env_prefix="${3:-ENSHROUDED_ROLE}"
-  backup_job="${4:-manual:enshrouded}"
-  empty_label="${5:-<empty>}"
-
-  if [[ -z "$file" ]]; then
-    ui_warn "menu_edit_user_groups_from_spec: missing file"
-    ui_pause
-    return 1
-  fi
-
-  local choice count idx name
-  while :; do
-    if menu_nav_is_set; then
-      return 0
-    fi
-
-    ui_header "Edit User Groups"
-    ui_info "[ENV] = controlled by container environment (locked)"
-
-    count="$(jq -r '(.userGroups // []) | if type == "array" then length else 0 end' "$file" 2>/dev/null || echo 0)"
-    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
-      count=0
-    fi
-
-    if [[ "$count" -le 0 ]]; then
-      ui_warn "No userGroups found."
-      echo
-      ui_actions_bar "b Back" "m Main" "x Exit"
-      echo
-      choice="$(menu_prompt_nav_choice "Choice")"
-      if menu_nav_choice_is_handled "$choice"; then
-        return 0
-      fi
-      continue
-    fi
-
-    for idx in $(seq 0 $((count - 1))); do
-      name="$(jq -r ".userGroups[$idx].name | if . == null or . == \"\" then \"Group $idx\" else . end" "$file" 2>/dev/null || echo "Group $idx")"
-      printf "%s[%s]%s %s%s%s\n" \
-        "${C_MAGENTA}" "$((idx + 1))" "${C_RESET}" \
-        "${C_GREEN}" "$name" "${C_RESET}"
-    done
-
-    echo
-    ui_actions_bar "b Back" "m Main" "x Exit"
-    echo
-
-    choice="$(menu_prompt_nav_choice "Group")"
-    if menu_nav_choice_is_handled "$choice"; then
-      return 0
-    fi
-
-    local selected_idx
-    selected_idx="$(menu_choice_index "$choice" "$count" || true)"
-    if [[ -z "$selected_idx" ]]; then
-      ui_warn "Invalid selection."
-      ui_pause
-      continue
-    fi
-
-    local g
-    g="$selected_idx"
-
-    menu_spec_editor__user_groups_edit_group "$file" "$g" "$template" "$env_prefix" "$backup_job" "$empty_label" || true
-  done
-}
-
-menu_edit_json_from_spec() {
-  # Interactive spec-driven editor.
-  # Args:
-  #   1  title
-  #   2  file
-  #   3  meta_field
-  #   4  label_mode (var|path, default var)
-  #   5  label_strip_prefix
-  #   6  filter_prefix
-  #   7  backup_job
-  #   8  empty_action (cancel|null, default cancel)
-  #   9  bool_toggle (true|false, default false)
-  #   10 empty_label (default <empty>)
-  #   11+ extras as "token|label|group|callback_fn"
-  local title file meta_field label_mode label_strip_prefix filter_prefix backup_job empty_action bool_toggle empty_label
-  local extra packed token label group callback
-  title="${1-}"
-  file="${2-}"
-  meta_field="${3-}"
-  label_mode="${4:-var}"
-  label_strip_prefix="${5-}"
-  filter_prefix="${6-}"
-  backup_job="${7-}"
-  empty_action="${8:-cancel}"
-  bool_toggle="${9:-false}"
-  empty_label="${10:-<empty>}"
-  shift 10 2>/dev/null || true
-
-  local -a extra_tokens extra_labels extra_groups extra_callbacks
-  extra_tokens=()
-  extra_labels=()
-  extra_groups=()
-  extra_callbacks=()
-
-  for packed in "$@"; do
-    IFS='|' read -r token label group callback <<<"$packed"
-    [[ -n "$token" && -n "$label" && -n "$callback" ]] || continue
-    extra_tokens+=("$token")
-    extra_labels+=("$label")
-    extra_groups+=("$group")
-    extra_callbacks+=("$callback")
-  done
-
-  if [[ -z "$file" || -z "$meta_field" ]]; then
-    ui_warn "menu_edit_json_from_spec: missing file or meta field"
-    ui_pause
-    return 1
-  fi
-
-  while :; do
-    if menu_nav_is_set; then
-      return 0
-    fi
-
-    ui_header "${title:-Edit Settings}"
-    ui_kv "File" "$(menu_display_path "$file")"
-    ui_info "Changes are written immediately."
-    ui_info "[ENV] = controlled by container environment (locked)"
-    echo
-
-    local field_count last_group var json_path group label
-    local -a options
-    options=()
-    field_count=0
-    last_group=""
-
-    while IFS= read -r var; do
-      [[ -z "$var" ]] && continue
-      json_path="$(validation_env_meta_field "$var" "$meta_field" 2>/dev/null || true)"
-      [[ -z "$json_path" ]] && continue
-
-      if [[ -n "$filter_prefix" ]]; then
-        case "$json_path" in
-          "${filter_prefix}"*) ;;
-          *) continue ;;
-        esac
-      fi
-
-      group="$(menu_editor_group_for_env "$meta_field" "$var" 2>/dev/null || true)"
-      case "$label_mode" in
-        path)
-          label="$json_path"
-          if [[ -n "$label_strip_prefix" ]]; then
-            label="${label#${label_strip_prefix}}"
+        next_screen="$(jq -r '.next // empty' <<<"$option_json")"
+        if [[ -z "$next_screen" ]]; then
+          ui_error "Menu screen option has no next screen (screen=${current_screen}, option=${option_key})"
+          rc=1
+          if [[ "$MENU_ONCE" == "true" ]]; then
+            return "$rc"
           fi
-          label="${label#.}"
-          ;;
-        *)
-          label="$(menu_compact_env_label "$var")"
-          ;;
-      esac
-
-      if [[ "$group" != "$last_group" ]]; then
-        [[ -n "$last_group" ]] && echo
-        echo "${C_DIM}== ${group:-Settings} ==${C_RESET}"
-        last_group="$group"
-      fi
-
-      options+=("$var")
-      field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s%s  %s%s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$label" "$(menu_spec_editor__display_value_for_var "$file" "$var" "$json_path" "$empty_label")" "$(menu_env_locked_badge "$var")" "${C_DIM}" "$(menu_spec_editor__description_for_var "$var")" "${C_RESET}"
-    done < <(menu_editor_envs_for_meta_field "$meta_field")
-
-    local i token extra_label extra_group cb
-    for i in "${!extra_tokens[@]}"; do
-      token="${extra_tokens[$i]}"
-      extra_label="${extra_labels[$i]}"
-      extra_group="${extra_groups[$i]}"
-      cb="${extra_callbacks[$i]}"
-      [[ -z "$token" || -z "$extra_label" || -z "$cb" ]] && continue
-
-      if [[ "$extra_group" != "$last_group" ]]; then
-        [[ -n "$last_group" ]] && echo
-        echo "${C_DIM}== ${extra_group:-Settings} ==${C_RESET}"
-        last_group="$extra_group"
-      fi
-
-      options+=("$token")
-      field_count=$((field_count + 1))
-      printf "%s[%s]%s %-26s %s  %s%s%s\n" "${C_MAGENTA}" "$field_count" "${C_RESET}" "$extra_label" "${C_DIM}<enter>${C_RESET}" "${C_DIM}" "Open submenu." "${C_RESET}"
-    done
-
-    if [[ "$field_count" -le 0 ]]; then
-      ui_warn "No settings found in validation spec."
-      ui_pause
-      return 0
-    fi
-
-    echo
-    ui_actions_bar "b Back" "m Main" "x Exit"
-    echo
-
-    local choice selected_idx
-    choice="$(menu_prompt_nav_choice "Choice")"
-    if menu_nav_choice_is_handled "$choice"; then
-      return 0
-    fi
-
-    selected_idx="$(menu_choice_index "$choice" "$field_count" || true)"
-    if [[ -z "$selected_idx" ]]; then
-      ui_warn "Invalid selection."
-      ui_pause
-      continue
-    fi
-
-    local selected
-    selected="${options[$selected_idx]}"
-
-    # Extra entry?
-    cb=""
-    for i in "${!extra_tokens[@]}"; do
-      if [[ "${extra_tokens[$i]}" == "$selected" ]]; then
-        cb="${extra_callbacks[$i]}"
-        break
-      fi
-    done
-
-    if [[ -n "$cb" ]]; then
-      "$cb" "$file" || true
-      continue
-    fi
-
-    # Spec var.
-    json_path="$(validation_env_meta_field "$selected" "$meta_field" 2>/dev/null || true)"
-    case "$label_mode" in
-      path)
-        label="$json_path"
-        if [[ -n "$label_strip_prefix" ]]; then
-          label="${label#${label_strip_prefix}}"
-        fi
-        label="${label#.}"
-        ;;
-      *)
-        label="$selected"
-        ;;
-    esac
-    menu_spec_editor__edit_var "$file" "$meta_field" "$selected" "$label" "$empty_action" "$backup_job" "$bool_toggle" || true
-  done
-}
-
-
-# --- inlined menu module: enshrouded ---
-enshrouded_config_path() {
-  printf "%s/enshrouded_server.json" "$install_path"
-}
-
-enshrouded_editor_jq_ok() {
-  local file
-  file="$1"
-  jq -e 'type == "object"' "$file" >/dev/null 2>&1
-}
-
-enshrouded_editor_game_settings_menu() {
-  local file
-  file="$1"
-  menu_edit_json_from_spec \
-    "Edit Game Settings" \
-    "$file" \
-    "enshroudedJsonPath" \
-    "path" \
-    ".gameSettings." \
-    ".gameSettings." \
-    "manual:enshrouded" \
-    "cancel" \
-    "false" \
-    "<empty>"
-}
-
-enshrouded_editor_user_groups_menu() {
-  local file
-  file="$1"
-  menu_edit_user_groups_from_spec \
-    "$file" \
-    "ENSHROUDED_ROLE" \
-    "ENSHROUDED_ROLE" \
-    "manual:enshrouded" \
-    "<empty>"
-}
-
-menu_enshrouded_bans_entries_tsv() {
-  local file
-  file="$1"
-  jq -r '
-    def arr($v): if ($v | type) == "array" then $v else [] end;
-    def same_ban($a; $b):
-      if (($a|type) == "object" and ($b|type) == "object" and ($a|has("accountId")) and ($b|has("accountId"))) then
-        (($a.accountId | tostring) == ($b.accountId | tostring))
-      else
-        ($a == $b)
-      end;
-    def display_label($i):
-      if ($i | type) == "object" then
-        if (($i.displayName // "") | tostring) != "" then ($i.displayName | tostring)
-        elif (($i.characterName // "") | tostring) != "" then ($i.characterName | tostring)
-        elif $i.accountId != null then ("Account " + ($i.accountId | tostring))
-        else "<unknown>"
-        end
-      else
-        ($i | tostring)
-      end;
-    def account_id($i):
-      if ($i | type) == "object" and $i.accountId != null then ($i.accountId | tostring) else "" end;
-    def character_name($i):
-      if ($i | type) == "object" then (($i.characterName // "") | tostring) else "" end;
-    def ban_ts($i):
-      if ($i | type) == "object" and ($i.banDate | type) == "object" and $i.banDate.value != null then ($i.banDate.value | tostring)
-      elif ($i | type) == "object" and $i.banDate != null then ($i.banDate | tostring)
-      else ""
-      end;
-
-    (arr(.bannedAccounts) + arr(.bans))
-    | reduce .[] as $item ([]; if any(.[]; same_ban(.; $item)) then . else . + [$item] end)
-    | to_entries[]
-    | [(.key + 1), display_label(.value), account_id(.value), character_name(.value), ban_ts(.value), (.value | tojson)]
-    | @tsv
-  ' "$file" 2>/dev/null || true
-}
-
-menu_manage_enshrouded_bans() {
-  local config_file backed_up choice selected_idx
-  local idx label account_id character_name ban_ts selected_json selected_label
-  local -a ban_json ban_labels
-
-  config_file="$(enshrouded_config_path)"
-  backed_up="false"
-
-  if [[ ! -f "$config_file" ]]; then
-    ui_warn "enshrouded_server.json is missing. Creating from profile..."
-    ensure_enshrouded_config_from_profile || true
-  fi
-
-  if [[ ! -f "$config_file" ]] || ! enshrouded_editor_jq_ok "$config_file"; then
-    ui_error "Invalid or missing config: $config_file"
-    ui_pause
-    return 1
-  fi
-
-  if ! menu_stop_server_for_config_change "manage banned accounts"; then
-    return 0
-  fi
-
-  while :; do
-    if menu_nav_is_set; then
-      return 0
-    fi
-
-    ui_header "Manage Banned Accounts"
-    ui_kv "File" "$(menu_display_path "$config_file")"
-    ui_info "Bans are preserved across profile apply/reset."
-    ui_info "Select an entry to remove the ban."
-    echo
-
-    ban_json=()
-    ban_labels=()
-
-    while IFS=$'\t' read -r idx label account_id character_name ban_ts selected_json; do
-      [[ -z "$idx" ]] && continue
-      ban_json+=("$selected_json")
-
-      selected_label="$label"
-      [[ -n "$account_id" ]] && selected_label="${selected_label} (ID: $account_id)"
-      if [[ -n "$character_name" && "$character_name" != "$label" ]]; then
-        selected_label="${selected_label}, Character: $character_name"
-      fi
-      [[ -n "$ban_ts" ]] && selected_label="${selected_label}, BanDate: $ban_ts"
-
-      ban_labels+=("$selected_label")
-      ui_opt "$idx" "$selected_label"
-    done < <(menu_enshrouded_bans_entries_tsv "$config_file")
-
-    if [[ "${#ban_json[@]}" -eq 0 ]]; then
-      ui_info "No banned accounts found."
-      echo
-      ui_actions_bar "b Back" "m Main" "x Exit"
-      echo
-      choice="$(menu_prompt_nav_choice "Choice")"
-      if menu_nav_choice_is_handled "$choice"; then
-        return 0
-      fi
-      ui_warn "Invalid selection."
-      ui_pause
-      continue
-    fi
-
-    echo
-    ui_actions_bar "b Back" "m Main" "x Exit"
-    echo
-
-    choice="$(menu_prompt_nav_choice "Ban")"
-    if menu_nav_choice_is_handled "$choice"; then
-      return 0
-    fi
-
-    selected_idx="$(menu_choice_index "$choice" "${#ban_json[@]}" || true)"
-    if [[ -z "$selected_idx" ]]; then
-      ui_warn "Invalid selection."
-      ui_pause
-      continue
-    fi
-
-    selected_json="${ban_json[$selected_idx]}"
-    selected_label="${ban_labels[$selected_idx]}"
-
-    ui_warn "This will remove the selected account from the ban list."
-    ui_kv "Selected" "$selected_label"
-    echo
-    if ! ui_confirm_yes_no "Unban this account now?"; then
-      ui_info "Cancelled."
-      ui_pause
-      continue
-    fi
-
-    menu_spec_editor__session_backup_if_needed "manual:enshrouded" || true
-    if ! menu_spec_editor__set_jq "$config_file" --argjson selected "$selected_json" '
-      def arr($v): if ($v | type) == "array" then $v else [] end;
-      def same_ban($a; $b):
-        if (($a|type) == "object" and ($b|type) == "object" and ($a|has("accountId")) and ($b|has("accountId"))) then
-          (($a.accountId | tostring) == ($b.accountId | tostring))
-        else
-          ($a == $b)
-        end;
-      def remove_all($a; $selected):
-        [ $a[] | select((same_ban(.; $selected) | not)) ];
-
-      .bannedAccounts = remove_all(arr(.bannedAccounts); $selected)
-      | .bans = remove_all(arr(.bans); $selected)
-    '; then
-      ui_warn "Failed to update ban list."
-      ui_pause
-      continue
-    fi
-
-    ui_success "Ban removed."
-    ui_pause
-  done
-}
-
-editor_enshrouded_json() {
-  local config_file backed_up
-  config_file="$(enshrouded_config_path)"
-  backed_up="false"
-
-  if [[ ! -f "$config_file" ]]; then
-    ui_warn "enshrouded_server.json is missing. Creating from profile..."
-    ensure_enshrouded_config_from_profile || true
-  fi
-
-  if [[ ! -f "$config_file" ]] || ! enshrouded_editor_jq_ok "$config_file"; then
-    ui_error "Invalid or missing config: $config_file"
-    ui_pause
-    return 1
-  fi
-
-  if ! menu_stop_server_for_config_change "edit Enshrouded settings"; then
-    return 0
-  fi
-
-  menu_edit_json_from_spec \
-    "Edit Enshrouded Settings" \
-    "$config_file" \
-    "enshroudedMenuJsonPath" \
-    "path" \
-    "" \
-    "" \
-    "manual:enshrouded" \
-    "cancel" \
-    "true" \
-    "<empty>" \
-    "__submenu_game_settings|gameSettings (submenu)|Game|enshrouded_editor_game_settings_menu" \
-    "__submenu_user_groups|userGroups (submenu)|Access|enshrouded_editor_user_groups_menu"
-}
-
-menu_profile_actions_after_change() {
-  local action_choice
-  echo
-  ui_info "Apply changes:"
-  ui_opt 1 "Bootstrap + start Enshrouded server"
-  echo
-  ui_actions_bar "b Back" "m Main" "x Exit"
-  echo
-
-  action_choice="$(menu_prompt_nav_choice "Action")"
-  if menu_nav_choice_is_handled "$action_choice"; then
-    return 0
-  fi
-
-  case "$action_choice" in
-    1)
-      menu_start_server_via_bootstrap || true
-      ui_pause
-      ;;
-    b) ;;
-    *) ;;
-  esac
-}
-
-menu_run_profile_job() {
-  local target action profile output
-  local -a cmd_args
-  target="$1"
-  action="$2"
-  profile="$3"
-  MENU_LAST_JOB_ERROR=""
-  cmd_args=(profile "$target" "$action")
-  [[ -n "$profile" ]] && cmd_args+=("$profile")
-  if output="$(server_run "${cmd_args[@]}" 2>&1)"; then
-    return 0
-  fi
-  MENU_LAST_JOB_ERROR="$output"
-  return 1
-}
-
-menu_show_last_job_error() {
-  local line
-  [[ -n "${MENU_LAST_JOB_ERROR:-}" ]] || return 0
-  line="$(printf "%s\n" "$MENU_LAST_JOB_ERROR" | awk 'NF{last=$0} END{print last}')"
-  [[ -n "$line" ]] || line="$MENU_LAST_JOB_ERROR"
-  [[ -n "$line" ]] && ui_warn "$line"
-}
-
-menu_profile_selector_env_name() {
-  case "$1" in
-    enshrouded) printf "%s" "EN_PROFILE" ;;
-    manager) printf "%s" "MANAGER_PROFILE" ;;
-    *) printf "%s" "" ;;
-  esac
-}
-
-menu_profile_flow_blocked_by_env() {
-  local target mode selector_env selector_value
-  target="$1"
-  mode="${2:-apply}"
-  selector_env="$(menu_profile_selector_env_name "$target")"
-  [[ -n "$selector_env" ]] || return 1
-  if ! menu_env_override_is_set "$selector_env"; then
-    return 1
-  fi
-
-  selector_value="$(menu_env_override_value "$selector_env")"
-  ui_header "Profile Selection Locked by ENV"
-  ui_warn "This profile flow is controlled by environment variables."
-  if [[ -n "$selector_value" ]]; then
-    ui_kv "ENV" "$selector_env=$(menu_env_override_pretty_value "$selector_env" "$selector_value") ${C_RED}[ENV]${C_RESET}"
-  else
-    ui_kv "ENV" "$selector_env=<set> ${C_RED}[ENV]${C_RESET}"
-  fi
-  ui_info "Action '${mode}' is disabled in menu while this ENV selector is set."
-  ui_info "Remove it from docker-compose/container env and restart container to manage profiles in menu."
-  ui_pause
-  return 0
-}
-
-menu_profile_flow() {
-  local target mode label config_file profiles_dir profile_count idx selected profile
-  local -a profiles
-  target="$1"
-  mode="${2:-apply}"
-
-  case "$target" in
-    enshrouded)
-      label="Enshrouded"
-      config_file="$(enshrouded_config_path)"
-      if [[ "$mode" == "apply" ]]; then
-        profiles_dir="$EN_PROFILE_DIR"
-        mapfile -t profiles < <(profiles_list_enshrouded | sort)
-      else
-        profile="$(enshrouded_profile_resolve)"
-      fi
-      ;;
-    manager)
-      label="Server Manager"
-      config_file="$(manager_config_path)"
-      if [[ "$mode" == "apply" ]]; then
-        profiles_dir="$MANAGER_PROFILE_DIR"
-        mapfile -t profiles < <(profiles_list_manager | sort)
-      else
-        profile="$(manager_profile_resolve)"
-      fi
-      ;;
-    *)
-      ui_fatal "Unknown profile target: $target"
-      ;;
-  esac
-
-  if menu_profile_flow_blocked_by_env "$target" "$mode"; then
-    return 0
-  fi
-
-  case "$mode" in
-    apply)
-      if ! menu_warn_env_overrides_before_profile_selection "$target"; then
-        return 1
-      fi
-
-      profile_count="${#profiles[@]}"
-      if [[ "$profile_count" -eq 0 ]]; then
-        ui_error "No ${label} profiles found in: $profiles_dir"
-        ui_pause
-        return 1
-      fi
-
-      while :; do
-        if menu_nav_is_set; then
-          return 0
-        fi
-        ui_header "Select ${label} Profile"
-        ui_kv "Profiles Folder" "$profiles_dir"
-        echo
-        idx=1
-        for p in "${profiles[@]}"; do
-          printf "%s[%s]%s %s%s%s\n" "${C_MAGENTA}" "$idx" "${C_RESET}" "${C_GREEN}" "$p" "${C_RESET}"
-          idx=$((idx + 1))
-        done
-        echo
-        ui_actions_bar "b Back" "m Main" "x Exit"
-        echo
-
-        selected="$(menu_prompt_nav_choice "Profile")"
-        if menu_nav_choice_is_handled "$selected"; then
-          return 0
-        fi
-
-        local selected_idx
-        selected_idx="$(menu_choice_index "$selected" "$profile_count" || true)"
-        if [[ -z "$selected_idx" ]]; then
-          ui_warn "Invalid selection."
           ui_pause
           continue
         fi
-
-        profile="${profiles[$selected_idx]}"
-
-        if is_supervisor_running "server" || [[ -f "$config_file" ]]; then
-          ui_warn "This will replace the active ${label} config with the selected profile."
-          ui_warn "All players will be disconnected."
-          echo
-          ui_kv "Selected Profile" "$profile"
-          ui_kv "Target File" "$(menu_display_path "$config_file")"
-          echo
-          if ! ui_confirm_yes_no "Stop server (if running) and apply this profile now?"; then
-            ui_info "Cancelled."
-            ui_pause
-            continue
+        if ! menu_screen_exists "$next_screen"; then
+          ui_error "Menu target screen not found: ${next_screen}"
+          rc=1
+          if [[ "$MENU_ONCE" == "true" ]]; then
+            return "$rc"
           fi
-        fi
-
-        if ! menu_run_profile_job "$target" "apply" "$profile"; then
-          ui_warn "Failed to apply profile."
-          menu_show_last_job_error
-          ui_info "Check: server status"
           ui_pause
           continue
         fi
-
-        ui_success "${label} profile applied: $profile"
-        menu_profile_actions_after_change
+        current_screen="$next_screen"
+        ;;
+      exit)
+        ui_info "Leaving menu."
         return 0
-      done
-      ;;
-
-    reset)
-      ui_header "Reset ${label} Profile"
-      ui_warn "This resets $(basename "$config_file") from the currently selected profile."
-      ui_warn "All players will be disconnected."
-      echo
-      ui_kv "Profile" "$profile"
-      ui_kv "Target File" "$(menu_display_path "$config_file")"
-      echo
-
-      if ! ui_confirm_yes_no "Stop server (if running) and reset now?"; then
-        ui_info "Cancelled."
+        ;;
+      *)
+        ui_error "Unsupported menu option type: ${option_type}"
+        rc=1
+        if [[ "$MENU_ONCE" == "true" ]]; then
+          return "$rc"
+        fi
         ui_pause
-        return 0
-      fi
-
-      if ! menu_run_profile_job "$target" "reset" "$profile"; then
-        ui_warn "Failed to reset profile."
-        menu_show_last_job_error
-        ui_info "Check: server status"
-        ui_pause
-        return 1
-      fi
-
-      ui_success "${label} profile reset completed: $profile"
-      menu_profile_actions_after_change
-      return 0
-      ;;
-    *)
-      ui_fatal "Unknown profile mode: $mode"
-      ;;
-  esac
-}
-
-# --- inlined menu module: manager ---
-editor_manager_json() {
-  local config_file backed_up
-  config_file="$(manager_config_path)"
-  backed_up="false"
-
-  if [[ ! -f "$config_file" ]] || ! jq -e 'type == "object"' "$config_file" >/dev/null 2>&1; then
-    ui_warn "server_manager.json is missing or invalid. Initializing..."
-    update_or_create_manager_config || true
-  fi
-
-  if [[ ! -f "$config_file" ]]; then
-    ui_error "Could not find server_manager.json: $config_file"
-    ui_pause
-    return 1
-  fi
-
-  if ! menu_stop_server_for_config_change "edit Server Manager settings"; then
-    return 0
-  fi
-
-  menu_edit_json_from_spec \
-    "Edit Server Manager Settings" \
-    "$config_file" \
-    "managerJsonPath" \
-    "var" \
-    "" \
-    "" \
-    "manual:manager" \
-    "null" \
-    "false" \
-    "<null>"
-}
-
-
-MENU_NAV=""
-MENU_POST_HOOK_RAN="false"
-
-menu_run_post_hook_once() {
-  if [[ "$MENU_POST_HOOK_RAN" == "true" ]]; then
-    return 0
-  fi
-  MENU_POST_HOOK_RAN="true"
-  if [[ -n "${MENU_SPEC_TMP_FILE:-}" ]]; then
-    rm -f "$MENU_SPEC_TMP_FILE" 2>/dev/null || true
-    MENU_SPEC_TMP_FILE=""
-  fi
-  server_run hook-run "menu post" "${MENU_POST_HOOK:-}"
-}
-
-menu_execute_action_by_type() {
-  local action_name action_json action_type
-  local requires_running confirm_raw confirm_message
-  local command_name fn
-  local -a internal_args command_args
-
-  action_name="$1"
-  action_json="$2"
-
-  action_type="$(jq -r '.type // empty' <<<"$action_json" 2>/dev/null || true)"
-  if [[ -z "$action_type" || "$action_type" == "null" ]]; then
-    ui_warn "Action '${action_name}' has no valid type."
-    ui_pause
-    return 1
-  fi
-
-  requires_running="$(jq -r '(.requiresRunning // false) | tostring' <<<"$action_json" 2>/dev/null || echo "false")"
-  if [[ "$requires_running" == "true" ]] && ! is_supervisor_running "server"; then
-    ui_warn "Action '${action_name}' requires the server to be running."
-    ui_pause
-    return 1
-  fi
-
-  confirm_raw="$(jq -r '
-    if has("confirm") then
-      if (.confirm | type) == "boolean" then
-        (if .confirm then "true" else "false" end)
-      elif (.confirm | type) == "string" then
-        .confirm
-      else
-        "false"
-      end
-    else
-      "false"
-    end
-  ' <<<"$action_json" 2>/dev/null || echo "false")"
-
-  confirm_message=""
-  if [[ "$confirm_raw" == "true" ]]; then
-    confirm_message="Execute action '${action_name}'?"
-  elif [[ "$confirm_raw" != "false" && -n "$confirm_raw" ]]; then
-    confirm_message="$confirm_raw"
-  fi
-
-  if [[ -n "$confirm_message" ]]; then
-    if ! ui_confirm_yes_no "$confirm_message"; then
-      ui_info "Cancelled."
-      ui_pause
-      return 0
-    fi
-  fi
-
-  case "$action_type" in
-    server)
-      command_name="$(jq -r '.command // empty' <<<"$action_json" 2>/dev/null || true)"
-      if [[ -z "$command_name" || "$command_name" == "null" ]]; then
-        ui_warn "Action '${action_name}' is missing command."
-        ui_pause
-        return 1
-      fi
-
-      mapfile -t command_args < <(jq -r 'if (.args | type) == "array" then .args[] | tostring else empty end' <<<"$action_json" 2>/dev/null || true)
-      ui_hr
-      case "$command_name" in
-        start)
-          ui_info "Running: bootstrap + start"
-          echo
-          menu_start_server_via_bootstrap || true
-          ;;
-        restart)
-          if is_supervisor_running "server"; then
-            ui_info "Running: server restart"
-            echo
-            server_run restart "${command_args[@]}" || true
-          else
-            ui_info "Server is STOPPED. Running: bootstrap + start"
-            echo
-            menu_start_server_via_bootstrap || true
-          fi
-          ;;
-        *)
-          if [[ "${#command_args[@]}" -gt 0 ]]; then
-            ui_info "Running: server $command_name ${command_args[*]}"
-          else
-            ui_info "Running: server $command_name"
-          fi
-          echo
-          server_run "$command_name" "${command_args[@]}" || true
-          ;;
-      esac
-      echo
-      ui_pause
-      ;;
-
-    internal)
-      fn="$(jq -r '.fn // empty' <<<"$action_json" 2>/dev/null || true)"
-      if [[ -z "$fn" || "$fn" == "null" ]]; then
-        ui_warn "Action '${action_name}' is missing 'fn'."
-        ui_pause
-        return 1
-      fi
-
-      if ! [[ "$fn" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-        ui_warn "Invalid internal function name in action '${action_name}': $fn"
-        ui_pause
-        return 1
-      fi
-
-      if ! declare -F "$fn" >/dev/null 2>&1; then
-        ui_warn "Internal function not found for action '${action_name}': $fn"
-        ui_pause
-        return 1
-      fi
-
-      mapfile -t internal_args < <(jq -r 'if (.args | type) == "array" then .args[] | tostring else empty end' <<<"$action_json" 2>/dev/null || true)
-      "$fn" "${internal_args[@]}"
-      ;;
-
-    *)
-      ui_warn "Unknown action type '${action_type}' for action '${action_name}'."
-      ui_pause
-      return 1
-      ;;
-  esac
-
-  return 0
-}
-
-menu_dispatch_action() {
-  local action_name action_json
-  action_name="$1"
-
-  if ! menu_spec_ready; then
-    ui_fatal "Menu specification unavailable: ${MENU_SPEC_FILE}"
-  fi
-
-  action_json="$(menu_spec_query -c --arg action "$action_name" '.actions[$action] // empty' || true)"
-  if [[ -z "$action_json" || "$action_json" == "null" ]]; then
-    ui_warn "Unknown menu action: ${action_name}"
-    ui_pause
-    return 1
-  fi
-
-  menu_execute_action_by_type "$action_name" "$action_json"
-}
-
-menu_load_screen() {
-  local screen title choice action main_screen
-  local key label action_id nav_value
-  local -a entries
-
-  screen="$1"
-  title="${2:-}"
-  if [[ -z "$title" ]]; then
-    if [[ "$screen" == "main" ]]; then
-      title="Main Menu"
-    else
-      title="$screen"
-    fi
-  fi
-
-  if ! menu_spec_ready; then
-    ui_fatal "Menu specification unavailable: ${MENU_SPEC_FILE}"
-  fi
-
-  if [[ "$screen" == "main" ]]; then
-    main_screen="true"
-  else
-    main_screen="false"
-  fi
-
-  while :; do
-    if menu_nav_is_set; then
-      nav_value="$(menu_nav_value)"
-      case "$nav_value" in
-        main)
-          if [[ "$screen" == "main" ]]; then
-            menu_nav_clear
-          else
-            return 0
-          fi
-          ;;
-        exit)
-          return 0
-          ;;
-      esac
-    fi
-
-    mapfile -t entries < <(menu_spec_query --arg screen "$screen" '
-      (.screens[$screen] // [])
-      | map(select((.key // "") != "" and (.action // "") != ""))
-      | .[]
-      | "\(.key)|\((.title // .label // .action))|\(.action)"
-    ' || true)
-
-    if [[ "${#entries[@]}" -eq 0 ]]; then
-      ui_fatal "Menu screen '${screen}' missing or empty in ${MENU_SPEC_FILE}"
-    fi
-
-    ui_header "$title" "$main_screen"
-    for action in "${entries[@]}"; do
-      IFS='|' read -r key label action_id <<<"$action"
-      [[ -z "$key" || -z "$action_id" ]] && continue
-      ui_opt "$key" "$label"
-    done
-    echo
-
-    if [[ "$screen" == "main" ]]; then
-      ui_actions_bar "x Exit"
-    else
-      ui_actions_bar "b Back" "m Main" "x Exit"
-    fi
-    echo
-
-    choice="$(menu_prompt_nav_choice "Choice" "$main_screen")"
-    if menu_nav_choice_is_handled "$choice"; then
-      return 0
-    fi
-
-    action_id=""
-    for action in "${entries[@]}"; do
-      IFS='|' read -r key label action_id <<<"$action"
-      [[ -z "$key" || -z "$action_id" ]] && continue
-      if [[ "$key" == "$choice" ]]; then
-        break
-      fi
-      action_id=""
-    done
-
-    if [[ -z "$action_id" ]]; then
-      ui_warn "Invalid selection."
-      ui_pause
-      continue
-    fi
-
-    menu_dispatch_action "$action_id" || true
-    if [[ "$MENU_ONCE" == "true" ]]; then
-      return 0
-    fi
+        ;;
+    esac
   done
 }
 
 main() {
-  parse_args "$@"
-  info "Running interactive menu (start_screen=${MENU_START_SCREEN}, once=${MENU_ONCE})"
-  menu_capture_external_env_overrides
-  init_runtime_env
-
-  if ! menu_spec_init; then
-    ui_fatal "Menu specification unavailable: ${MENU_SPEC_CSV_FILE}"
-  fi
-
-  trap menu_run_post_hook_once EXIT
-  server_run hook-run "menu pre" "${MENU_PRE_HOOK:-}"
-  if [[ "$MENU_START_SCREEN" == "main" ]]; then
-    menu_load_screen "$MENU_START_SCREEN" "Main Menu"
-  else
-    menu_load_screen "$MENU_START_SCREEN"
-  fi
-
-  case "${MENU_NAV:-}" in
-    exit)
-      # On exit, offer to start the server if it is currently stopped.
-      if ! is_supervisor_running "server"; then
-        ui_clear
-        ui_banner
-        ui_warn "The Enshrouded server is currently STOPPED."
-        echo
-        menu_prompt_start_server "Do you want me to start server before exiting?"
-      fi
+  case "${1-}" in
+    --help|-h|help)
+      usage
+      exit 0
+      ;;
+    "")
+      ;;
+    *)
+      fatal "menu job does not accept arguments"
       ;;
   esac
 
-  menu_run_post_hook_once
-  success "Interactive menu complete (nav=${MENU_NAV:-unknown})"
+  require_file "$MENU_CONFIG_FILE"
+  require_command jq
+  require_file "$MENU_UI_SCRIPT"
+  require_file "$STARTUP_BANNER_SCRIPT"
+
+  # shellcheck disable=SC1090
+  . "$MENU_UI_SCRIPT"
+
+  menu_validate_config
+  info "Running menu job orchestrator"
+  menu_loop
 }
 
 main "$@"
-

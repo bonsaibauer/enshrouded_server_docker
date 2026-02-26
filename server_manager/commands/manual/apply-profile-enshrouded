@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+CORE_PROFILE_JOB="${CORE_PROFILE_JOB:-${SCRIPT_DIR}/../../jobs_core/profile}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  apply-profile-enshrouded --profile <name> [--create-backup true|false]
+  apply-profile-enshrouded <name> [--create-backup true|false]
+EOF
+}
+
+parse_bool() {
+  case "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" in
+    true|false) echo "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" ;;
+    *) echo "" ;;
+  esac
+}
+
+main() {
+  local profile_name create_backup parsed_bool
+  profile_name=""
+  create_backup=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --profile)
+        profile_name="${2-}"
+        [[ -n "$profile_name" ]] || {
+          echo "Missing value for --profile" >&2
+          exit 1
+        }
+        shift 2
+        ;;
+      --create-backup)
+        parsed_bool="$(parse_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || {
+          echo "Invalid value for --create-backup (expected true|false)" >&2
+          exit 1
+        }
+        create_backup="$parsed_bool"
+        shift 2
+        ;;
+      --help|-h|help)
+        usage
+        exit 0
+        ;;
+      *)
+        if [[ -z "$profile_name" ]]; then
+          profile_name="$1"
+          shift
+        else
+          echo "Unknown argument: $1" >&2
+          usage >&2
+          exit 1
+        fi
+        ;;
+    esac
+  done
+
+  [[ -n "$profile_name" ]] || {
+    usage >&2
+    exit 1
+  }
+
+  [[ -x "$CORE_PROFILE_JOB" ]] || {
+    echo "Profile job is not executable: $CORE_PROFILE_JOB" >&2
+    exit 1
+  }
+
+  if [[ -n "$create_backup" ]]; then
+    "$CORE_PROFILE_JOB" --target enshrouded --action apply --profile "$profile_name" --create-backup "$create_backup"
+    exit $?
+  fi
+
+  "$CORE_PROFILE_JOB" --target enshrouded --action apply --profile "$profile_name"
+}
+
+main "$@"
+
+

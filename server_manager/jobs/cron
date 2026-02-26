@@ -1,72 +1,32 @@
-#!/bin/bash
-SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
-# shellcheck source=server_manager/jobs/env-validation
-. "${SCRIPT_DIR}/env-validation"
+#!/usr/bin/env bash
 
-update_cron="${UPDATE_CRON:-}"
-backup_cron="${BACKUP_CRON:-}"
-restart_cron="${RESTART_CRON:-}"
-service_action=""
-runtime_ready="false"
-SERVER_JOB_BIN="${SERVER_JOB_BIN:-${SCRIPT_DIR}/server}"
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/lib/log
+. "${SCRIPT_DIR}/../lib/log"
+# shellcheck source=server_manager/jobs_core/profile
+. "${SCRIPT_DIR}/../jobs_core/profile"
+
+COMMAND_ROOT="${COMMAND_ROOT:-${SCRIPT_DIR}/../commands}"
+CRON_EXEC_ACTION="${CRON_EXEC_ACTION:-sync}"
+
+JOB_UPDATE_BIN="${JOB_UPDATE_BIN:-/usr/local/etc/enshrouded/jobs/update}"
+JOB_BACKUP_BIN="${JOB_BACKUP_BIN:-/usr/local/etc/enshrouded/jobs/backup}"
+JOB_RESTART_BIN="${JOB_RESTART_BIN:-/usr/local/etc/enshrouded/jobs/restart}"
 
 usage() {
   cat <<'EOF'
 Usage:
-  cron [sync] [--update-cron "<expr>"] [--backup-cron "<expr>"] [--restart-cron "<expr>"]
-  cron <start|stop|restart|status>
-  cron [--sync] [--runtime-ready] [--update-cron "<expr>"] [--backup-cron "<expr>"] [--restart-cron "<expr>"]
-  cron --service <start|stop|restart|status>
+  cron
+
+Configuration via ENV:
+  CRON_EXEC_ACTION=sync|start|stop|restart|status
 EOF
 }
 
-parse_args() {
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      sync)
-        shift
-        ;;
-      start|stop|restart|status)
-        service_action="$1"
-        shift
-        ;;
-      help)
-        usage
-        exit 0
-        ;;
-      --sync)
-        shift
-        ;;
-      --runtime-ready|runtime-ready)
-        runtime_ready="true"
-        shift
-        ;;
-      --service)
-        service_action="${2-}"
-        [[ -n "$service_action" ]] || fatal "Missing value for --service"
-        shift 2
-        ;;
-      --update-cron)
-        update_cron="${2-}"
-        shift 2
-        ;;
-      --backup-cron)
-        backup_cron="${2-}"
-        shift 2
-        ;;
-      --restart-cron)
-        restart_cron="${2-}"
-        shift 2
-        ;;
-      --help|-h)
-        usage
-        exit 0
-        ;;
-      *)
-        fatal "Unknown argument: $1"
-        ;;
-    esac
-  done
+require_executable() {
+  local file
+  file="$1"
+  [[ -x "$file" ]] || fatal "Command is not executable: $file"
 }
 
 cron_append() {
@@ -77,22 +37,29 @@ cron_append() {
   label="$4"
 
   [[ -n "$schedule" ]] || return 0
-  info "creating cron for ${label} (schedule: $schedule)"
+  info "Adding cron entry for ${label}: ${schedule}"
   printf "%s %s >/dev/null 2>&1\n" "$schedule" "$command_line" >>"$out_file"
 }
 
 sync_crontab() {
-  local crontab_file
-  crontab_file="$(mktemp)"
+  local update_cron backup_cron restart_cron crontab_file
 
-  cron_append "$crontab_file" "$update_cron" "$SERVER_JOB_BIN update" "update checks"
-  cron_append "$crontab_file" "$backup_cron" "$SERVER_JOB_BIN scheduled-backup" "backups"
-  cron_append "$crontab_file" "$restart_cron" "$SERVER_JOB_BIN scheduled-restart" "server restarts"
+  update_cron="$(resolve_from_env_or_manager "UPDATE_CRON" ".updateCron" "")"
+  backup_cron="$(resolve_from_env_or_manager "BACKUP_CRON" ".backupCron" "")"
+  restart_cron="$(resolve_from_env_or_manager "RESTART_CRON" ".restartCron" "")"
+
+  require_executable "${COMMAND_ROOT}/check/check-cron"
+  "${COMMAND_ROOT}/check/check-cron" --format json >/dev/null
+
+  crontab_file="$(mktemp)"
+  cron_append "$crontab_file" "$update_cron" "$JOB_UPDATE_BIN" "update checks"
+  cron_append "$crontab_file" "$backup_cron" "$JOB_BACKUP_BIN" "scheduled backups"
+  cron_append "$crontab_file" "$restart_cron" "$JOB_RESTART_BIN" "scheduled restarts"
 
   if [[ ! -s "$crontab_file" ]]; then
     info "No schedules configured - clearing crontab"
   else
-    info "Applying updated crontab entries"
+    info "Applying crontab entries"
   fi
   crontab "$crontab_file"
   rm -f "$crontab_file"
@@ -101,87 +68,45 @@ sync_crontab() {
 run_crond_service_action() {
   local action
   action="$1"
-  [[ -x "$SERVER_JOB_BIN" ]] || fatal "Server job is not executable: $SERVER_JOB_BIN"
   case "$action" in
-    restart)
-      run_crond_supervisor_action stop || return $?
-      run_crond_supervisor_action start
-      ;;
     start|stop|status)
-      run_crond_supervisor_action "$action"
+      supervisorctl "$action" crond
+      ;;
+    restart)
+      supervisorctl stop crond || true
+      supervisorctl start crond
       ;;
     *)
-      fatal "Invalid service action: $action"
+      fatal "Invalid CRON_EXEC_ACTION: $action"
       ;;
   esac
-}
-
-is_crond_idempotent_notice() {
-  local action output
-  action="$1"
-  output="$2"
-  case "$action" in
-    start)
-      [[ "$output" == *"ERROR (already started)"* ]]
-      ;;
-    stop)
-      [[ "$output" == *"ERROR (not running)"* ]]
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-run_crond_supervisor_action() {
-  local action output rc
-  action="$1"
-  output="$("$SERVER_JOB_BIN" guard-run core_ready -- supervisorctl "$action" crond 2>&1)"
-  rc=$?
-
-  if is_crond_idempotent_notice "$action" "$output"; then
-    case "$action" in
-      start) success "crond: already running" ;;
-      stop) success "crond: already stopped" ;;
-    esac
-    return 0
-  fi
-
-  if [[ -n "$output" ]]; then
-    while IFS= read -r line; do
-      [[ -n "$line" ]] || continue
-      if [[ "$rc" -eq 0 ]]; then
-        info "$line"
-      else
-        warn "$line"
-      fi
-    done <<<"$output"
-  fi
-
-  return "$rc"
 }
 
 main() {
-  parse_args "$@"
+  case "${1-}" in
+    --help|-h|help)
+      usage
+      exit 0
+      ;;
+    "")
+      ;;
+    *)
+      fatal "cron job does not accept arguments"
+      ;;
+  esac
 
-  if [[ -n "$service_action" ]]; then
-    info "Running cron service action: ${service_action}"
-    case "$service_action" in
-      start|stop|restart|status) run_crond_service_action "$service_action" ;;
-      *) fatal "Invalid service action: $service_action" ;;
-    esac
-    success "Cron service action complete: ${service_action}"
-    return 0
-  fi
-
-  info "Running cron schedule sync (update=${update_cron:-<empty>}, backup=${backup_cron:-<empty>}, restart=${restart_cron:-<empty>})"
-  if [[ "$runtime_ready" == "true" ]]; then
-    info "Skipping runtime initialization (--runtime-ready)"
-  else
-    init_runtime_env
-  fi
-  sync_crontab
-  success "Cron schedule sync complete"
+  info "Running cron job dispatcher (action=${CRON_EXEC_ACTION})"
+  case "$CRON_EXEC_ACTION" in
+    sync|"")
+      sync_crontab
+      ;;
+    start|stop|restart|status)
+      run_crond_service_action "$CRON_EXEC_ACTION"
+      ;;
+    *)
+      fatal "Invalid CRON_EXEC_ACTION: $CRON_EXEC_ACTION"
+      ;;
+  esac
 }
 
 main "$@"

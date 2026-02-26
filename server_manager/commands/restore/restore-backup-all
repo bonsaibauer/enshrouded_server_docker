@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+CORE_BACKUP_JOB="${CORE_BACKUP_JOB:-${SCRIPT_DIR}/../../jobs_core/backup}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  restore-backup-all --zip <path_or_name> [--safety-backup true|false]
+  restore-backup-all <path_or_name> [--safety-backup true|false]
+EOF
+}
+
+parse_bool() {
+  case "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" in
+    true|false) echo "$(echo "${1-}" | tr '[:upper:]' '[:lower:]' | xargs)" ;;
+    *) echo "" ;;
+  esac
+}
+
+main() {
+  local zip_input safety_backup parsed_bool
+  zip_input=""
+  safety_backup=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --zip)
+        zip_input="${2-}"
+        [[ -n "$zip_input" ]] || {
+          echo "Missing value for --zip" >&2
+          exit 1
+        }
+        shift 2
+        ;;
+      --safety-backup)
+        parsed_bool="$(parse_bool "${2-}")"
+        [[ -n "$parsed_bool" ]] || {
+          echo "Invalid value for --safety-backup (expected true|false)" >&2
+          exit 1
+        }
+        safety_backup="$parsed_bool"
+        shift 2
+        ;;
+      --help|-h|help)
+        usage
+        exit 0
+        ;;
+      *)
+        if [[ -z "$zip_input" ]]; then
+          zip_input="$1"
+          shift
+        else
+          echo "Unknown argument: $1" >&2
+          usage >&2
+          exit 1
+        fi
+        ;;
+    esac
+  done
+
+  [[ -n "$zip_input" ]] || {
+    usage >&2
+    exit 1
+  }
+
+  [[ -x "$CORE_BACKUP_JOB" ]] || {
+    echo "Backup job is not executable: $CORE_BACKUP_JOB" >&2
+    exit 1
+  }
+
+  if [[ -n "$safety_backup" ]]; then
+    "$CORE_BACKUP_JOB" --mode restore --zip "$zip_input" --restore all --safety-backup "$safety_backup"
+    exit $?
+  fi
+
+  "$CORE_BACKUP_JOB" --mode restore --zip "$zip_input" --restore all
+}
+
+main "$@"
+
+

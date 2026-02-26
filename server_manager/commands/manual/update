@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+CORE_UPDATER_JOB="${CORE_UPDATER_JOB:-${SCRIPT_DIR}/../../jobs_core/update}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  update [--player-check|--no-player-check]
+EOF
+}
+
+main() {
+  local args
+  args=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --player-check|--no-player-check)
+        args+=("$1")
+        shift
+        ;;
+      --help|-h|help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown argument: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  [[ -x "$CORE_UPDATER_JOB" ]] || {
+    echo "Updater job is not executable: $CORE_UPDATER_JOB" >&2
+    exit 1
+  }
+
+  "$CORE_UPDATER_JOB" "${args[@]}"
+}
+
+main "$@"
+
+

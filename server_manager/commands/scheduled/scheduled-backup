@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+CORE_BACKUP_JOB="${CORE_BACKUP_JOB:-${SCRIPT_DIR}/../../jobs_core/backup}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scheduled-backup
+EOF
+}
+
+main() {
+  case "${1-}" in
+    --help|-h|help)
+      usage
+      exit 0
+      ;;
+    "")
+      ;;
+    *)
+      echo "scheduled-backup does not accept arguments" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+
+  [[ -x "$CORE_BACKUP_JOB" ]] || {
+    echo "Backup job is not executable: $CORE_BACKUP_JOB" >&2
+    exit 1
+  }
+
+  "$CORE_BACKUP_JOB" --mode scheduled
+}
+
+main "$@"
+
+

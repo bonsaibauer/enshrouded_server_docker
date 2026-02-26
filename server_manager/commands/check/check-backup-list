@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR="$(cd -P "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" >/dev/null 2>&1 && pwd)"
+# shellcheck source=server_manager/jobs_core/profile
+. "${SCRIPT_DIR}/../../jobs_core/profile"
+
+CHECK_OUTPUT_FORMAT="human"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  check-backup-list [--format human|json]
+
+Exit codes:
+  0  One or more backup ZIP files found
+  10 No backup ZIP files found
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --format)
+        CHECK_OUTPUT_FORMAT="${2-}"
+        [[ -n "$CHECK_OUTPUT_FORMAT" ]] || fatal "Missing value for --format"
+        shift 2
+        ;;
+      --json)
+        CHECK_OUTPUT_FORMAT="json"
+        shift
+        ;;
+      --help|-h|help)
+        usage
+        exit 0
+        ;;
+      *)
+        fatal "Unknown argument: $1"
+        ;;
+    esac
+  done
+
+  case "$CHECK_OUTPUT_FORMAT" in
+    human|json) ;;
+    *)
+      fatal "Invalid output format: $CHECK_OUTPUT_FORMAT (expected: human|json)"
+      ;;
+  esac
+}
+
+main() {
+  local backup_root entries_json entry_count
+
+  parse_args "$@"
+  require_cmd python3
+
+  BACKUP_DIR="$(resolve_from_env_or_manager "BACKUP_DIR" ".backupDir" "backups")"
+  backup_root="$(backup_dir_resolve)"
+
+  entries_json="$(
+    python3 - "$backup_root" <<'PY'
+import json
+import pathlib
+import sys
+from datetime import datetime, timezone
+
+backup_root = pathlib.Path(sys.argv[1])
+entries = []
+
+for scope in ("manual", "scheduled"):
+    scope_dir = backup_root / scope
+    if not scope_dir.exists():
+        continue
+    for path in scope_dir.glob("*.zip"):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        entries.append(
+            {
+                "scope": scope,
+                "path": str(path),
+                "size_bytes": stat.st_size,
+                "mtime_epoch": int(stat.st_mtime),
+                "mtime_utc": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            }
+        )
+
+entries.sort(key=lambda item: item["mtime_epoch"], reverse=True)
+print(json.dumps(entries))
+PY
+  )"
+
+  entry_count="$(python3 - "$entries_json" <<'PY'
+import json
+import sys
+entries = json.loads(sys.argv[1])
+print(len(entries))
+PY
+)"
+
+  if [[ "$CHECK_OUTPUT_FORMAT" == "json" ]]; then
+    printf "%s\n" "$entries_json"
+  else
+    if [[ "$entry_count" -eq 0 ]]; then
+      echo "No backup ZIP files found in ${backup_root}/manual or ${backup_root}/scheduled."
+    else
+      python3 - "$entries_json" <<'PY'
+import json
+import sys
+
+entries = json.loads(sys.argv[1])
+for item in entries:
+    print(f"[{item['scope']}] {item['path']} ({item['size_bytes']} bytes, {item['mtime_utc']})")
+PY
+    fi
+  fi
+
+  if [[ "$entry_count" -eq 0 ]]; then
+    exit 10
+  fi
+  exit 0
+}
+
+main "$@"
+
+
