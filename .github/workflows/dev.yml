@@ -168,6 +168,52 @@ jobs:
           sarif_file: trivy.limited.sarif
           category: trivy
 
+      - name: Security report summary
+        if: always()
+        run: |
+          set -euo pipefail
+          scout_total=0
+          trivy_total=0
+          scout_crit=0
+          scout_high=0
+          trivy_crit=0
+          trivy_high=0
+
+          if [ -f scout.limited.sarif ]; then
+            scout_total=$(jq '[.runs[].results[]?] | length' scout.limited.sarif)
+            scout_crit=$(jq '[.runs[].results[]? | select((.level // "" | ascii_downcase) == "error")] | length' scout.limited.sarif)
+            scout_high=$(jq '[.runs[].results[]? | select((.level // "" | ascii_downcase) == "warning")] | length' scout.limited.sarif)
+          fi
+
+          if [ -f trivy.limited.sarif ]; then
+            trivy_total=$(jq '[.runs[].results[]?] | length' trivy.limited.sarif)
+            trivy_crit=$(jq '[.runs[].results[]? | select((.level // "" | ascii_downcase) == "error")] | length' trivy.limited.sarif)
+            trivy_high=$(jq '[.runs[].results[]? | select((.level // "" | ascii_downcase) == "warning")] | length' trivy.limited.sarif)
+          fi
+
+          {
+            echo "## Security Scan Report"
+            echo ""
+            echo "| Scanner | Findings total | Error | Warning |"
+            echo "|---|---:|---:|---:|"
+            echo "| Docker Scout | ${scout_total} | ${scout_crit} | ${scout_high} |"
+            echo "| Trivy | ${trivy_total} | ${trivy_crit} | ${trivy_high} |"
+            echo ""
+            echo "SARIF uploads: docker-scout + trivy (GitHub Code Scanning)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload security reports artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-dev-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            scout.sarif
+            scout.limited.sarif
+            trivy.sarif
+            trivy.limited.sarif
+
       - name: Push dev tags (after successful scans)
         run: |
           set -euo pipefail
